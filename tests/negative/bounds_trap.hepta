@@ -1,0 +1,8 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn kernel_entry(request:readbuf,reply:mutbuf,state:mutbuf) -> (u32) effects(read,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,state:mutbuf)
+  outside:usize = const() {"value":4096}
+  byte:u8 = buffer.load(request,outside)
+  result:u32 = int.cast(byte) {"mode":"wrap"}
+  ret(result)
+end

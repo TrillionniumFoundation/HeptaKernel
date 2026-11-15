@@ -1,0 +1,20 @@
+{
+  "schema": "heptakernel.boot-cases.v1",
+  "scope": "HIA frame allocator in an x86-64 QEMU guest",
+  "physical_arena": {"base": 4194304, "pages": 17, "reserved_prefix": 2},
+  "cases": [
+    {"name": "initialize", "request": [0, 17, 4194304, 2], "expected": [0, 15]},
+    {"name": "first-frame", "request": [1, 1, 0, 0], "expected": [0, 4202496]},
+    {"name": "physical-alignment", "request": [1, 8, 0, 0], "expected": [0, 4227072]},
+    {"name": "reserved-frame", "request": [2, 4194304, 0, 0], "expected": [8, 0]},
+    {"name": "release-first", "request": [2, 4202496, 0, 0], "expected": [0, 0]},
+    {"name": "double-free", "request": [2, 4202496, 0, 0], "expected": [7, 0]},
+    {"name": "reuse", "request": [1, 1, 0, 0], "expected": [0, 4202496]},
+    {"name": "unaligned-free", "request": [2, 4202497, 0, 0], "expected": [6, 0]},
+    {"name": "past-arena", "request": [2, 4263936, 0, 0], "expected": [6, 0]},
+    {"name": "invalid-alignment", "request": [1, 3, 0, 0], "expected": [6, 0]},
+    {"name": "unused-argument", "request": [1, 1, 1, 0], "expected": [6, 0]},
+    {"name": "free-count", "request": [3, 0, 0, 0], "expected": [0, 13]},
+    {"name": "unknown-op", "request": [99, 0, 0, 0], "expected": [3, 0]}
+  ]
+}

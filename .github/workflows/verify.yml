@@ -1,0 +1,110 @@
+name: HIA kernel foundation
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  foundation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out HeptaKernel
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Install the assembler, linker and QEMU test runner
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends build-essential binutils qemu-system-x86
+
+      - name: Check out the pinned HIA toolchain
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: f33d8da316de8fdf27b504371f1a5310997ff548
+          path: .toolchain/hepta
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout-cone-mode: true
+          sparse-checkout: |
+            hepta
+            tools
+            examples/hia_bootstrap
+            docs
+
+      - name: Reproduce the native HIA compiler
+        shell: bash
+        run: |
+          python3 -I -S -B tools/bootstrap_hia.py \
+            --root .toolchain/hepta --output .toolchain/compiler
+
+      - name: Build the HIA object and boot image
+        shell: bash
+        run: |
+          make HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
+      - name: Check native behavior and exact HIA object bytes
+        shell: bash
+        run: |
+          make test-native HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
+      - name: Check actual inaccessible and read-only memory boundaries
+        shell: bash
+        run: |
+          make test-guard-pages HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
+      - name: Boot two positive machines and two negative kernels
+        shell: bash
+        run: |
+          make test-boot HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
+      - name: Bind source, native object and both boot containers
+        shell: bash
+        run: |
+          make record-build HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
+      - name: Record separate full-target acceptance state
+        shell: bash
+        run: |
+          python3 tests/test_closure.py
+          set +e
+          python3 tools/check_closure.py > build/closure-report.json
+          result=$?
+          set -e
+          cat build/closure-report.json
+          if [ "$result" -ne 0 ] && [ "$result" -ne 2 ]; then exit "$result"; fi
+          if [ "$result" -eq 2 ]; then
+            echo 'Full Linux rewrite remains HOLD. This job validates the foundation only.'
+          fi
+
+      - name: Retain bootstrap and execution evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: heptakernel-foundation-${{ github.sha }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            .toolchain/compiler/bootstrap-report.json
+            .toolchain/compiler/B0.receipt.json
+            .toolchain/compiler/B1.receipt.json
+            .toolchain/compiler/B2.receipt.json
+            .toolchain/compiler/B3.receipt.json
+            .toolchain/compiler/native-compiler.receipt.json
+            build/native-report.json
+            build/guard-pages-report.json
+            build/boot-report.json
+            build/build-report.json
+            build/closure-report.json
+            build/kernel.o
+            build/kernel.elf
+            build/kernel-multiboot.elf

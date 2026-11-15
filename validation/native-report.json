@@ -1,0 +1,21 @@
+{
+  "schema": "heptakernel.native-tests.v1",
+  "scope": "HIA single-arena frame allocator",
+  "linux_compatibility_tested": false,
+  "formal_proof": false,
+  "tested_library": "/workspace/scratch/4570ab439733/HeptaKernel/build/kernel-host.so",
+  "tested_library_sha256": "71791c95d0e078d7b28cbefede1f53b08beac49cebf3429cdb33687e57018ff1",
+  "object_sha256": "8a21795f1e162b4222df0d2abed62c52225fea82b74f70b81a85f9bcda998a0b",
+  "source_sha256": "0edea2409672dd0b1e9425a775e9b6677bb34fede736219488677ceefa72faf7",
+  "library_text_matches_object": true,
+  "status": "PASS",
+  "calls": 9895,
+  "cases": [
+    "exact-capacity, non-byte-aligned tails, reserved prefixes, exhaustion, reuse, double-free",
+    "physical alignment, zero base, 52-bit upper boundary, unsigned 64-bit arguments",
+    "malformed requests, short capabilities, unused arguments, guard bytes, mutation-free errors",
+    "header invariants; no claim of protection against arbitrary trusted-state corruption",
+    "32 fixed reproducible random traces, 250 operations per trace, set-oracle comparison after every operation",
+    "maximum 65536-page arena with exact 8256-byte metadata capacity"
+  ]
+}

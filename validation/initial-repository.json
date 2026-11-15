@@ -1,0 +1,20 @@
+{
+  "schema": "heptakernel.initial-repository.v1",
+  "observed_date": "2026-11-15",
+  "repository": "TrillionniumFoundation/HeptaKernel",
+  "created_at": "2026-11-15T17:03:49Z",
+  "default_branch_setting": "main",
+  "branches": [],
+  "pull_requests": [],
+  "contents_api_error": {
+    "status": 404,
+    "message": "This repository is empty."
+  },
+  "source_urls": [
+    "https://api.github.com/repos/TrillionniumFoundation/HeptaKernel",
+    "https://api.github.com/repos/TrillionniumFoundation/HeptaKernel/branches?per_page=100",
+    "https://api.github.com/repos/TrillionniumFoundation/HeptaKernel/contents",
+    "https://api.github.com/repos/TrillionniumFoundation/HeptaKernel/pulls?state=all&per_page=100"
+  ],
+  "existing_implementation": false
+}

@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""Bind tested products to native HIA bytes and declared build inputs.
+
+This is a host-side artifact check, not an assembler or kernel implementation.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import struct
+import subprocess
+
+
+def sha(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+class Elf:
+    def __init__(self, path):
+        self.raw = Path(path).read_bytes()
+        raw = self.raw
+        if raw[:4] != b"\x7fELF" or raw[5] != 1 or raw[4] not in (1, 2):
+            raise ValueError("expected a little-endian ELF artifact")
+        self.bits = 64 if raw[4] == 2 else 32
+        if self.bits == 64:
+            self.entry, phoff, shoff = struct.unpack_from("<3Q", raw, 24)
+            phsize, phnum, shsize, shnum, shstr = struct.unpack_from("<5H", raw, 54)
+            shfmt = "<IIQQQQIIQQ"
+        else:
+            self.entry, phoff, shoff = struct.unpack_from("<3I", raw, 24)
+            phsize, phnum, shsize, shnum, shstr = struct.unpack_from("<5H", raw, 42)
+            shfmt = "<10I"
+        self.headers = [struct.unpack_from(shfmt, raw, shoff + i * shsize) for i in range(shnum)]
+        h = self.headers[shstr]
+        names = raw[h[4]:h[4] + h[5]]
+        self.sections = {}
+        for h in self.headers:
+            name = names[h[0]:].split(b"\0", 1)[0].decode("ascii")
+            self.sections[name] = h
+        for i in range(phnum):
+            if struct.unpack_from("<I", raw, phoff + i * phsize)[0] == 3:
+                raise ValueError("kernel artifact unexpectedly requires PT_INTERP")
+
+    def section_bytes(self, name):
+        h = self.sections[name]
+        return self.raw[h[4]:h[4] + h[5]]
+
+    def symbol(self, name):
+        table = self.sections[".symtab"]
+        strings_h = self.headers[table[6]]
+        strings = self.raw[strings_h[4]:strings_h[4] + strings_h[5]]
+        for at in range(table[4], table[4] + table[5], table[9]):
+            if self.bits == 64:
+                spelling, info, other, section, value, size = struct.unpack_from("<IBBHQQ", self.raw, at)
+            else:
+                spelling, value, size, info, other, section = struct.unpack_from("<IIIBBH", self.raw, at)
+            found = strings[spelling:].split(b"\0", 1)[0].decode("ascii")
+            if found == name:
+                return value
+        raise ValueError("missing symbol " + name)
+
+    def text_at(self, address, size):
+        section = self.sections[".text"]
+        offset = address - section[3]
+        if offset < 0 or size > section[5] - offset:
+            raise ValueError("symbol extent is outside .text")
+        return self.section_bytes(".text")[offset:offset + size]
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--compiler", required=True)
+    ap.add_argument("--report", type=Path, default=Path("build/build-report.json"))
+    args = ap.parse_args()
+    report = {"schema": "heptakernel.build-evidence.v1", "whole_kernel_rewrite_complete": False}
+    try:
+        compiler = shutil.which(args.compiler)
+        if compiler is None:
+            raise ValueError("native compiler is unavailable")
+        compiler = str(Path(compiler).resolve())
+        lock = json.loads(Path("compatibility/hia-toolchain-lock.json").read_text())
+        compiler_hash = sha(Path(compiler).read_bytes())
+        if compiler_hash != lock["compiler_sha256"]:
+            raise ValueError("native compiler does not match the lock")
+        source = Path("src/kernel.hepta").read_bytes()
+        obj = Path("build/kernel.o").read_bytes()
+        repeated = subprocess.run([compiler], input=source, capture_output=True,
+                                  timeout=20, env={"PATH": ""})
+        if repeated.returncode or repeated.stderr or repeated.stdout != obj:
+            raise ValueError("exact HIA source did not reproduce the tested object")
+        undefined = subprocess.check_output(["nm", "-u", "build/kernel.o"], text=True).strip()
+        if undefined:
+            raise ValueError("HIA object contains external dependencies: " + undefined)
+        object_elf, image64, image32 = [Elf(p) for p in
+                                      ("build/kernel.o", "build/kernel.elf", "build/kernel-multiboot.elf")]
+        code = object_elf.section_bytes(".text")
+        entry = image64.symbol("f0")
+        if image32.symbol("f0") != entry or image32.entry != image64.entry:
+            raise ValueError("Multiboot container changed entry symbols")
+        if image64.text_at(entry, len(code)) != code or image32.text_at(entry, len(code)) != code:
+            raise ValueError("linked boot images do not contain the exact HIA code at f0")
+        host = Elf("build/kernel-host.so")
+        if host.section_bytes(".text") != code:
+            raise ValueError("native library changed HIA code")
+        inputs = [Path("Makefile")]
+        for directory in ("src", "arch", "tests", "tools", "compatibility", ".github"):
+            inputs.extend(p for p in Path(directory).rglob("*") if p.is_file()
+                          and "__pycache__" not in p.parts and p.suffix != ".pyc")
+        input_hashes = {str(p): sha(p.read_bytes()) for p in sorted(inputs)}
+        artifacts = {str(p): sha(p.read_bytes()) for p in sorted(Path("build").glob("*"))
+                     if p.suffix in (".o", ".so", ".elf", ".bin")}
+        report.update(status="PASS", candidate_commit=os.environ.get("GITHUB_SHA"),
+                      compiler_sha256=compiler_hash, hia_source_sha256=sha(source),
+                      hia_object_sha256=sha(obj), hia_text_sha256=sha(code),
+                      exact_source_recompiled_with_empty_PATH=True,
+                      undefined_symbols=[], linked_hia_bytes_match=True,
+                      multiboot_container_preserves_hia_bytes=True,
+                      hia_entry_address=entry, inputs=input_hashes, artifacts=artifacts,
+                      input_manifest_sha256=sha(json.dumps(input_hashes, sort_keys=True,
+                                                          separators=(",", ":")).encode()),
+                      linker_version=subprocess.check_output(["ld", "--version"], text=True).splitlines()[0],
+                      assembler_version=subprocess.check_output(["as", "--version"], text=True).splitlines()[0])
+    except Exception as exc:
+        report.update(status="FAIL", error=repr(exc))
+    args.report.parent.mkdir(parents=True, exist_ok=True)
+    args.report.write_text(json.dumps(report, indent=2) + "\n")
+    print(json.dumps({k: v for k, v in report.items() if k not in ("inputs", "artifacts")}, sort_keys=True))
+    raise SystemExit(0 if report["status"] == "PASS" else 1)
+
+
+if __name__ == "__main__":
+    main()

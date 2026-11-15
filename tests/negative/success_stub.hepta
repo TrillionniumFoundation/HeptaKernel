@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn kernel_entry(request:readbuf,reply:mutbuf,state:mutbuf) -> (u32) effects() entry(start)
+block start(request:readbuf,reply:mutbuf,state:mutbuf)
+  zero:u32 = const() {"value":0}
+  ret(zero)
+end

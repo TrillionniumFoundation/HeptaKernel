@@ -1,0 +1,22 @@
+{
+  "schema": "heptakernel.guard-page-tests.v1",
+  "scope": "Single-arena HIA allocator with exact-size host FFI capabilities",
+  "tested_library": "/workspace/scratch/4570ab439733/HeptaKernel/build/kernel-host.so",
+  "status": "PASS",
+  "calls": 61,
+  "linux_compatibility_tested": false,
+  "formal_proof": false,
+  "cases": [
+    "Read-only request storage and inaccessible page immediately after each buffer",
+    "Zero-length state/request/reply pointers into PROT_NONE",
+    "Exact 67-byte metadata and short capacities 0,1,31,63,64,65,66",
+    "Physical alignment with a base that is not eight-page aligned",
+    "Physical address zero success distinguished from exhaustion by status",
+    "Reserved prefix, double free, malformed sizes and invalid arguments",
+    "Failed requests and successful count queries leave state unchanged"
+  ],
+  "tested_library_sha256": "71791c95d0e078d7b28cbefede1f53b08beac49cebf3429cdb33687e57018ff1",
+  "worker_returncode": 0,
+  "stdout": "{\"calls\": 61, \"status\": \"PASS\", \"tested_library_sha256\": \"71791c95d0e078d7b28cbefede1f53b08beac49cebf3429cdb33687e57018ff1\"}\n",
+  "stderr": ""
+}

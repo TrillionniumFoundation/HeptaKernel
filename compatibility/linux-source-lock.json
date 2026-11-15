@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "observed_date": "2026-11-15",
+  "linux": {
+    "version": "7.3.4",
+    "tag": "v7.3.4",
+    "tag_object": "8310b43a724c54668eeaa6860234078a7886915a",
+    "commit": "7595a62d45ee1a2297eafa5f2ef5d0a45142d84d",
+    "tag_verification": "GitHub reports verified=true, reason=valid; not locally GPG-verified",
+    "official_release_url": "https://www.kernel.org/",
+    "official_changelog_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/ChangeLog-7.3.4",
+    "upstream_git": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git",
+    "read_mirror": "https://github.com/gregkh/linux",
+    "release_date": "2026-11-10"
+  },
+  "ltp": {
+    "commit": "686a331b6240e54ac3170717adfd28ec94cfe100",
+    "url": "https://github.com/linux-test-project/ltp"
+  },
+  "inventories": {
+    "x86_64_table_rows": 422,
+    "native_x86_64_table_rows": 386,
+    "x32_special_table_rows": 36,
+    "native_unimplemented_or_obsolete_entries": 17,
+    "arch_directories": [
+      "alpha",
+      "arc",
+      "arm",
+      "arm64",
+      "csky",
+      "hexagon",
+      "loongarch",
+      "m68k",
+      "microblaze",
+      "mips",
+      "nios2",
+      "openrisc",
+      "parisc",
+      "powerpc",
+      "riscv",
+      "s390",
+      "sh",
+      "sparc",
+      "um",
+      "x86",
+      "xtensa"
+    ],
+    "directory_counts": [
+      {
+        "path": "arch",
+        "tree": "a960cfe86de71dc4af51bf8968c96ee064b70c0f",
+        "subdirs": 21
+      },
+      {
+        "path": "drivers",
+        "tree": "d5661ed74cd7a60038dfd2bea8c62e18e573030c",
+        "subdirs": 144
+      },
+      {
+        "path": "fs",
+        "tree": "5d2008b91c2fd7270ced3a342fb7511a0cbdb7fa",
+        "subdirs": 76
+      },
+      {
+        "path": "net",
+        "tree": "f8c73ea7ae2cb68ba424c3e1ce96f708911151af",
+        "subdirs": 66
+      },
+      {
+        "path": "security",
+        "tree": "5e3426f48968c536b39430a9356065251d466529",
+        "subdirs": 13
+      },
+      {
+        "path": "kernel",
+        "tree": "6580beeb9f1881ae51c5c00089150b7da613ebcc",
+        "subdirs": 22
+      },
+      {
+        "path": "mm",
+        "tree": "ba4316c05d057140f1743b60815f11906a288557",
+        "subdirs": 5
+      }
+    ],
+    "kselftest_directory_count": 125
+  },
+  "limitations": [
+    "These counts enumerate source rows/directories, not implemented features or coverage percentages.",
+    "A full recursive source/Kconfig/driver inventory is not yet retrieved; no complete Linux source audit is claimed.",
+    "x32 uses shared common entries plus its special entries; 36 is not total x32 syscall coverage."
+  ]
+}
+

@@ -1,0 +1,65 @@
+{
+  "B0": {
+    "image_sha256": "1ec66146a42a8b51ac9a436e42b524505ada72cfb5385fc73c9da350b232a1e9",
+    "receipt": "B0.receipt.json",
+    "requires_GNU_ld": true,
+    "requires_Python": true
+  },
+  "compiler_correctness_formally_proved": false,
+  "compiler_source_sha256": "388b182e42675f11435867dd99520e9452a4ff48e23c0766a3952b662acc7627",
+  "elapsed_seconds": 6.960779446999368,
+  "full_upstream_cold_qualification": false,
+  "kernel_full_linux_closure": false,
+  "native_compiler_bytes": 673903,
+  "native_compiler_sha256": "87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54",
+  "native_generations": [
+    {
+      "generation": "B1",
+      "image_bytes": 673413,
+      "image_sha256": "bfd603dd2b40974d2083b567b4295fb3975938da8435dd636514fc197c485de0",
+      "receipt": "B1.receipt.json"
+    },
+    {
+      "generation": "B2",
+      "image_bytes": 673413,
+      "image_sha256": "bfd603dd2b40974d2083b567b4295fb3975938da8435dd636514fc197c485de0",
+      "receipt": "B2.receipt.json"
+    },
+    {
+      "generation": "B3",
+      "image_bytes": 673413,
+      "image_sha256": "bfd603dd2b40974d2083b567b4295fb3975938da8435dd636514fc197c485de0",
+      "receipt": "B3.receipt.json"
+    }
+  ],
+  "output": "/workspace/scratch/4570ab439733/toolchain-bootstrap-validation",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "schema": "heptakernel.hia-bootstrap.v1",
+  "source": {
+    "commit": "f33d8da316de8fdf27b504371f1a5310997ff548",
+    "tree": "378bc0dc613befc7006f1514bd2229357ae0d07c",
+    "worktree_clean": true
+  },
+  "source_root": "/workspace/scratch/dfc64d0acfc2/hia-toolchain",
+  "standalone_rebuilds": [
+    {
+      "environment": {
+        "PATH": ""
+      },
+      "exit_code": 0,
+      "generation": 1,
+      "sha256": "87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54"
+    },
+    {
+      "environment": {
+        "PATH": ""
+      },
+      "exit_code": 0,
+      "generation": 2,
+      "sha256": "87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54"
+    }
+  ],
+  "status": "PASS",
+  "toolchain_lock_sha256": "d1a2c7ca6c87b0159ffcc10216588f6b02dbfb4de7f5e364aff5b78793d6f420"
+}

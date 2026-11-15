@@ -1,0 +1,40 @@
+{
+  "hepta_commit": "f33d8da316de8fdf27b504371f1a5310997ff548",
+  "compiler_sha256": "87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54",
+  "source_sha256": "388b182e42675f11435867dd99520e9452a4ff48e23c0766a3952b662acc7627",
+  "fresh_standalone_self_reproduction": true,
+  "environment": {
+    "PATH": ""
+  },
+  "negative_compile_cases": [
+    {
+      "case": "unsupported_privileged_halt",
+      "exit": 2,
+      "output_bytes": 0
+    },
+    {
+      "case": "undefined_external_call",
+      "exit": 2,
+      "output_bytes": 0
+    },
+    {
+      "case": "write_through_readonly_input",
+      "exit": 2,
+      "output_bytes": 0
+    }
+  ],
+  "positive_native": {
+    "compiler_sha256": "87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54",
+    "source_sha256": "772cd6a20efb80f7d2d00b04d0947c4effbd47520d004390a5e2589d21fb554c",
+    "object_sha256": "4ef91b4dec0241378ae2cf219fe08ecb574058d40a1ff61d99f86780333303a2",
+    "native_result": 73,
+    "console_hex": "480f490f00000000",
+    "undefined_symbols": [],
+    "profile": "selfhost_elf",
+    "abi": "u32 f0(void *source,u64 source_len,void *output,u64 output_len,void *workspace,u64 workspace_len)",
+    "baremetal_execution_tested": false
+  },
+  "privileged_operations_supported": false,
+  "general_extern_supported": false,
+  "kernel_boot_executed": false
+}

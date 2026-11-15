@@ -1,0 +1,14 @@
+{
+  "schema": "heptakernel.validation-attempts.v1",
+  "attempts": [
+    {
+      "stage": "boot-driver-development",
+      "status": "INCOMPLETE_CANCELLED",
+      "owner_exit": 130,
+      "configuration_error": "QEMU command included -no-shutdown with isa-debug-exit",
+      "observed": "Driver did not return terminal per-case results; owner explicitly cancelled after separate direct QEMU diagnosis.",
+      "resolution": "Removed -no-shutdown. Retained -no-reboot and strict guest exit/serial checks. The corrected runs and both negative controls are in boot-report.json.",
+      "count_as_pass": false
+    }
+  ]
+}

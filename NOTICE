@@ -1,0 +1,21 @@
+HeptaKernel
+
+Original kernel implementation in this repository is provided under
+GPL-2.0-only; see LICENSE. The .hepta sources are human-readable HIA source,
+not generated C wrappers or opaque machine-code payloads.
+
+The HIA toolchain is an external, pinned dependency from
+https://github.com/TrillionniumFoundation/Hepta at
+f33d8da316de8fdf27b504371f1a5310997ff548. Its own license applies to that toolchain.
+The native compiler binary and upstream compiler sources are not vendored here.
+
+Reference files under third_party/linux are unmodified upstream reference
+material from Linux v7.3.4, commit
+7595a62d45ee1a2297eafa5f2ef5d0a45142d84d. Their original notices and the upstream
+COPYING file are retained. These tables are inventories, not replacement Linux
+implementation. Upstream license rules and the syscall exception are linked
+from third_party/linux/COPYING.
+
+The boot bridge in arch/x86_64/boot.S is an explicitly non-HIA component.
+GNU binutils, QEMU and Python are build/test tools, not code hidden inside
+the HIA allocator. Host tools are not counted as HIA kernel implementation.
