@@ -231,6 +231,44 @@ class Campaign:
             self.commands += 2
         self.cases.append("header invariants; no claim of protection against arbitrary trusted-state corruption")
 
+    def bitmap_corruption(self):
+        # Check the HIA validation path itself, not the Python set model:
+        # a forged free-count, released reserved bit or nonzero tail padding
+        # must be rejected before any allocator operation changes state.
+        for flips in ((0,), (1,), (2,), (3,), (0, 3)):
+            native, _ = self.pair()
+            assert native.call((0, 17, 0x400000, 2)) == (OK, 15)
+            assert native.call((1, 1, 0, 0)) == (OK, 0x402000)
+            for index in flips:
+                address = native.state_ptr + 64 + index // 8
+                old = ctypes.string_at(address, 1)[0]
+                ctypes.memmove(address, bytes((old ^ (1 << (index % 8)),)), 1)
+            corrupted = native.snapshot()
+            for command in ((3, 0, 0, 0), (1, 1, 0, 0),
+                            (2, 0x402000, 0, 0)):
+                assert native.call(command) == (BAD_STATE, 0), (flips, command)
+                assert native.snapshot() == corrupted, (flips, "mutation on invalid bitmap")
+                self.commands += 1
+        for index in (17, 18, 23):
+            native, _ = self.pair()
+            assert native.call((0, 17, 0x400000, 2)) == (OK, 15)
+            address = native.state_ptr + 64 + index // 8
+            old = ctypes.string_at(address, 1)[0]
+            ctypes.memmove(address, bytes((old | (1 << (index % 8)),)), 1)
+            before = native.snapshot()
+            assert native.call((3, 0, 0, 0)) == (BAD_STATE, 0), index
+            assert native.snapshot() == before
+            self.commands += 1
+        for count in (0, 14):
+            native, _ = self.pair()
+            assert native.call((0, 17, 0x400000, 2)) == (OK, 15)
+            ctypes.memmove(native.state_ptr + 32, struct.pack("<Q", count), 8)
+            before = native.snapshot()
+            assert native.call((3, 0, 0, 0)) == (BAD_STATE, 0), count
+            assert native.snapshot() == before
+            self.commands += 1
+        self.cases.append("HIA bitmap integrity: reserved bits, exact free counter, unused tail bits; errors preserve bytes")
+
     def randomized(self):
         for seed in range(32):
             rng = random.Random(0x48494100 + seed)
@@ -292,6 +330,7 @@ def main():
         campaign.alignment()
         campaign.invalid()
         campaign.header_corruption()
+        campaign.bitmap_corruption()
         campaign.randomized()
         campaign.maximum()
         report.update(status="PASS", calls=campaign.commands, cases=campaign.cases)

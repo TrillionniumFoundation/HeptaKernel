@@ -46,6 +46,17 @@ jobs:
           python3 -I -S -B tools/bootstrap_hia.py \
             --root .toolchain/hepta --output .toolchain/compiler
 
+      - name: Independently verify the edited HIA Core source
+        shell: bash
+        run: |
+          PYTHONPATH=.toolchain/hepta python3 - <<'PY'
+          from pathlib import Path
+          from hepta.hia_agent_assembly import assemble_program
+          checked = assemble_program(Path("src/kernel.hepta").read_bytes())
+          print("Independent HIA Core syntax/semantics verification: PASS")
+          print("Verified functions:", len(checked.as_dict()["functions"]))
+          PY
+
       - name: Build the HIA object and boot image
         shell: bash
         run: |
