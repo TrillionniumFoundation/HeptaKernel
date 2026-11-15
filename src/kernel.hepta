@@ -632,7 +632,7 @@ block publish(cr_publish_reply:mutbuf,cr_publish_state:mutbuf,cr_publish_count:u
   cr_publish_result:u32 = call(cr_publish_reply,cr_publish_ok,cr_publish_zero) {"function":"write_reply"}
   ret(cr_publish_result)
 end
-fn query_free_run(reply:mutbuf,state:mutbuf,address:u64,count:u64,unused:u64) -> (u32) effects(read,write,trap) entry(start)
+fn query_free_run(v00:mutbuf,v01:mutbuf,v02:u64,v03:u64,v04:u64) -> (u32) effects(read,write,trap) entry(start)
 block start(v00:mutbuf,v01:mutbuf,v02:u64,v03:u64,v04:u64)
   v05:u64 = const() {"value":0}
   v06:u64 = const() {"value":4095}
