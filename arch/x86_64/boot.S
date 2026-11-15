@@ -282,8 +282,21 @@ case_loop:
     jmp case_next
 
 maybe_probe:
-    cmpq $1, (%r12)               /* successful ALLOC: value is a real frame */
+    cmpq $1, (%r12)               /* ALLOC: one real physical page */
+    je probe_single
+    cmpq $4, (%r12)               /* ALLOC_RUN: every physical page */
     jne case_next
+    movq 8(%r12), %r14            /* requested contiguous run length */
+    testq %r14, %r14
+    jz fail64
+    cmpq $1024, %r14             /* bounded by fixture arena, before shifting */
+    ja fail64
+    jmp probe_bounds
+
+probe_single:
+    movq $1, %r14
+
+probe_bounds:
     cmpq $1, arena_ready(%rip)
     jne fail64
     movq reply+8(%rip), %rax
@@ -292,22 +305,29 @@ maybe_probe:
     cmpq arena_first(%rip), %rax
     jb fail64
     movq arena_end(%rip), %rdx
-    subq $PAGE_BYTES, %rdx
+    movq %r14, %rcx
+    shlq $12, %rcx
+    subq %rcx, %rdx
     jc fail64
     cmpq %rdx, %rax
     ja fail64
+    movq %rax, %r13
+probe_each_page:
     movabsq $0x4849414b45524e4c, %rdx
-    movq %rdx, (%rax)
+    movq %rdx, (%r13)
     notq %rdx
-    movq %rdx, (PAGE_BYTES - 8)(%rax)
-    cmpq %rdx, (PAGE_BYTES - 8)(%rax)
+    movq %rdx, (PAGE_BYTES - 8)(%r13)
+    cmpq %rdx, (PAGE_BYTES - 8)(%r13)
     jne fail64
     notq %rdx
-    cmpq %rdx, (%rax)
+    cmpq %rdx, (%r13)
     jne fail64
-    movq $0, (%rax)
-    movq $0, (PAGE_BYTES - 8)(%rax)
+    movq $0, (%r13)
+    movq $0, (PAGE_BYTES - 8)(%r13)
     incq physical_probes(%rip)
+    addq $PAGE_BYTES, %r13
+    decq %r14
+    jnz probe_each_page
 
 case_next:
     addq $48, case_cursor(%rip)

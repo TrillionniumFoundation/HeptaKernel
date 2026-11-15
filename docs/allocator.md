@@ -1,7 +1,7 @@
 # HIA frame allocator
 
 The authoritative implementation is `src/kernel.hepta`, using the real upstream
-`hia-asm.v1 hepta.hia.program.v8 selfhost_elf` profile. It contains 15 functions,
+`hia-asm.v1 hepta.hia.program.v8 selfhost_elf` profile. It contains 16 functions,
 typed control flow, checked borrowed byte access, and no owned allocation or
 external function call. The native compiler emits an ELF64 object with the
 legacy exported symbol `f0`. Its `.text` is unchanged when linked into either
@@ -48,6 +48,7 @@ the status word distinguishes it from a failure.
 | 2 FREE | allocated physical address, 0, 0 | 0 |
 | 3 FREE_COUNT | 0, 0, 0 | Free frames |
 | 4 ALLOC_RUN | contiguous page count, power-of-two alignment in pages, 0 | Lowest physically aligned first frame of a contiguous run |
+| 5 FREE_RUN | starting physical address, contiguous page count, 0 | 0 (atomic release) |
 
 Each page is 4096 bytes. The arena has 1 through 65,536 pages, a 4096-aligned
 base, and an exclusive upper bound at most `2^52`. The permanently reserved
@@ -68,8 +69,13 @@ finds a contiguous run of the requested nonzero number of pages, and commits
 all its bits and free-count change only after the entire run has been found.
 The first physical page of the run must satisfy the power-of-two page
 alignment. An insufficient total count or fragmented capacity returns
-NO_MEMORY with no state mutation. Individual pages can be returned with
-FREE; no run-ownership tracking, zones, SMP locking or buddy merging is yet
+NO_MEMORY with no state mutation. FREE_RUN validates the complete requested run, including aligned start,
+nonzero length, in-arena exclusive end, reserved prefix and every existing
+allocation bit, before clearing any bits. Any already-free member returns
+DOUBLE_FREE without partial release; malformed range returns INVALID_ARGUMENT
+and a protected prefix returns RESERVED. A successful release increases the
+free count by the full run length. FREE remains available for individual
+pages. No run-ownership tracking, zones, SMP locking or buddy merging is yet
 implemented. The caller must prevent stale aliases and coordinate ownership.
 
 | Status | Name | Meaning |
@@ -112,8 +118,8 @@ the magic after all geometry/capacity checks and initialization writes.
 For a valid state, `free_count = pages - reserved - allocated_dynamic_pages`.
 ALLOC sets exactly one eligible bit and decrements the count; FREE clears one
 dynamic allocated bit and increments it. Parameter and header checks bound
-all bitmap accesses. Header validation checks ranges and capacity, but does
-not rescan every bitmap bit on every call. The state is not an authenticated
+all bitmap accesses. State validation checks ranges and capacity, then rescans the active bitmap
+on every non-init call (O(pages)). The state is not an authenticated
 storage format and arbitrary memory corruption is not guaranteed to be detected.
 
 ## Verification

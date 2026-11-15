@@ -59,7 +59,14 @@ block check_count(count_reply:mutbuf,count_state:mutbuf,count_op:u64,count_a:u64
 block check_run_op(ar_dispatch_reply:mutbuf,ar_dispatch_state:mutbuf,ar_dispatch_op:u64,ar_dispatch_a:u64,ar_dispatch_b:u64,ar_dispatch_c:u64)
   ar_dispatch_run_opcode:u64 = const() {"value":4}
   ar_dispatch_is_run:bool = compare.eq(ar_dispatch_op,ar_dispatch_run_opcode)
-  branch ar_dispatch_is_run allocate_contiguous(ar_dispatch_reply,ar_dispatch_state,ar_dispatch_a,ar_dispatch_b,ar_dispatch_c) unknown(ar_dispatch_reply)
+  branch ar_dispatch_is_run allocate_contiguous(ar_dispatch_reply,ar_dispatch_state,ar_dispatch_a,ar_dispatch_b,ar_dispatch_c) check_release_run(ar_dispatch_reply,ar_dispatch_state,ar_dispatch_op,ar_dispatch_a,ar_dispatch_b,ar_dispatch_c)
+block check_release_run(fr_dispatch_reply:mutbuf,fr_dispatch_state:mutbuf,fr_dispatch_op:u64,fr_dispatch_a:u64,fr_dispatch_b:u64,fr_dispatch_c:u64)
+  fr_dispatch_opcode:u64 = const() {"value":5}
+  fr_dispatch_match:bool = compare.eq(fr_dispatch_op,fr_dispatch_opcode)
+  branch fr_dispatch_match release_contiguous(fr_dispatch_reply,fr_dispatch_state,fr_dispatch_a,fr_dispatch_b,fr_dispatch_c) unknown(fr_dispatch_reply)
+block release_contiguous(fr_route_reply:mutbuf,fr_route_state:mutbuf,fr_route_address:u64,fr_route_pages:u64,fr_route_unused:u64)
+  fr_route_result:u32 = call(fr_route_reply,fr_route_state,fr_route_address,fr_route_pages,fr_route_unused) {"function":"free_run"}
+  ret(fr_route_result)
 block allocate_contiguous(ar_route_reply:mutbuf,ar_route_state:mutbuf,ar_route_pages:u64,ar_route_alignment:u64,ar_route_unused:u64)
   ar_route_result:u32 = call(ar_route_reply,ar_route_state,ar_route_pages,ar_route_alignment,ar_route_unused) {"function":"allocate_run"}
   ret(ar_route_result)
@@ -424,6 +431,99 @@ block publish_run(ar_publish_reply:mutbuf,ar_publish_state:mutbuf,ar_publish_bas
   ar_publish_ok:u32 = const() {"value":0}
   ar_publish_result:u32 = call(ar_publish_reply,ar_publish_ok,ar_publish_address) {"function":"write_reply"}
   ret(ar_publish_result)
+end
+fn free_run(reply:mutbuf,state:mutbuf,address:u64,run_pages:u64,unused:u64) -> (u32) effects(read,write,trap) entry(start)
+block start(reply:mutbuf,state:mutbuf,address:u64,run_pages:u64,unused:u64)
+  fr_start_zero:u64 = const() {"value":0}
+  fr_start_page_mask:u64 = const() {"value":4095}
+  fr_start_low:u64 = bit.and(address,fr_start_page_mask)
+  fr_start_aligned:bool = compare.eq(fr_start_low,fr_start_zero)
+  fr_start_nonempty:bool = compare.gt(run_pages,fr_start_zero)
+  fr_start_no_extra:bool = compare.eq(unused,fr_start_zero)
+  fr_start_first_ok:bool = bool.and(fr_start_aligned,fr_start_nonempty)
+  fr_start_valid:bool = bool.and(fr_start_first_ok,fr_start_no_extra)
+  branch fr_start_valid check_state(reply,state,address,run_pages) invalid_arguments(reply)
+block invalid_arguments(fr_invalid_reply:mutbuf)
+  fr_invalid_status:u32 = const() {"value":6}
+  fr_invalid_zero:u64 = const() {"value":0}
+  fr_invalid_result:u32 = call(fr_invalid_reply,fr_invalid_status,fr_invalid_zero) {"function":"write_reply"}
+  ret(fr_invalid_result)
+block check_state(fr_verify_reply:mutbuf,fr_verify_state:mutbuf,fr_verify_address:u64,fr_verify_count:u64)
+  fr_verify_ok:bool = call(fr_verify_state) {"function":"state_valid"}
+  branch fr_verify_ok inspect_header(fr_verify_reply,fr_verify_state,fr_verify_address,fr_verify_count) bad_state(fr_verify_reply)
+block bad_state(fr_badstate_reply:mutbuf)
+  fr_badstate_status:u32 = const() {"value":4}
+  fr_badstate_zero:u64 = const() {"value":0}
+  fr_badstate_result:u32 = call(fr_badstate_reply,fr_badstate_status,fr_badstate_zero) {"function":"write_reply"}
+  ret(fr_badstate_result)
+block inspect_header(fr_hdr_reply:mutbuf,fr_hdr_state:mutbuf,fr_hdr_address:u64,fr_hdr_count:u64)
+  fr_hdr_page_off:usize = const() {"value":8}
+  fr_hdr_base_off:usize = const() {"value":16}
+  fr_hdr_res_off:usize = const() {"value":24}
+  fr_hdr_free_off:usize = const() {"value":32}
+  fr_hdr_shift:u64 = const() {"value":12}
+  fr_hdr_total:u64 = call(fr_hdr_state,fr_hdr_page_off) {"function":"read_state_u64"}
+  fr_hdr_base:u64 = call(fr_hdr_state,fr_hdr_base_off) {"function":"read_state_u64"}
+  fr_hdr_reserved:u64 = call(fr_hdr_state,fr_hdr_res_off) {"function":"read_state_u64"}
+  fr_hdr_free:u64 = call(fr_hdr_state,fr_hdr_free_off) {"function":"read_state_u64"}
+  fr_hdr_delta:u64 = int.sub.wrap(fr_hdr_address,fr_hdr_base)
+  fr_hdr_index:u64 = int.shr.checked(fr_hdr_delta,fr_hdr_shift)
+  fr_hdr_above:bool = compare.ge(fr_hdr_address,fr_hdr_base)
+  fr_hdr_below:bool = compare.lt(fr_hdr_index,fr_hdr_total)
+  fr_hdr_inside:bool = bool.and(fr_hdr_above,fr_hdr_below)
+  branch fr_hdr_inside check_extent(fr_hdr_reply,fr_hdr_state,fr_hdr_count,fr_hdr_total,fr_hdr_reserved,fr_hdr_free,fr_hdr_index) invalid_arguments(fr_hdr_reply)
+block check_extent(fr_ext_reply:mutbuf,fr_ext_state:mutbuf,fr_ext_count:u64,fr_ext_total:u64,fr_ext_reserved:u64,fr_ext_free:u64,fr_ext_index:u64)
+  fr_ext_remaining:u64 = int.sub.wrap(fr_ext_total,fr_ext_index)
+  fr_ext_fits:bool = compare.le(fr_ext_count,fr_ext_remaining)
+  branch fr_ext_fits check_reserved(fr_ext_reply,fr_ext_state,fr_ext_count,fr_ext_total,fr_ext_reserved,fr_ext_free,fr_ext_index) invalid_arguments(fr_ext_reply)
+block check_reserved(fr_res_reply:mutbuf,fr_res_state:mutbuf,fr_res_count:u64,fr_res_total:u64,fr_res_reserved:u64,fr_res_free:u64,fr_res_index:u64)
+  fr_res_protected:bool = compare.lt(fr_res_index,fr_res_reserved)
+  branch fr_res_protected reserved_error(fr_res_reply) begin_validation(fr_res_reply,fr_res_state,fr_res_count,fr_res_total,fr_res_reserved,fr_res_free,fr_res_index)
+block reserved_error(fr_reserved_reply:mutbuf)
+  fr_reserved_status:u32 = const() {"value":8}
+  fr_reserved_zero:u64 = const() {"value":0}
+  fr_reserved_result:u32 = call(fr_reserved_reply,fr_reserved_status,fr_reserved_zero) {"function":"write_reply"}
+  ret(fr_reserved_result)
+block begin_validation(fr_begin_reply:mutbuf,fr_begin_state:mutbuf,fr_begin_count:u64,fr_begin_total:u64,fr_begin_reserved:u64,fr_begin_free:u64,fr_begin_index:u64)
+  jump validate_pages(fr_begin_reply,fr_begin_state,fr_begin_count,fr_begin_total,fr_begin_reserved,fr_begin_free,fr_begin_index,fr_begin_index,fr_begin_count)
+block validate_pages(fr_scan_reply:mutbuf,fr_scan_state:mutbuf,fr_scan_count:u64,fr_scan_total:u64,fr_scan_reserved:u64,fr_scan_free:u64,fr_scan_start:u64,fr_scan_index:u64,fr_scan_left:u64)
+  fr_scan_zero:u64 = const() {"value":0}
+  fr_scan_more:bool = compare.gt(fr_scan_left,fr_scan_zero)
+  branch fr_scan_more inspect_page(fr_scan_reply,fr_scan_state,fr_scan_count,fr_scan_total,fr_scan_reserved,fr_scan_free,fr_scan_start,fr_scan_index,fr_scan_left) commit_begin(fr_scan_reply,fr_scan_state,fr_scan_count,fr_scan_free,fr_scan_start)
+block inspect_page(fr_bit_reply:mutbuf,fr_bit_state:mutbuf,fr_bit_count:u64,fr_bit_total:u64,fr_bit_reserved:u64,fr_bit_free:u64,fr_bit_start:u64,fr_bit_index:u64,fr_bit_left:u64)
+  fr_bit_used:bool = call(fr_bit_state,fr_bit_index) {"function":"bitmap_get"}
+  branch fr_bit_used next_validation(fr_bit_reply,fr_bit_state,fr_bit_count,fr_bit_total,fr_bit_reserved,fr_bit_free,fr_bit_start,fr_bit_index,fr_bit_left) double_free(fr_bit_reply)
+block double_free(fr_duplicate_reply:mutbuf)
+  fr_duplicate_status:u32 = const() {"value":7}
+  fr_duplicate_zero:u64 = const() {"value":0}
+  fr_duplicate_result:u32 = call(fr_duplicate_reply,fr_duplicate_status,fr_duplicate_zero) {"function":"write_reply"}
+  ret(fr_duplicate_result)
+block next_validation(fr_next_reply:mutbuf,fr_next_state:mutbuf,fr_next_count:u64,fr_next_total:u64,fr_next_reserved:u64,fr_next_free:u64,fr_next_start:u64,fr_next_index:u64,fr_next_left:u64)
+  fr_next_one:u64 = const() {"value":1}
+  fr_next_index_value:u64 = int.add.wrap(fr_next_index,fr_next_one)
+  fr_next_left_value:u64 = int.sub.wrap(fr_next_left,fr_next_one)
+  jump validate_pages(fr_next_reply,fr_next_state,fr_next_count,fr_next_total,fr_next_reserved,fr_next_free,fr_next_start,fr_next_index_value,fr_next_left_value)
+block commit_begin(fr_commitbegin_reply:mutbuf,fr_commitbegin_state:mutbuf,fr_commitbegin_count:u64,fr_commitbegin_free:u64,fr_commitbegin_start:u64)
+  jump commit_pages(fr_commitbegin_reply,fr_commitbegin_state,fr_commitbegin_count,fr_commitbegin_free,fr_commitbegin_start,fr_commitbegin_count)
+block commit_pages(fr_commit_reply:mutbuf,fr_commit_state:mutbuf,fr_commit_count:u64,fr_commit_free:u64,fr_commit_index:u64,fr_commit_left:u64)
+  fr_commit_zero:u64 = const() {"value":0}
+  fr_commit_more:bool = compare.gt(fr_commit_left,fr_commit_zero)
+  branch fr_commit_more clear_page(fr_commit_reply,fr_commit_state,fr_commit_count,fr_commit_free,fr_commit_index,fr_commit_left) publish(fr_commit_reply,fr_commit_state,fr_commit_count,fr_commit_free)
+block clear_page(fr_clear_reply:mutbuf,fr_clear_state:mutbuf,fr_clear_count:u64,fr_clear_free:u64,fr_clear_index:u64,fr_clear_left:u64)
+  fr_clear_false:bool = const() {"value":false}
+  fr_clear_result:u32 = call(fr_clear_state,fr_clear_index,fr_clear_false) {"function":"bitmap_set"}
+  fr_clear_one:u64 = const() {"value":1}
+  fr_clear_next:u64 = int.add.wrap(fr_clear_index,fr_clear_one)
+  fr_clear_remaining:u64 = int.sub.wrap(fr_clear_left,fr_clear_one)
+  jump commit_pages(fr_clear_reply,fr_clear_state,fr_clear_count,fr_clear_free,fr_clear_next,fr_clear_remaining)
+block publish(fr_publish_reply:mutbuf,fr_publish_state:mutbuf,fr_publish_count:u64,fr_publish_free:u64)
+  fr_publish_new_free:u64 = int.add.wrap(fr_publish_free,fr_publish_count)
+  fr_publish_offset:usize = const() {"value":32}
+  fr_publish_written:u32 = call(fr_publish_state,fr_publish_offset,fr_publish_new_free) {"function":"write_u64"}
+  fr_publish_ok:u32 = const() {"value":0}
+  fr_publish_zero:u64 = const() {"value":0}
+  fr_publish_result:u32 = call(fr_publish_reply,fr_publish_ok,fr_publish_zero) {"function":"write_reply"}
+  ret(fr_publish_result)
 end
 fn free_page(reply:mutbuf,state:mutbuf,address:u64,b:u64,c:u64) -> (u32) effects(read,write,trap) entry(start)
 block start(reply:mutbuf,state:mutbuf,address:u64,b:u64,c:u64)
