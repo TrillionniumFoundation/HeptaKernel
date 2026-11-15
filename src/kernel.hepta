@@ -124,7 +124,55 @@ block inspect(memory:mutbuf,capacity:usize)
   header_valid:bool = bool.and(magic_valid,geometry_ok)
   storage_valid:bool = bool.and(count_valid,capacity_valid)
   accepted:bool = bool.and(header_valid,storage_valid)
-  ret(accepted)
+  branch accepted scan_start(memory,page_count,reserved_count,available_count) invalid()
+block scan_start(scan_state:mutbuf,scan_pages:u64,scan_reserved:u64,claimed_free:u64)
+  initial_index:u64 = const() {"value":0}
+  initial_free:u64 = const() {"value":0}
+  jump scan(scan_state,scan_pages,scan_reserved,claimed_free,initial_index,initial_free)
+block scan(scan_state:mutbuf,scan_pages:u64,scan_reserved:u64,claimed_free:u64,index:u64,free_seen:u64)
+  more:bool = compare.lt(index,scan_pages)
+  branch more inspect_bit(scan_state,scan_pages,scan_reserved,claimed_free,index,free_seen) check_tail(scan_state,scan_pages,claimed_free,free_seen)
+block inspect_bit(bit_state:mutbuf,bit_pages:u64,bit_reserved:u64,bit_claimed:u64,bit_index:u64,seen:u64)
+  occupied:bool = call(bit_state,bit_index) {"function":"bitmap_get"}
+  reserved:bool = compare.lt(bit_index,bit_reserved)
+  empty:bool = bool.not(occupied)
+  freed_reserved:bool = bool.and(reserved,empty)
+  branch freed_reserved invalid() count_bit(bit_state,bit_pages,bit_reserved,bit_claimed,bit_index,seen,occupied,reserved)
+block count_bit(count_state:mutbuf,count_pages:u64,count_reserved:u64,count_claimed:u64,count_index:u64,old_free:u64,occupied:bool,reserved:bool)
+  available:bool = bool.not(occupied)
+  dynamic:bool = bool.not(reserved)
+  is_free:bool = bool.and(available,dynamic)
+  one:u64 = const() {"value":1}
+  zero:u64 = const() {"value":0}
+  increment:u64 = select(is_free,one,zero)
+  next_free:u64 = int.add.wrap(old_free,increment)
+  next_index:u64 = int.add.wrap(count_index,one)
+  jump scan(count_state,count_pages,count_reserved,count_claimed,next_index,next_free)
+block check_tail(tail_state:mutbuf,tail_pages:u64,tail_claimed:u64,observed_free:u64)
+  seven:u64 = const() {"value":7}
+  zero:u64 = const() {"value":0}
+  remainder:u64 = bit.and(tail_pages,seven)
+  whole_bytes:bool = compare.eq(remainder,zero)
+  branch whole_bytes check_free_count(tail_claimed,observed_free) inspect_tail(tail_state,tail_pages,remainder,tail_claimed,observed_free)
+block inspect_tail(tail_state:mutbuf,tail_pages:u64,remainder:u64,tail_claimed:u64,observed_free:u64)
+  three:u64 = const() {"value":3}
+  header:u64 = const() {"value":64}
+  one:u64 = const() {"value":1}
+  zero:u64 = const() {"value":0}
+  index:u64 = int.shr.checked(tail_pages,three)
+  offset:u64 = int.add.wrap(header,index)
+  byte_offset:usize = int.cast(offset) {"mode":"wrap"}
+  octet:u8 = buffer.load(tail_state,byte_offset)
+  value:u64 = int.cast(octet) {"mode":"wrap"}
+  first_unused:u64 = int.shl.checked(one,remainder)
+  valid_mask:u64 = int.sub.wrap(first_unused,one)
+  invalid_mask:u64 = bit.not(valid_mask)
+  tail_bits:u64 = bit.and(value,invalid_mask)
+  clean:bool = compare.eq(tail_bits,zero)
+  branch clean check_free_count(tail_claimed,observed_free) invalid()
+block check_free_count(expected:u64,actual:u64)
+  consistent:bool = compare.eq(expected,actual)
+  ret(consistent)
 end
 fn initialize_pages(reply:mutbuf,state:mutbuf,pages:u64,base:u64,reserved:u64) -> (u32) effects(read,write,trap) entry(start)
 block start(reply:mutbuf,state:mutbuf,pages:u64,base:u64,reserved:u64)

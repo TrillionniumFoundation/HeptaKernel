@@ -24,7 +24,13 @@ HIA's internal capability checks cannot establish those facts about a foreign
 caller. The boot observer and native tests own and separate all three regions.
 
 The state region is trusted, private, single-owner kernel memory. Calls must be
-serialized. This component has no interrupt/SMP synchronization and performs no
+serialized. The current HIA state validator reads every active bitmap bit on
+each non-init operation, checks the reserved prefix, reconciles the exact
+free-frame counter, and requires zero bits beyond the page count in the final
+bitmap byte. This validation adds O(pages) work to each operation; it detects
+inconsistent bookkeeping but does not authenticate caller-owned memory or
+detect a coherent malicious rewrite of an entire private state. A future Linux
+allocator requires protected metadata, concurrency and scalable structures. This component has no interrupt/SMP synchronization and performs no
 implicit allocation, system call, global access or runtime initialization.
 
 ## Request and response
