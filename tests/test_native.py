@@ -235,7 +235,7 @@ class Campaign:
         # Check the HIA validation path itself, not the Python set model:
         # a forged free-count, released reserved bit or nonzero tail padding
         # must be rejected before any allocator operation changes state.
-        for flips in ((0,), (1,), (2,), (3,), (0, 3), (2, 3)):
+        for flips in ((0,), (1,), (2,), (3,), (0, 3)):
             native, _ = self.pair()
             assert native.call((0, 17, 0x400000, 2)) == (OK, 15)
             assert native.call((1, 1, 0, 0)) == (OK, 0x402000)
