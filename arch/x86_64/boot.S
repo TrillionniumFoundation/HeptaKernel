@@ -289,10 +289,10 @@ maybe_probe:
     cmpq $6, (%r12)               /* CLAIM_RUN: every exact physical page */
     jne case_next
     movq 16(%r12), %r14           /* exact-claim length is argument b */
-    movq 8(%r12), %r13            /* claimed exact address, not reply value */
-    jmp probe_bounds
+    jmp probe_length
 probe_run:
     movq 8(%r12), %r14            /* ALLOC_RUN length is argument a */
+probe_length:
     testq %r14, %r14
     jz fail64
     cmpq $1024, %r14             /* bounded by fixture arena, before shifting */
@@ -306,6 +306,10 @@ probe_bounds:
     cmpq $1, arena_ready(%rip)
     jne fail64
     movq reply+8(%rip), %rax
+    cmpq $6, (%r12)
+    jne probe_address_ready
+    movq 8(%r12), %rax            /* CLAIM_RUN uses explicit physical address */
+probe_address_ready:
     testq $4095, %rax
     jnz fail64
     cmpq arena_first(%rip), %rax
