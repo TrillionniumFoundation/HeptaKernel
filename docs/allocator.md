@@ -1,7 +1,7 @@
 # HIA frame allocator
 
 The authoritative implementation is `src/kernel.hepta`, using the real upstream
-`hia-asm.v1 hepta.hia.program.v8 selfhost_elf` profile. It contains 18 functions,
+`hia-asm.v1 hepta.hia.program.v8 selfhost_elf` profile. It contains 17 functions,
 typed control flow, checked borrowed byte access, and no owned allocation or
 external function call. The native compiler emits an ELF64 object with the
 legacy exported symbol `f0`. Its `.text` is unchanged when linked into either

@@ -479,7 +479,7 @@ def main():
     parser.add_argument("--report", type=Path, default=Path("build/native-report.json"))
     args = parser.parse_args()
     campaign = Campaign(args.library)
-    report = {"schema": "heptakernel.native-tests.v1", "scope": "HIA single-arena allocator with atomic contiguous allocation, release and exact-address claim",
+    report = {"schema": "heptakernel.native-tests.v1", "scope": "HIA single-arena allocator with atomic contiguous allocation, release, exact claim and read-only availability query",
               "linux_compatibility_tested": False, "formal_proof": False,
               "tested_library": str(args.library.resolve()),
               "tested_library_sha256": hashlib.sha256(args.library.read_bytes()).hexdigest(),

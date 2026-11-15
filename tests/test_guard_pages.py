@@ -73,7 +73,7 @@ def probe(library):
             result = struct.unpack_from("<2Q", reply.snapshot())
             assert returned == result[0], ("return/reply mismatch", returned, result)
             assert result == expected, (command, result, expected)
-        if expected[0] != 0 or command[0] == 3:
+        if expected[0] != 0 or command[0] in (3, 7):
             assert state.snapshot() == before_state, (command, "unexpected state mutation")
         calls += 1
 
@@ -160,6 +160,7 @@ def main():
             "Failed requests and successful count queries leave state unchanged",
             "Contiguous allocation/release with exact metadata guard and duplicate-run rejection",
             "Exact address claim on read-only request and guard-page protected state",
+            "Read-only exact-run availability query with immutable state and guard-page boundaries",
         ],
     }
     try:
