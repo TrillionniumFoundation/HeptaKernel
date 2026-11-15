@@ -298,7 +298,8 @@ class Campaign:
         assert self.call(pair, (4, 2, 1, 0)) == (OK, 0x506000)
         self.call(pair, (2, 0x509000, 0, 0))
         self.call(pair, (2, 0x50A000, 0, 0))
-        assert self.call(pair, (4, 3, 2, 0)) == (NO_MEMORY, 0)
+        assert self.call(pair, (4, 3, 2, 0)) == (OK, 0x508000)
+        assert self.call(pair, (4, 4, 1, 0)) == (NO_MEMORY, 0)
         self.call(pair, (3, 0, 0, 0))
         for base, alignment in ((0, 1), (0x1000, 1 << 63),
                                 (LIMIT - 7 * PAGE, 2)):
