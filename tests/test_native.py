@@ -71,7 +71,7 @@ class Model:
 
     def call(self, c):
         op, a, b, d = c
-        if op not in range(4):
+        if op not in range(5):
             return BAD_OP, 0
         if op == 0:
             if not 1 <= a <= 65536 or b % PAGE or b >= LIMIT or a > (LIMIT - b) // PAGE or d > a:
@@ -85,7 +85,8 @@ class Model:
         # Parameter-only failures precede inspection of mutable allocator state.
         if ((op == 1 and (a == 0 or a & (a - 1) or b or d))
                 or (op == 2 and (a % PAGE or b or d))
-                or (op == 3 and (a or b or d))):
+                or (op == 3 and (a or b or d))
+                or (op == 4 and (a == 0 or b == 0 or (b & (b - 1)) or d))):
             return INVALID, 0
         if not self.initialized:
             return BAD_STATE, 0
@@ -107,6 +108,16 @@ class Model:
                 return DOUBLE_FREE, 0
             self.free.add(a)
             return OK, 0
+        if op == 4:
+            if a > len(self.free):
+                return NO_MEMORY, 0
+            for index in range(self.reserved, self.n - a + 1):
+                physical = self.base + index * PAGE
+                run = {physical + offset * PAGE for offset in range(a)}
+                if (physical // PAGE) % b == 0 and run.issubset(self.free):
+                    self.free.difference_update(run)
+                    return OK, physical
+            return NO_MEMORY, 0
         if a or b or d:
             return INVALID, 0
         return OK, len(self.free)
@@ -269,6 +280,40 @@ class Campaign:
             self.commands += 1
         self.cases.append("HIA bitmap integrity: reserved bits, exact free counter, unused tail bits; errors preserve bytes")
 
+    def contiguous_runs(self):
+        # A separate set oracle establishes first-fit, physical alignment,
+        # all-or-nothing failure and coexistence with single-page FREE/ALLOC.
+        pair = self.pair(67)
+        self.call(pair, (4, 1, 1, 0))  # valid arguments but uninitialized
+        self.call(pair, (4, 0, 1, 0))  # invalid before state inspection
+        self.call(pair, (0, 17, 0x503000, 3))
+        for request in ((4, 0, 1, 0), (4, 1, 0, 0),
+                        (4, 1, 3, 0), (4, 1, 1, 1)):
+            self.call(pair, request)
+        assert self.call(pair, (4, 4, 8, 0)) == (OK, 0x508000)
+        assert self.call(pair, (4, 6, 1, 0)) == (OK, 0x50C000)
+        assert self.call(pair, (4, 4, 1, 0)) == (NO_MEMORY, 0)
+        assert self.call(pair, (4, 65536, 1, 0)) == (NO_MEMORY, 0)
+        self.call(pair, (2, 0x508000, 0, 0))
+        assert self.call(pair, (4, 2, 1, 0)) == (OK, 0x506000)
+        self.call(pair, (2, 0x509000, 0, 0))
+        self.call(pair, (2, 0x50A000, 0, 0))
+        assert self.call(pair, (4, 3, 2, 0)) == (OK, 0x508000)
+        assert self.call(pair, (4, 4, 1, 0)) == (NO_MEMORY, 0)
+        self.call(pair, (3, 0, 0, 0))
+        for base, alignment in ((0, 1), (0x1000, 1 << 63),
+                                (LIMIT - 7 * PAGE, 2)):
+            p = self.pair(65)
+            self.call(p, (0, 7, base, 0))
+            self.call(p, (4, 1, alignment, 0))
+            self.call(p, (4, 7, 1, 0))
+            self.call(p, (3, 0, 0, 0))
+        p = self.pair(8256)
+        self.call(p, (0, 65536, 0x400000, 65535))
+        assert self.call(p, (4, 1, 1, 0)) == (OK, 0x400000 + 65535 * PAGE)
+        assert self.call(p, (4, 2, 1, 0)) == (NO_MEMORY, 0)
+        self.cases.append("contiguous run allocation: independently modelled first-fit, alignment, fragmentation, no partial claim, zero physical address and maximal state")
+
     def randomized(self):
         for seed in range(32):
             rng = random.Random(0x48494100 + seed)
@@ -280,8 +325,10 @@ class Campaign:
                 choice = rng.randrange(10)
                 if choice < 5:
                     c = (1, 1 << rng.randrange(9), 0, 0)
-                elif choice < 9:
+                elif choice < 8:
                     c = (2, base + rng.randrange(n + 2) * PAGE, 0, 0)
+                elif choice == 8:
+                    c = (4, rng.randint(1, 5), 1 << rng.randrange(6), 0)
                 else:
                     c = (3, 0, 0, 0)
                 self.call(pair, c)
@@ -302,7 +349,7 @@ def main():
     parser.add_argument("--report", type=Path, default=Path("build/native-report.json"))
     args = parser.parse_args()
     campaign = Campaign(args.library)
-    report = {"schema": "heptakernel.native-tests.v1", "scope": "HIA single-arena frame allocator",
+    report = {"schema": "heptakernel.native-tests.v1", "scope": "HIA single-arena frame allocator with contiguous runs",
               "linux_compatibility_tested": False, "formal_proof": False,
               "tested_library": str(args.library.resolve()),
               "tested_library_sha256": hashlib.sha256(args.library.read_bytes()).hexdigest(),
@@ -331,6 +378,7 @@ def main():
         campaign.invalid()
         campaign.header_corruption()
         campaign.bitmap_corruption()
+        campaign.contiguous_runs()
         campaign.randomized()
         campaign.maximum()
         report.update(status="PASS", calls=campaign.commands, cases=campaign.cases)
