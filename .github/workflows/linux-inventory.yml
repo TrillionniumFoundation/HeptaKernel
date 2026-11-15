@@ -1,0 +1,108 @@
+name: Pinned Linux source inventory
+
+on:
+  pull_request:
+    paths:
+      - 'tools/linux_inventory.py'
+      - 'tests/test_linux_inventory.py'
+      - 'docs/linux-inventory.md'
+      - '.github/workflows/linux-inventory.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/linux_inventory.py'
+      - 'tests/test_linux_inventory.py'
+      - 'docs/linux-inventory.md'
+      - '.github/workflows/linux-inventory.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recursive-source-inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout HeptaKernel candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Test inventory parser against adversarial Git fixtures
+        run: python3 -I -B tests/test_linux_inventory.py
+
+      - name: Checkout exact pinned upstream Linux (not a moving branch)
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: gregkh/linux
+          ref: 7595a62d45ee1a2297eafa5f2ef5d0a45142d84d
+          fetch-depth: 1
+          persist-credentials: false
+          path: .upstream/linux
+
+      - name: Extract all tracked paths and Kconfig lexical declarations
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C .upstream/linux rev-parse HEAD)" = "7595a62d45ee1a2297eafa5f2ef5d0a45142d84d"
+          python3 -I -B tools/linux_inventory.py \
+            --repo .upstream/linux \
+            --lock compatibility/linux-source-lock.json \
+            --out build/linux-inventory
+
+      - name: Independently check source counts, hashes and unclosed Linux scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, hashlib, json, subprocess
+          from pathlib import Path
+          root = Path("build/linux-inventory")
+          report = json.loads((root / "report.json").read_text())
+          commit = json.loads(Path("compatibility/linux-source-lock.json").read_text())["linux"]["commit"]
+          assert report["linux_commit"] == commit
+          assert report["linux_root_tree"] == subprocess.check_output([
+              "git", "-C", ".upstream/linux", "rev-parse", "HEAD^{tree}"
+          ], text=True).strip()
+          assert report["status"] == "PARTIAL_SOURCE_INVENTORY_NOT_LINUX_IMPLEMENTATION"
+          assert report["inventory_complete"] is False
+          assert report["linux_full_rewrite_complete"] is False
+          source = (root / report["source_paths_file"]).read_bytes()
+          kconfig = (root / report["kconfig_declarations_file"]).read_bytes()
+          assert hashlib.sha256(source).hexdigest() == report["source_paths_sha256"]
+          assert hashlib.sha256(kconfig).hexdigest() == report["kconfig_declarations_sha256"]
+          rows = [json.loads(x) for x in source.splitlines()]
+          paths = [base64.b64decode(x["path_b64"]) for x in rows]
+          actual = subprocess.check_output([
+              "git", "-C", ".upstream/linux", "ls-tree", "--full-tree",
+              "-r", "-z", "--name-only", commit
+          ]).rstrip(b"\0").split(b"\0")
+          assert len(rows) == len(actual) == report["counts"]["tracked_paths"]
+          assert set(paths) == set(actual)
+          assert paths == sorted(paths)
+          assert len(paths) == len(set(paths))
+          assert report["counts"]["kconfig_declarations"] > 0
+          print("FULL_GIT_TREE_LOSSLESS_INVENTORY: PASS", len(rows))
+          print("KCONFIG_DECLARATION_RECORDS:", report["counts"]["kconfig_declarations"])
+          print("FULL_LINUX_REWRITE: HOLD")
+          PY
+          set +e
+          python3 tools/check_closure.py > build/linux-inventory/closure-state.json
+          result=$?
+          set -e
+          test "$result" -eq 2
+          cat build/linux-inventory/closure-state.json
+
+      - name: Retain pinned, replayable inventory as an artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pinned-linux-source-inventory-${{ github.sha }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            build/linux-inventory/source-paths.jsonl
+            build/linux-inventory/kconfig-declarations.jsonl
+            build/linux-inventory/report.json
+            build/linux-inventory/closure-state.json
