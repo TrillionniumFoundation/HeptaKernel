@@ -125,54 +125,54 @@ block inspect(memory:mutbuf,capacity:usize)
   storage_valid:bool = bool.and(count_valid,capacity_valid)
   accepted:bool = bool.and(header_valid,storage_valid)
   branch accepted scan_start(memory,page_count,reserved_count,available_count) invalid()
-block scan_start(scan_state:mutbuf,scan_pages:u64,scan_reserved:u64,claimed_free:u64)
-  initial_index:u64 = const() {"value":0}
-  initial_free:u64 = const() {"value":0}
-  jump scan(scan_state,scan_pages,scan_reserved,claimed_free,initial_index,initial_free)
-block scan(scan_state:mutbuf,scan_pages:u64,scan_reserved:u64,claimed_free:u64,index:u64,free_seen:u64)
-  more:bool = compare.lt(index,scan_pages)
-  branch more inspect_bit(scan_state,scan_pages,scan_reserved,claimed_free,index,free_seen) check_tail(scan_state,scan_pages,claimed_free,free_seen)
-block inspect_bit(bit_state:mutbuf,bit_pages:u64,bit_reserved:u64,bit_claimed:u64,bit_index:u64,seen:u64)
-  occupied:bool = call(bit_state,bit_index) {"function":"bitmap_get"}
-  reserved:bool = compare.lt(bit_index,bit_reserved)
-  empty:bool = bool.not(occupied)
-  freed_reserved:bool = bool.and(reserved,empty)
-  branch freed_reserved invalid() count_bit(bit_state,bit_pages,bit_reserved,bit_claimed,bit_index,seen,occupied,reserved)
-block count_bit(count_state:mutbuf,count_pages:u64,count_reserved:u64,count_claimed:u64,count_index:u64,old_free:u64,occupied:bool,reserved:bool)
-  available:bool = bool.not(occupied)
-  dynamic:bool = bool.not(reserved)
-  is_free:bool = bool.and(available,dynamic)
-  one:u64 = const() {"value":1}
-  zero:u64 = const() {"value":0}
-  increment:u64 = select(is_free,one,zero)
-  next_free:u64 = int.add.wrap(old_free,increment)
-  next_index:u64 = int.add.wrap(count_index,one)
-  jump scan(count_state,count_pages,count_reserved,count_claimed,next_index,next_free)
-block check_tail(tail_state:mutbuf,tail_pages:u64,tail_claimed:u64,observed_free:u64)
-  seven:u64 = const() {"value":7}
-  zero:u64 = const() {"value":0}
-  remainder:u64 = bit.and(tail_pages,seven)
-  whole_bytes:bool = compare.eq(remainder,zero)
-  branch whole_bytes check_free_count(tail_claimed,observed_free) inspect_tail(tail_state,tail_pages,remainder,tail_claimed,observed_free)
-block inspect_tail(tail_state:mutbuf,tail_pages:u64,remainder:u64,tail_claimed:u64,observed_free:u64)
-  three:u64 = const() {"value":3}
-  header:u64 = const() {"value":64}
-  one:u64 = const() {"value":1}
-  zero:u64 = const() {"value":0}
-  index:u64 = int.shr.checked(tail_pages,three)
-  offset:u64 = int.add.wrap(header,index)
-  byte_offset:usize = int.cast(offset) {"mode":"wrap"}
-  octet:u8 = buffer.load(tail_state,byte_offset)
-  value:u64 = int.cast(octet) {"mode":"wrap"}
-  first_unused:u64 = int.shl.checked(one,remainder)
-  valid_mask:u64 = int.sub.wrap(first_unused,one)
-  invalid_mask:u64 = bit.not(valid_mask)
-  tail_bits:u64 = bit.and(value,invalid_mask)
-  clean:bool = compare.eq(tail_bits,zero)
-  branch clean check_free_count(tail_claimed,observed_free) invalid()
-block check_free_count(expected:u64,actual:u64)
-  consistent:bool = compare.eq(expected,actual)
-  ret(consistent)
+block scan_start(hk_startscan_scan_state:mutbuf,hk_startscan_scan_pages:u64,hk_startscan_scan_reserved:u64,hk_startscan_claimed_free:u64)
+  hk_startscan_initial_index:u64 = const() {"value":0}
+  hk_startscan_initial_free:u64 = const() {"value":0}
+  jump scan(hk_startscan_scan_state,hk_startscan_scan_pages,hk_startscan_scan_reserved,hk_startscan_claimed_free,hk_startscan_initial_index,hk_startscan_initial_free)
+block scan(hk_walk_scan_state:mutbuf,hk_walk_scan_pages:u64,hk_walk_scan_reserved:u64,hk_walk_claimed_free:u64,hk_walk_index:u64,hk_walk_free_seen:u64)
+  hk_walk_more:bool = compare.lt(hk_walk_index,hk_walk_scan_pages)
+  branch hk_walk_more inspect_bit(hk_walk_scan_state,hk_walk_scan_pages,hk_walk_scan_reserved,hk_walk_claimed_free,hk_walk_index,hk_walk_free_seen) check_tail(hk_walk_scan_state,hk_walk_scan_pages,hk_walk_claimed_free,hk_walk_free_seen)
+block inspect_bit(hk_inspectbit_bit_state:mutbuf,hk_inspectbit_bit_pages:u64,hk_inspectbit_bit_reserved:u64,hk_inspectbit_bit_claimed:u64,hk_inspectbit_bit_index:u64,hk_inspectbit_seen:u64)
+  hk_inspectbit_occupied:bool = call(hk_inspectbit_bit_state,hk_inspectbit_bit_index) {"function":"bitmap_get"}
+  hk_inspectbit_reserved:bool = compare.lt(hk_inspectbit_bit_index,hk_inspectbit_bit_reserved)
+  hk_inspectbit_empty:bool = bool.not(hk_inspectbit_occupied)
+  hk_inspectbit_freed_reserved:bool = bool.and(hk_inspectbit_reserved,hk_inspectbit_empty)
+  branch hk_inspectbit_freed_reserved invalid() count_bit(hk_inspectbit_bit_state,hk_inspectbit_bit_pages,hk_inspectbit_bit_reserved,hk_inspectbit_bit_claimed,hk_inspectbit_bit_index,hk_inspectbit_seen,hk_inspectbit_occupied,hk_inspectbit_reserved)
+block count_bit(hk_countbit_count_state:mutbuf,hk_countbit_count_pages:u64,hk_countbit_count_reserved:u64,hk_countbit_count_claimed:u64,hk_countbit_count_index:u64,hk_countbit_old_free:u64,hk_countbit_occupied:bool,hk_countbit_reserved:bool)
+  hk_countbit_available:bool = bool.not(hk_countbit_occupied)
+  hk_countbit_dynamic:bool = bool.not(hk_countbit_reserved)
+  hk_countbit_is_free:bool = bool.and(hk_countbit_available,hk_countbit_dynamic)
+  hk_countbit_one:u64 = const() {"value":1}
+  hk_countbit_zero:u64 = const() {"value":0}
+  hk_countbit_increment:u64 = select(hk_countbit_is_free,hk_countbit_one,hk_countbit_zero)
+  hk_countbit_next_free:u64 = int.add.wrap(hk_countbit_old_free,hk_countbit_increment)
+  hk_countbit_next_index:u64 = int.add.wrap(hk_countbit_count_index,hk_countbit_one)
+  jump scan(hk_countbit_count_state,hk_countbit_count_pages,hk_countbit_count_reserved,hk_countbit_count_claimed,hk_countbit_next_index,hk_countbit_next_free)
+block check_tail(hk_tailcheck_tail_state:mutbuf,hk_tailcheck_tail_pages:u64,hk_tailcheck_tail_claimed:u64,hk_tailcheck_observed_free:u64)
+  hk_tailcheck_seven:u64 = const() {"value":7}
+  hk_tailcheck_zero:u64 = const() {"value":0}
+  hk_tailcheck_remainder:u64 = bit.and(hk_tailcheck_tail_pages,hk_tailcheck_seven)
+  hk_tailcheck_whole_bytes:bool = compare.eq(hk_tailcheck_remainder,hk_tailcheck_zero)
+  branch hk_tailcheck_whole_bytes check_free_count(hk_tailcheck_tail_claimed,hk_tailcheck_observed_free) inspect_tail(hk_tailcheck_tail_state,hk_tailcheck_tail_pages,hk_tailcheck_remainder,hk_tailcheck_tail_claimed,hk_tailcheck_observed_free)
+block inspect_tail(hk_tailinspect_tail_state:mutbuf,hk_tailinspect_tail_pages:u64,hk_tailinspect_remainder:u64,hk_tailinspect_tail_claimed:u64,hk_tailinspect_observed_free:u64)
+  hk_tailinspect_three:u64 = const() {"hk_tailinspect_value":3}
+  hk_tailinspect_header:u64 = const() {"hk_tailinspect_value":64}
+  hk_tailinspect_one:u64 = const() {"hk_tailinspect_value":1}
+  hk_tailinspect_zero:u64 = const() {"hk_tailinspect_value":0}
+  hk_tailinspect_index:u64 = int.shr.checked(hk_tailinspect_tail_pages,hk_tailinspect_three)
+  hk_tailinspect_offset:u64 = int.add.wrap(hk_tailinspect_header,hk_tailinspect_index)
+  hk_tailinspect_byte_offset:usize = int.cast(hk_tailinspect_offset) {"mode":"wrap"}
+  hk_tailinspect_octet:u8 = buffer.load(hk_tailinspect_tail_state,hk_tailinspect_byte_offset)
+  hk_tailinspect_value:u64 = int.cast(hk_tailinspect_octet) {"mode":"wrap"}
+  hk_tailinspect_first_unused:u64 = int.shl.checked(hk_tailinspect_one,hk_tailinspect_remainder)
+  hk_tailinspect_valid_mask:u64 = int.sub.wrap(hk_tailinspect_first_unused,hk_tailinspect_one)
+  hk_tailinspect_invalid_mask:u64 = bit.not(hk_tailinspect_valid_mask)
+  hk_tailinspect_tail_bits:u64 = bit.and(hk_tailinspect_value,hk_tailinspect_invalid_mask)
+  hk_tailinspect_clean:bool = compare.eq(hk_tailinspect_tail_bits,hk_tailinspect_zero)
+  branch hk_tailinspect_clean check_free_count(hk_tailinspect_tail_claimed,hk_tailinspect_observed_free) invalid()
+block check_free_count(hk_countverify_expected:u64,hk_countverify_actual:u64)
+  hk_countverify_consistent:bool = compare.eq(hk_countverify_expected,hk_countverify_actual)
+  ret(hk_countverify_consistent)
 end
 fn initialize_pages(reply:mutbuf,state:mutbuf,pages:u64,base:u64,reserved:u64) -> (u32) effects(read,write,trap) entry(start)
 block start(reply:mutbuf,state:mutbuf,pages:u64,base:u64,reserved:u64)
