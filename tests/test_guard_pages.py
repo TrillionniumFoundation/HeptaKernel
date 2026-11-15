@@ -91,6 +91,9 @@ def probe(library):
         ((4, 2, 3, 0), (6, 0)),
         ((4, 20, 1, 0), (5, 0)),
         ((4, 2, 4, 0), (0, 0x508000)),
+        ((5, 0x508000, 2, 0), (0, 0)),
+        ((5, 0x508000, 2, 0), (7, 0)),
+        ((3, 0, 0, 0), (0, 15)),
     ):
         call(state, command, expected)
     for size in (0, 1, 7, 15, 31, 33):
@@ -119,7 +122,7 @@ def probe(library):
     absent = Guarded(0)
     call(absent, (0, 0, 0, 0), (1, 0), request_size=0, reply_size=0)
     call(absent, (0, 0, 0, 0), (2, 0), request_size=0)
-    assert calls == 64
+    assert calls == 67
     return {"status": "PASS", "calls": calls,
             "tested_library_sha256": digest(library)}
 
@@ -148,7 +151,7 @@ def main():
             "Physical address zero success distinguished from exhaustion by status",
             "Reserved prefix, double free, malformed sizes and invalid arguments",
             "Failed requests and successful count queries leave state unchanged",
-            "Contiguous run allocation respects physical alignment and exact metadata guard",
+            "Contiguous allocation/release with exact metadata guard and duplicate-run rejection",
         ],
     }
     try:
@@ -159,11 +162,11 @@ def main():
         if result.returncode != 0:
             raise RuntimeError("guard-page worker failed or faulted")
         worker = json.loads(result.stdout)
-        if worker.get("status") != "PASS" or worker.get("calls") != 64:
+        if worker.get("status") != "PASS" or worker.get("calls") != 67:
             raise RuntimeError("worker did not report the complete fixed campaign")
         if worker.get("tested_library_sha256") != report["tested_library_sha256"]:
             raise RuntimeError("tested library changed during the campaign")
-        report.update(status="PASS", calls=64)
+        report.update(status="PASS", calls=67)
     except Exception as exc:
         report["error"] = repr(exc)
     args.report.parent.mkdir(parents=True, exist_ok=True)

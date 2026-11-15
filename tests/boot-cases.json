@@ -201,6 +201,97 @@
         3,
         0
       ]
+    },
+    {
+      "name": "partial-free-run-rejected",
+      "request": [
+        5,
+        4210688,
+        3,
+        0
+      ],
+      "expected": [
+        7,
+        0
+      ]
+    },
+    {
+      "name": "atomic-free-two",
+      "request": [
+        5,
+        4210688,
+        2,
+        0
+      ],
+      "expected": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "count-after-free-run",
+      "request": [
+        3,
+        0,
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        13
+      ]
+    },
+    {
+      "name": "duplicate-free-run",
+      "request": [
+        5,
+        4210688,
+        2,
+        0
+      ],
+      "expected": [
+        7,
+        0
+      ]
+    },
+    {
+      "name": "run-reuse-after-free",
+      "request": [
+        4,
+        2,
+        4,
+        0
+      ],
+      "expected": [
+        0,
+        4210688
+      ]
+    },
+    {
+      "name": "invalid-free-run-overflow",
+      "request": [
+        5,
+        4259840,
+        2,
+        0
+      ],
+      "expected": [
+        6,
+        0
+      ]
+    },
+    {
+      "name": "final-count",
+      "request": [
+        3,
+        0,
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        11
+      ]
     }
   ]
 }
