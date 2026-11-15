@@ -71,7 +71,7 @@ class Model:
 
     def call(self, c):
         op, a, b, d = c
-        if op not in range(6):
+        if op not in range(7):
             return BAD_OP, 0
         if op == 0:
             if not 1 <= a <= 65536 or b % PAGE or b >= LIMIT or a > (LIMIT - b) // PAGE or d > a:
@@ -87,7 +87,8 @@ class Model:
                 or (op == 2 and (a % PAGE or b or d))
                 or (op == 3 and (a or b or d))
                 or (op == 4 and (a == 0 or b == 0 or (b & (b - 1)) or d))
-                or (op == 5 and (a % PAGE or b == 0 or d))):
+                or (op == 5 and (a % PAGE or b == 0 or d))
+                or (op == 6 and (a % PAGE or b == 0 or d))):
             return INVALID, 0
         if not self.initialized:
             return BAD_STATE, 0
@@ -131,6 +132,19 @@ class Model:
             if run & self.free:
                 return DOUBLE_FREE, 0
             self.free.update(run)
+            return OK, 0
+        if op == 6:
+            if not self.base <= a < self.base + self.n * PAGE:
+                return INVALID, 0
+            index = (a - self.base) // PAGE
+            if b > self.n - index:
+                return INVALID, 0
+            if index < self.reserved:
+                return RESERVED, 0
+            run = {a + offset * PAGE for offset in range(b)}
+            if not run.issubset(self.free):
+                return NO_MEMORY, 0
+            self.free.difference_update(run)
             return OK, 0
         if a or b or d:
             return INVALID, 0
@@ -354,6 +368,37 @@ class Campaign:
         self.call(zero, (5, 0, 1, 0))
         self.cases.append("atomic contiguous release: independent set oracle, partial-double-free rollback, reserved/overflow, exact metadata and physical zero")
 
+    def exact_claim_runs(self):
+        # Independent address-set oracle, including exact-placement failures.
+        pair = self.pair(67)
+        assert self.call(pair, (6, 0x505000, 3, 0)) == (BAD_STATE, 0)
+        assert self.call(pair, (6, 0x505000, 0, 0)) == (INVALID, 0)
+        self.call(pair, (0, 17, 0x503000, 2))
+        assert self.call(pair, (6, 0x505000, 3, 0)) == (OK, 0)
+        assert self.call(pair, (6, 0x505000, 3, 0)) == (NO_MEMORY, 0)
+        assert self.call(pair, (6, 0x504000, 3, 0)) == (RESERVED, 0)
+        assert self.call(pair, (6, 0x507000, 2, 0)) == (NO_MEMORY, 0)
+        assert self.call(pair, (2, 0x506000, 0, 0)) == (OK, 0)
+        assert self.call(pair, (6, 0x505000, 3, 0)) == (NO_MEMORY, 0)
+        self.call(pair, (2, 0x505000, 0, 0))
+        self.call(pair, (2, 0x507000, 0, 0))
+        assert self.call(pair, (6, 0x505000, 3, 0)) == (OK, 0)
+        for cmd in ((6, 0x505001, 1, 0), (6, 0x505000, 0, 0),
+                    (6, 0x505000, 1, 1), (6, 0x514000, 1, 0),
+                    (6, 0x513000, 2, 0), (6, MASK, 2, 0)):
+            self.call(pair, cmd)
+        zero = self.pair(65)
+        self.call(zero, (0, 1, 0, 0))
+        assert self.call(zero, (6, 0, 1, 0)) == (OK, 0)
+        assert self.call(zero, (6, 0, 1, 0)) == (NO_MEMORY, 0)
+        self.call(zero, (5, 0, 1, 0))
+        assert self.call(zero, (6, 0, 1, 0)) == (OK, 0)
+        ceiling = self.pair(65)
+        self.call(ceiling, (0, 1, LIMIT - PAGE, 0))
+        assert self.call(ceiling, (6, LIMIT - PAGE, 1, 0)) == (OK, 0)
+        assert self.call(ceiling, (6, LIMIT - PAGE, 2, 0)) == (INVALID, 0)
+        self.cases.append("exact address claim: zero physical address, reserved, conflict immutability, boundary and reacquisition")
+
     def randomized(self):
         for seed in range(32):
             rng = random.Random(0x48494100 + seed)
@@ -362,7 +407,7 @@ class Campaign:
             base = rng.randrange(0, 1024) * PAGE
             self.call(pair, (0, n, base, reserved))
             for _ in range(250):
-                choice = rng.randrange(12)
+                choice = rng.randrange(15)
                 if choice < 5:
                     c = (1, 1 << rng.randrange(9), 0, 0)
                 elif choice < 8:
@@ -371,6 +416,8 @@ class Campaign:
                     c = (4, rng.randint(1, 5), 1 << rng.randrange(6), 0)
                 elif choice == 10:
                     c = (5, base + rng.randrange(n + 2) * PAGE, rng.randint(1, 5), 0)
+                elif choice in (11, 12, 13):
+                    c = (6, base + rng.randrange(n + 2) * PAGE, rng.randint(1, 5), 0)
                 else:
                     c = (3, 0, 0, 0)
                 self.call(pair, c)
@@ -391,7 +438,7 @@ def main():
     parser.add_argument("--report", type=Path, default=Path("build/native-report.json"))
     args = parser.parse_args()
     campaign = Campaign(args.library)
-    report = {"schema": "heptakernel.native-tests.v1", "scope": "HIA single-arena allocator with atomic contiguous allocation and release",
+    report = {"schema": "heptakernel.native-tests.v1", "scope": "HIA single-arena allocator with atomic contiguous allocation, release and exact-address claim",
               "linux_compatibility_tested": False, "formal_proof": False,
               "tested_library": str(args.library.resolve()),
               "tested_library_sha256": hashlib.sha256(args.library.read_bytes()).hexdigest(),
@@ -422,6 +469,7 @@ def main():
         campaign.bitmap_corruption()
         campaign.contiguous_runs()
         campaign.free_runs()
+        campaign.exact_claim_runs()
         campaign.randomized()
         campaign.maximum()
         report.update(status="PASS", calls=campaign.commands, cases=campaign.cases)

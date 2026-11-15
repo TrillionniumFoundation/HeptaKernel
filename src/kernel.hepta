@@ -63,7 +63,14 @@ block check_run_op(ar_dispatch_reply:mutbuf,ar_dispatch_state:mutbuf,ar_dispatch
 block check_release_run(fr_dispatch_reply:mutbuf,fr_dispatch_state:mutbuf,fr_dispatch_op:u64,fr_dispatch_a:u64,fr_dispatch_b:u64,fr_dispatch_c:u64)
   fr_dispatch_opcode:u64 = const() {"value":5}
   fr_dispatch_match:bool = compare.eq(fr_dispatch_op,fr_dispatch_opcode)
-  branch fr_dispatch_match release_contiguous(fr_dispatch_reply,fr_dispatch_state,fr_dispatch_a,fr_dispatch_b,fr_dispatch_c) unknown(fr_dispatch_reply)
+  branch fr_dispatch_match release_contiguous(fr_dispatch_reply,fr_dispatch_state,fr_dispatch_a,fr_dispatch_b,fr_dispatch_c) check_claim_run(fr_dispatch_reply,fr_dispatch_state,fr_dispatch_op,fr_dispatch_a,fr_dispatch_b,fr_dispatch_c)
+block check_claim_run(cr_route_reply:mutbuf,cr_route_state:mutbuf,cr_route_op:u64,cr_route_address:u64,cr_route_count:u64,cr_route_unused:u64)
+  cr_route_code:u64 = const() {"value":6}
+  cr_route_matches:bool = compare.eq(cr_route_op,cr_route_code)
+  branch cr_route_matches route_claim(cr_route_reply,cr_route_state,cr_route_address,cr_route_count,cr_route_unused) unknown(cr_route_reply)
+block route_claim(cr_in_reply:mutbuf,cr_in_state:mutbuf,cr_in_address:u64,cr_in_count:u64,cr_in_unused:u64)
+  cr_in_result:u32 = call(cr_in_reply,cr_in_state,cr_in_address,cr_in_count,cr_in_unused) {"function":"claim_run"}
+  ret(cr_in_result)
 block release_contiguous(fr_route_reply:mutbuf,fr_route_state:mutbuf,fr_route_address:u64,fr_route_pages:u64,fr_route_unused:u64)
   fr_route_result:u32 = call(fr_route_reply,fr_route_state,fr_route_address,fr_route_pages,fr_route_unused) {"function":"free_run"}
   ret(fr_route_result)
@@ -524,6 +531,99 @@ block publish(fr_publish_reply:mutbuf,fr_publish_state:mutbuf,fr_publish_count:u
   fr_publish_zero:u64 = const() {"value":0}
   fr_publish_result:u32 = call(fr_publish_reply,fr_publish_ok,fr_publish_zero) {"function":"write_reply"}
   ret(fr_publish_result)
+end
+fn claim_run(reply:mutbuf,state:mutbuf,address:u64,run_pages:u64,unused:u64) -> (u32) effects(read,write,trap) entry(start)
+block start(reply:mutbuf,state:mutbuf,address:u64,run_pages:u64,unused:u64)
+  cr_start_zero:u64 = const() {"value":0}
+  cr_start_page_mask:u64 = const() {"value":4095}
+  cr_start_low:u64 = bit.and(address,cr_start_page_mask)
+  cr_start_aligned:bool = compare.eq(cr_start_low,cr_start_zero)
+  cr_start_nonempty:bool = compare.gt(run_pages,cr_start_zero)
+  cr_start_no_extra:bool = compare.eq(unused,cr_start_zero)
+  cr_start_first_ok:bool = bool.and(cr_start_aligned,cr_start_nonempty)
+  cr_start_valid:bool = bool.and(cr_start_first_ok,cr_start_no_extra)
+  branch cr_start_valid check_state(reply,state,address,run_pages) invalid_arguments(reply)
+block invalid_arguments(cr_invalid_reply:mutbuf)
+  cr_invalid_status:u32 = const() {"value":6}
+  cr_invalid_zero:u64 = const() {"value":0}
+  cr_invalid_result:u32 = call(cr_invalid_reply,cr_invalid_status,cr_invalid_zero) {"function":"write_reply"}
+  ret(cr_invalid_result)
+block check_state(cr_verify_reply:mutbuf,cr_verify_state:mutbuf,cr_verify_address:u64,cr_verify_count:u64)
+  cr_verify_ok:bool = call(cr_verify_state) {"function":"state_valid"}
+  branch cr_verify_ok inspect_header(cr_verify_reply,cr_verify_state,cr_verify_address,cr_verify_count) bad_state(cr_verify_reply)
+block bad_state(cr_badstate_reply:mutbuf)
+  cr_badstate_status:u32 = const() {"value":4}
+  cr_badstate_zero:u64 = const() {"value":0}
+  cr_badstate_result:u32 = call(cr_badstate_reply,cr_badstate_status,cr_badstate_zero) {"function":"write_reply"}
+  ret(cr_badstate_result)
+block inspect_header(cr_hdr_reply:mutbuf,cr_hdr_state:mutbuf,cr_hdr_address:u64,cr_hdr_count:u64)
+  cr_hdr_page_off:usize = const() {"value":8}
+  cr_hdr_base_off:usize = const() {"value":16}
+  cr_hdr_res_off:usize = const() {"value":24}
+  cr_hdr_free_off:usize = const() {"value":32}
+  cr_hdr_shift:u64 = const() {"value":12}
+  cr_hdr_total:u64 = call(cr_hdr_state,cr_hdr_page_off) {"function":"read_state_u64"}
+  cr_hdr_base:u64 = call(cr_hdr_state,cr_hdr_base_off) {"function":"read_state_u64"}
+  cr_hdr_reserved:u64 = call(cr_hdr_state,cr_hdr_res_off) {"function":"read_state_u64"}
+  cr_hdr_free:u64 = call(cr_hdr_state,cr_hdr_free_off) {"function":"read_state_u64"}
+  cr_hdr_delta:u64 = int.sub.wrap(cr_hdr_address,cr_hdr_base)
+  cr_hdr_index:u64 = int.shr.checked(cr_hdr_delta,cr_hdr_shift)
+  cr_hdr_above:bool = compare.ge(cr_hdr_address,cr_hdr_base)
+  cr_hdr_below:bool = compare.lt(cr_hdr_index,cr_hdr_total)
+  cr_hdr_inside:bool = bool.and(cr_hdr_above,cr_hdr_below)
+  branch cr_hdr_inside check_extent(cr_hdr_reply,cr_hdr_state,cr_hdr_count,cr_hdr_total,cr_hdr_reserved,cr_hdr_free,cr_hdr_index) invalid_arguments(cr_hdr_reply)
+block check_extent(cr_ext_reply:mutbuf,cr_ext_state:mutbuf,cr_ext_count:u64,cr_ext_total:u64,cr_ext_reserved:u64,cr_ext_free:u64,cr_ext_index:u64)
+  cr_ext_remaining:u64 = int.sub.wrap(cr_ext_total,cr_ext_index)
+  cr_ext_fits:bool = compare.le(cr_ext_count,cr_ext_remaining)
+  branch cr_ext_fits check_reserved(cr_ext_reply,cr_ext_state,cr_ext_count,cr_ext_total,cr_ext_reserved,cr_ext_free,cr_ext_index) invalid_arguments(cr_ext_reply)
+block check_reserved(cr_res_reply:mutbuf,cr_res_state:mutbuf,cr_res_count:u64,cr_res_total:u64,cr_res_reserved:u64,cr_res_free:u64,cr_res_index:u64)
+  cr_res_protected:bool = compare.lt(cr_res_index,cr_res_reserved)
+  branch cr_res_protected reserved_error(cr_res_reply) begin_validation(cr_res_reply,cr_res_state,cr_res_count,cr_res_total,cr_res_reserved,cr_res_free,cr_res_index)
+block reserved_error(cr_reserved_reply:mutbuf)
+  cr_reserved_status:u32 = const() {"value":8}
+  cr_reserved_zero:u64 = const() {"value":0}
+  cr_reserved_result:u32 = call(cr_reserved_reply,cr_reserved_status,cr_reserved_zero) {"function":"write_reply"}
+  ret(cr_reserved_result)
+block begin_validation(cr_begin_reply:mutbuf,cr_begin_state:mutbuf,cr_begin_count:u64,cr_begin_total:u64,cr_begin_reserved:u64,cr_begin_free:u64,cr_begin_index:u64)
+  jump validate_pages(cr_begin_reply,cr_begin_state,cr_begin_count,cr_begin_total,cr_begin_reserved,cr_begin_free,cr_begin_index,cr_begin_index,cr_begin_count)
+block validate_pages(cr_scan_reply:mutbuf,cr_scan_state:mutbuf,cr_scan_count:u64,cr_scan_total:u64,cr_scan_reserved:u64,cr_scan_free:u64,cr_scan_start:u64,cr_scan_index:u64,cr_scan_left:u64)
+  cr_scan_zero:u64 = const() {"value":0}
+  cr_scan_more:bool = compare.gt(cr_scan_left,cr_scan_zero)
+  branch cr_scan_more inspect_page(cr_scan_reply,cr_scan_state,cr_scan_count,cr_scan_total,cr_scan_reserved,cr_scan_free,cr_scan_start,cr_scan_index,cr_scan_left) commit_begin(cr_scan_reply,cr_scan_state,cr_scan_count,cr_scan_free,cr_scan_start)
+block inspect_page(cr_bit_reply:mutbuf,cr_bit_state:mutbuf,cr_bit_count:u64,cr_bit_total:u64,cr_bit_reserved:u64,cr_bit_free:u64,cr_bit_start:u64,cr_bit_index:u64,cr_bit_left:u64)
+  cr_bit_used:bool = call(cr_bit_state,cr_bit_index) {"function":"bitmap_get"}
+  branch cr_bit_used no_memory(cr_bit_reply) next_validation(cr_bit_reply,cr_bit_state,cr_bit_count,cr_bit_total,cr_bit_reserved,cr_bit_free,cr_bit_start,cr_bit_index,cr_bit_left)
+block no_memory(cr_duplicate_reply:mutbuf)
+  cr_duplicate_status:u32 = const() {"value":5}
+  cr_duplicate_zero:u64 = const() {"value":0}
+  cr_duplicate_result:u32 = call(cr_duplicate_reply,cr_duplicate_status,cr_duplicate_zero) {"function":"write_reply"}
+  ret(cr_duplicate_result)
+block next_validation(cr_next_reply:mutbuf,cr_next_state:mutbuf,cr_next_count:u64,cr_next_total:u64,cr_next_reserved:u64,cr_next_free:u64,cr_next_start:u64,cr_next_index:u64,cr_next_left:u64)
+  cr_next_one:u64 = const() {"value":1}
+  cr_next_index_value:u64 = int.add.wrap(cr_next_index,cr_next_one)
+  cr_next_left_value:u64 = int.sub.wrap(cr_next_left,cr_next_one)
+  jump validate_pages(cr_next_reply,cr_next_state,cr_next_count,cr_next_total,cr_next_reserved,cr_next_free,cr_next_start,cr_next_index_value,cr_next_left_value)
+block commit_begin(cr_commitbegin_reply:mutbuf,cr_commitbegin_state:mutbuf,cr_commitbegin_count:u64,cr_commitbegin_free:u64,cr_commitbegin_start:u64)
+  jump commit_pages(cr_commitbegin_reply,cr_commitbegin_state,cr_commitbegin_count,cr_commitbegin_free,cr_commitbegin_start,cr_commitbegin_count)
+block commit_pages(cr_commit_reply:mutbuf,cr_commit_state:mutbuf,cr_commit_count:u64,cr_commit_free:u64,cr_commit_index:u64,cr_commit_left:u64)
+  cr_commit_zero:u64 = const() {"value":0}
+  cr_commit_more:bool = compare.gt(cr_commit_left,cr_commit_zero)
+  branch cr_commit_more clear_page(cr_commit_reply,cr_commit_state,cr_commit_count,cr_commit_free,cr_commit_index,cr_commit_left) publish(cr_commit_reply,cr_commit_state,cr_commit_count,cr_commit_free)
+block clear_page(cr_clear_reply:mutbuf,cr_clear_state:mutbuf,cr_clear_count:u64,cr_clear_free:u64,cr_clear_index:u64,cr_clear_left:u64)
+  cr_clear_false:bool = const() {"value":true}
+  cr_clear_result:u32 = call(cr_clear_state,cr_clear_index,cr_clear_false) {"function":"bitmap_set"}
+  cr_clear_one:u64 = const() {"value":1}
+  cr_clear_next:u64 = int.add.wrap(cr_clear_index,cr_clear_one)
+  cr_clear_remaining:u64 = int.sub.wrap(cr_clear_left,cr_clear_one)
+  jump commit_pages(cr_clear_reply,cr_clear_state,cr_clear_count,cr_clear_free,cr_clear_next,cr_clear_remaining)
+block publish(cr_publish_reply:mutbuf,cr_publish_state:mutbuf,cr_publish_count:u64,cr_publish_free:u64)
+  cr_publish_new_free:u64 = int.sub.wrap(cr_publish_free,cr_publish_count)
+  cr_publish_offset:usize = const() {"value":32}
+  cr_publish_written:u32 = call(cr_publish_state,cr_publish_offset,cr_publish_new_free) {"function":"write_u64"}
+  cr_publish_ok:u32 = const() {"value":0}
+  cr_publish_zero:u64 = const() {"value":0}
+  cr_publish_result:u32 = call(cr_publish_reply,cr_publish_ok,cr_publish_zero) {"function":"write_reply"}
+  ret(cr_publish_result)
 end
 fn free_page(reply:mutbuf,state:mutbuf,address:u64,b:u64,c:u64) -> (u32) effects(read,write,trap) entry(start)
 block start(reply:mutbuf,state:mutbuf,address:u64,b:u64,c:u64)
