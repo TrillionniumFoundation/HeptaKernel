@@ -155,10 +155,10 @@ block check_tail(hk_tailcheck_tail_state:mutbuf,hk_tailcheck_tail_pages:u64,hk_t
   hk_tailcheck_whole_bytes:bool = compare.eq(hk_tailcheck_remainder,hk_tailcheck_zero)
   branch hk_tailcheck_whole_bytes check_free_count(hk_tailcheck_tail_claimed,hk_tailcheck_observed_free) inspect_tail(hk_tailcheck_tail_state,hk_tailcheck_tail_pages,hk_tailcheck_remainder,hk_tailcheck_tail_claimed,hk_tailcheck_observed_free)
 block inspect_tail(hk_tailinspect_tail_state:mutbuf,hk_tailinspect_tail_pages:u64,hk_tailinspect_remainder:u64,hk_tailinspect_tail_claimed:u64,hk_tailinspect_observed_free:u64)
-  hk_tailinspect_three:u64 = const() {"hk_tailinspect_value":3}
-  hk_tailinspect_header:u64 = const() {"hk_tailinspect_value":64}
-  hk_tailinspect_one:u64 = const() {"hk_tailinspect_value":1}
-  hk_tailinspect_zero:u64 = const() {"hk_tailinspect_value":0}
+  hk_tailinspect_three:u64 = const() {"value":3}
+  hk_tailinspect_header:u64 = const() {"value":64}
+  hk_tailinspect_one:u64 = const() {"value":1}
+  hk_tailinspect_zero:u64 = const() {"value":0}
   hk_tailinspect_index:u64 = int.shr.checked(hk_tailinspect_tail_pages,hk_tailinspect_three)
   hk_tailinspect_offset:u64 = int.add.wrap(hk_tailinspect_header,hk_tailinspect_index)
   hk_tailinspect_byte_offset:usize = int.cast(hk_tailinspect_offset) {"mode":"wrap"}
