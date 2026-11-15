@@ -1,7 +1,7 @@
 # HIA frame allocator
 
 The authoritative implementation is `src/kernel.hepta`, using the real upstream
-`hia-asm.v1 hepta.hia.program.v8 selfhost_elf` profile. It contains 14 functions,
+`hia-asm.v1 hepta.hia.program.v8 selfhost_elf` profile. It contains 15 functions,
 typed control flow, checked borrowed byte access, and no owned allocation or
 external function call. The native compiler emits an ELF64 object with the
 legacy exported symbol `f0`. Its `.text` is unchanged when linked into either
@@ -47,6 +47,7 @@ the status word distinguishes it from a failure.
 | 1 ALLOC | power-of-two alignment in pages, 0, 0 | Lowest free aligned physical address |
 | 2 FREE | allocated physical address, 0, 0 | 0 |
 | 3 FREE_COUNT | 0, 0, 0 | Free frames |
+| 4 ALLOC_RUN | contiguous page count, power-of-two alignment in pages, 0 | Lowest physically aligned first frame of a contiguous run |
 
 Each page is 4096 bytes. The arena has 1 through 65,536 pages, a 4096-aligned
 base, and an exclusive upper bound at most `2^52`. The permanently reserved
@@ -61,6 +62,15 @@ address merely aligned relative to the arena. Any representable nonzero
 power-of-two page alignment is accepted; absence of a matching frame returns
 NO_MEMORY. Arithmetic validation precedes mutation. Search is first-fit and
 linear in the page count; no Linux buddy-allocation behavior is claimed.
+
+ALLOC_RUN walks the existing bitmap exactly once after validating the state,
+finds a contiguous run of the requested nonzero number of pages, and commits
+all its bits and free-count change only after the entire run has been found.
+The first physical page of the run must satisfy the power-of-two page
+alignment. An insufficient total count or fragmented capacity returns
+NO_MEMORY with no state mutation. Individual pages can be returned with
+FREE; no run-ownership tracking, zones, SMP locking or buddy merging is yet
+implemented. The caller must prevent stale aliases and coordinate ownership.
 
 | Status | Name | Meaning |
 | ---: | --- | --- |
