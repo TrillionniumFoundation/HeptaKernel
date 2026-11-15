@@ -71,7 +71,7 @@ class Model:
 
     def call(self, c):
         op, a, b, d = c
-        if op not in range(7):
+        if op not in range(8):
             return BAD_OP, 0
         if op == 0:
             if not 1 <= a <= 65536 or b % PAGE or b >= LIMIT or a > (LIMIT - b) // PAGE or d > a:
@@ -88,7 +88,8 @@ class Model:
                 or (op == 3 and (a or b or d))
                 or (op == 4 and (a == 0 or b == 0 or (b & (b - 1)) or d))
                 or (op == 5 and (a % PAGE or b == 0 or d))
-                or (op == 6 and (a % PAGE or b == 0 or d))):
+                or (op == 6 and (a % PAGE or b == 0 or d))
+                or (op == 7 and (a % PAGE or b == 0 or d))):
             return INVALID, 0
         if not self.initialized:
             return BAD_STATE, 0
@@ -146,6 +147,16 @@ class Model:
                 return NO_MEMORY, 0
             self.free.difference_update(run)
             return OK, 0
+        if op == 7:
+            if not self.base <= a < self.base + self.n * PAGE:
+                return INVALID, 0
+            index = (a - self.base) // PAGE
+            if b > self.n - index:
+                return INVALID, 0
+            if index < self.reserved:
+                return RESERVED, 0
+            requested = {a + offset * PAGE for offset in range(b)}
+            return (OK, b) if requested.issubset(self.free) else (NO_MEMORY, 0)
         if a or b or d:
             return INVALID, 0
         return OK, len(self.free)
@@ -180,8 +191,8 @@ class Campaign:
         assert actual == expected, {"command": command, "actual": actual, "expected": expected}
         if actual[0] != OK:
             assert native.snapshot() == before, ("failure mutated allocator state", command)
-        elif command[0] == 3:
-            assert native.snapshot() == before, "read-only count query mutated state"
+        elif command[0] in (3, 7):
+            assert native.snapshot() == before, "read-only query mutated state"
         if model.initialized:
             end = 64 + (model.n + 7) // 8
             assert native.snapshot()[end:] == before[end:], "unrelated state capacity modified"
@@ -399,6 +410,34 @@ class Campaign:
         assert self.call(ceiling, (6, LIMIT - PAGE, 2, 0)) == (INVALID, 0)
         self.cases.append("exact address claim: zero physical address, reserved, conflict immutability, boundary and reacquisition")
 
+    def query_free_runs(self):
+        pair = self.pair(67)
+        assert self.call(pair, (7, 0x505000, 3, 0)) == (BAD_STATE, 0)
+        assert self.call(pair, (7, 0x505000, 0, 0)) == (INVALID, 0)
+        self.call(pair, (0, 17, 0x503000, 2))
+        assert self.call(pair, (7, 0x505000, 3, 0)) == (OK, 3)
+        assert self.call(pair, (7, 0x504000, 1, 0)) == (RESERVED, 0)
+        assert self.call(pair, (6, 0x507000, 2, 0)) == (OK, 0)
+        assert self.call(pair, (7, 0x505000, 5, 0)) == (NO_MEMORY, 0)
+        assert self.call(pair, (7, 0x505000, 2, 0)) == (OK, 2)
+        assert self.call(pair, (7, 0x507000, 2, 0)) == (NO_MEMORY, 0)
+        self.call(pair, (5, 0x507000, 2, 0))
+        assert self.call(pair, (7, 0x505000, 5, 0)) == (OK, 5)
+        for cmd in ((7, 0x505001, 1, 0), (7, 0x505000, 0, 0),
+                    (7, 0x505000, 1, 1), (7, 0x513000, 2, 0),
+                    (7, MASK, 1, 0)):
+            self.call(pair, cmd)
+        zero = self.pair(65)
+        self.call(zero, (0, 1, 0, 0))
+        assert self.call(zero, (7, 0, 1, 0)) == (OK, 1)
+        self.call(zero, (6, 0, 1, 0))
+        assert self.call(zero, (7, 0, 1, 0)) == (NO_MEMORY, 0)
+        ceiling = self.pair(65)
+        self.call(ceiling, (0, 1, LIMIT - PAGE, 0))
+        assert self.call(ceiling, (7, LIMIT - PAGE, 1, 0)) == (OK, 1)
+        assert self.call(ceiling, (7, LIMIT - PAGE, 2, 0)) == (INVALID, 0)
+        self.cases.append("read-only exact run query: independent set model, fragmentation, zero address, reserved, boundaries and immutability")
+
     def randomized(self):
         for seed in range(32):
             rng = random.Random(0x48494100 + seed)
@@ -407,7 +446,7 @@ class Campaign:
             base = rng.randrange(0, 1024) * PAGE
             self.call(pair, (0, n, base, reserved))
             for _ in range(250):
-                choice = rng.randrange(15)
+                choice = rng.randrange(17)
                 if choice < 5:
                     c = (1, 1 << rng.randrange(9), 0, 0)
                 elif choice < 8:
@@ -418,6 +457,8 @@ class Campaign:
                     c = (5, base + rng.randrange(n + 2) * PAGE, rng.randint(1, 5), 0)
                 elif choice in (11, 12, 13):
                     c = (6, base + rng.randrange(n + 2) * PAGE, rng.randint(1, 5), 0)
+                elif choice in (14, 15):
+                    c = (7, base + rng.randrange(n + 2) * PAGE, rng.randint(1, 5), 0)
                 else:
                     c = (3, 0, 0, 0)
                 self.call(pair, c)
@@ -438,7 +479,7 @@ def main():
     parser.add_argument("--report", type=Path, default=Path("build/native-report.json"))
     args = parser.parse_args()
     campaign = Campaign(args.library)
-    report = {"schema": "heptakernel.native-tests.v1", "scope": "HIA single-arena allocator with atomic contiguous allocation, release and exact-address claim",
+    report = {"schema": "heptakernel.native-tests.v1", "scope": "HIA single-arena allocator with atomic contiguous allocation, release, exact claim and read-only availability query",
               "linux_compatibility_tested": False, "formal_proof": False,
               "tested_library": str(args.library.resolve()),
               "tested_library_sha256": hashlib.sha256(args.library.read_bytes()).hexdigest(),
@@ -470,6 +511,7 @@ def main():
         campaign.contiguous_runs()
         campaign.free_runs()
         campaign.exact_claim_runs()
+        campaign.query_free_runs()
         campaign.randomized()
         campaign.maximum()
         report.update(status="PASS", calls=campaign.commands, cases=campaign.cases)

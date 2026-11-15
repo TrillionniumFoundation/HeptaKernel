@@ -370,6 +370,58 @@
         0,
         11
       ]
+    },
+    {
+      "name": "query-free-after-release",
+      "request": [
+        7,
+        4243456,
+        3,
+        0
+      ],
+      "expected": [
+        0,
+        3
+      ]
+    },
+    {
+      "name": "query-reserved-prefix",
+      "request": [
+        7,
+        4198400,
+        1,
+        0
+      ],
+      "expected": [
+        8,
+        0
+      ]
+    },
+    {
+      "name": "query-conflicting-run",
+      "request": [
+        7,
+        4210688,
+        2,
+        0
+      ],
+      "expected": [
+        5,
+        0
+      ]
+    },
+    {
+      "name": "query-out-of-arena",
+      "request": [
+        7,
+        4263936,
+        1,
+        0
+      ],
+      "expected": [
+        6,
+        0
+      ]
     }
   ]
 }
