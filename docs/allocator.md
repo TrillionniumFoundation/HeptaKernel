@@ -1,7 +1,7 @@
 # HIA frame allocator
 
 The authoritative implementation is `src/kernel.hepta`, using the real upstream
-`hia-asm.v1 hepta.hia.program.v8 selfhost_elf` profile. It contains 17 functions,
+`hia-asm.v1 hepta.hia.program.v8 selfhost_elf` profile. It contains 18 functions,
 typed control flow, checked borrowed byte access, and no owned allocation or
 external function call. The native compiler emits an ELF64 object with the
 legacy exported symbol `f0`. Its `.text` is unchanged when linked into either
@@ -50,6 +50,7 @@ the status word distinguishes it from a failure.
 | 4 ALLOC_RUN | contiguous page count, power-of-two alignment in pages, 0 | Lowest physically aligned first frame of a contiguous run |
 | 5 FREE_RUN | starting physical address, contiguous page count, 0 | 0 (atomic release) |
 | 6 CLAIM_RUN | exact physical start address, contiguous page count, 0 | 0 (atomic claim) |
+| 7 QUERY_FREE_RUN | exact physical start address, contiguous page count, 0 | Requested count if every frame is free (read-only) |
 
 Each page is 4096 bytes. The arena has 1 through 65,536 pages, a 4096-aligned
 base, and an exclusive upper bound at most `2^52`. The permanently reserved
@@ -82,6 +83,12 @@ bitmap run before modifying any state. An occupied member returns NO_MEMORY,
 without partial claim. Successful CLAIM_RUN returns value zero, even for
 physical address zero; status distinguishes success. This primitive does not
 discover usable firmware RAM or protect arbitrary device ranges.
+
+QUERY_FREE_RUN is an exact-range read-only availability query using the same
+argument, geometry, reserved-prefix and complete-bitmap checks as CLAIM_RUN.
+It returns NO_MEMORY when any requested frame is in use and never modifies
+the allocator state. It is not an atomic claim, and callers must use CLAIM_RUN
+to reserve pages; probing is safe only under the stated single-owner contract.
 
 No run-ownership tracking, zones, SMP locking or buddy merging is yet
 implemented. The caller must prevent stale aliases and coordinate ownership.

@@ -67,7 +67,14 @@ block check_release_run(fr_dispatch_reply:mutbuf,fr_dispatch_state:mutbuf,fr_dis
 block check_claim_run(cr_route_reply:mutbuf,cr_route_state:mutbuf,cr_route_op:u64,cr_route_address:u64,cr_route_count:u64,cr_route_unused:u64)
   cr_route_code:u64 = const() {"value":6}
   cr_route_matches:bool = compare.eq(cr_route_op,cr_route_code)
-  branch cr_route_matches route_claim(cr_route_reply,cr_route_state,cr_route_address,cr_route_count,cr_route_unused) unknown(cr_route_reply)
+  branch cr_route_matches route_claim(cr_route_reply,cr_route_state,cr_route_address,cr_route_count,cr_route_unused) check_query_run(cr_route_reply,cr_route_state,cr_route_op,cr_route_address,cr_route_count,cr_route_unused)
+block check_query_run(qr_dispatch_reply:mutbuf,qr_dispatch_state:mutbuf,qr_dispatch_op:u64,qr_dispatch_address:u64,qr_dispatch_count:u64,qr_dispatch_unused:u64)
+  qr_dispatch_opcode:u64 = const() {"value":7}
+  qr_dispatch_match:bool = compare.eq(qr_dispatch_op,qr_dispatch_opcode)
+  branch qr_dispatch_match route_query_run(qr_dispatch_reply,qr_dispatch_state,qr_dispatch_address,qr_dispatch_count,qr_dispatch_unused) unknown(qr_dispatch_reply)
+block route_query_run(qr_route_reply:mutbuf,qr_route_state:mutbuf,qr_route_address:u64,qr_route_count:u64,qr_route_unused:u64)
+  qr_route_result:u32 = call(qr_route_reply,qr_route_state,qr_route_address,qr_route_count,qr_route_unused) {"function":"query_free_run"}
+  ret(qr_route_result)
 block route_claim(cr_in_reply:mutbuf,cr_in_state:mutbuf,cr_in_address:u64,cr_in_count:u64,cr_in_unused:u64)
   cr_in_result:u32 = call(cr_in_reply,cr_in_state,cr_in_address,cr_in_count,cr_in_unused) {"function":"claim_run"}
   ret(cr_in_result)
@@ -625,6 +632,83 @@ block publish(cr_publish_reply:mutbuf,cr_publish_state:mutbuf,cr_publish_count:u
   cr_publish_result:u32 = call(cr_publish_reply,cr_publish_ok,cr_publish_zero) {"function":"write_reply"}
   ret(cr_publish_result)
 end
+fn query_free_run(reply:mutbuf,state:mutbuf,address:u64,run_pages:u64,unused:u64) -> (u32) effects(read,write,trap) entry(start)
+block start(reply:mutbuf,state:mutbuf,address:u64,run_pages:u64,unused:u64)
+  qr_start_zero:u64 = const() {"value":0}
+  qr_start_page_mask:u64 = const() {"value":4095}
+  qr_start_low:u64 = bit.and(address,qr_start_page_mask)
+  qr_start_aligned:bool = compare.eq(qr_start_low,qr_start_zero)
+  qr_start_nonempty:bool = compare.gt(run_pages,qr_start_zero)
+  qr_start_no_extra:bool = compare.eq(unused,qr_start_zero)
+  qr_start_first_ok:bool = bool.and(qr_start_aligned,qr_start_nonempty)
+  qr_start_valid:bool = bool.and(qr_start_first_ok,qr_start_no_extra)
+  branch qr_start_valid check_state(reply,state,address,run_pages) invalid_arguments(reply)
+block invalid_arguments(qr_invalid_reply:mutbuf)
+  qr_invalid_status:u32 = const() {"value":6}
+  qr_invalid_zero:u64 = const() {"value":0}
+  qr_invalid_result:u32 = call(qr_invalid_reply,qr_invalid_status,qr_invalid_zero) {"function":"write_reply"}
+  ret(qr_invalid_result)
+block check_state(qr_verify_reply:mutbuf,qr_verify_state:mutbuf,qr_verify_address:u64,qr_verify_count:u64)
+  qr_verify_ok:bool = call(qr_verify_state) {"function":"state_valid"}
+  branch qr_verify_ok inspect_header(qr_verify_reply,qr_verify_state,qr_verify_address,qr_verify_count) bad_state(qr_verify_reply)
+block bad_state(qr_badstate_reply:mutbuf)
+  qr_badstate_status:u32 = const() {"value":4}
+  qr_badstate_zero:u64 = const() {"value":0}
+  qr_badstate_result:u32 = call(qr_badstate_reply,qr_badstate_status,qr_badstate_zero) {"function":"write_reply"}
+  ret(qr_badstate_result)
+block inspect_header(qr_hdr_reply:mutbuf,qr_hdr_state:mutbuf,qr_hdr_address:u64,qr_hdr_count:u64)
+  qr_hdr_page_off:usize = const() {"value":8}
+  qr_hdr_base_off:usize = const() {"value":16}
+  qr_hdr_res_off:usize = const() {"value":24}
+  qr_hdr_free_off:usize = const() {"value":32}
+  qr_hdr_shift:u64 = const() {"value":12}
+  qr_hdr_total:u64 = call(qr_hdr_state,qr_hdr_page_off) {"function":"read_state_u64"}
+  qr_hdr_base:u64 = call(qr_hdr_state,qr_hdr_base_off) {"function":"read_state_u64"}
+  qr_hdr_reserved:u64 = call(qr_hdr_state,qr_hdr_res_off) {"function":"read_state_u64"}
+  qr_hdr_free:u64 = call(qr_hdr_state,qr_hdr_free_off) {"function":"read_state_u64"}
+  qr_hdr_delta:u64 = int.sub.wrap(qr_hdr_address,qr_hdr_base)
+  qr_hdr_index:u64 = int.shr.checked(qr_hdr_delta,qr_hdr_shift)
+  qr_hdr_above:bool = compare.ge(qr_hdr_address,qr_hdr_base)
+  qr_hdr_below:bool = compare.lt(qr_hdr_index,qr_hdr_total)
+  qr_hdr_inside:bool = bool.and(qr_hdr_above,qr_hdr_below)
+  branch qr_hdr_inside check_extent(qr_hdr_reply,qr_hdr_state,qr_hdr_count,qr_hdr_total,qr_hdr_reserved,qr_hdr_free,qr_hdr_index) invalid_arguments(qr_hdr_reply)
+block check_extent(qr_ext_reply:mutbuf,qr_ext_state:mutbuf,qr_ext_count:u64,qr_ext_total:u64,qr_ext_reserved:u64,qr_ext_free:u64,qr_ext_index:u64)
+  qr_ext_remaining:u64 = int.sub.wrap(qr_ext_total,qr_ext_index)
+  qr_ext_fits:bool = compare.le(qr_ext_count,qr_ext_remaining)
+  branch qr_ext_fits check_reserved(qr_ext_reply,qr_ext_state,qr_ext_count,qr_ext_total,qr_ext_reserved,qr_ext_free,qr_ext_index) invalid_arguments(qr_ext_reply)
+block check_reserved(qr_res_reply:mutbuf,qr_res_state:mutbuf,qr_res_count:u64,qr_res_total:u64,qr_res_reserved:u64,qr_res_free:u64,qr_res_index:u64)
+  qr_res_protected:bool = compare.lt(qr_res_index,qr_res_reserved)
+  branch qr_res_protected reserved_error(qr_res_reply) begin_validation(qr_res_reply,qr_res_state,qr_res_count,qr_res_total,qr_res_reserved,qr_res_free,qr_res_index)
+block reserved_error(qr_reserved_reply:mutbuf)
+  qr_reserved_status:u32 = const() {"value":8}
+  qr_reserved_zero:u64 = const() {"value":0}
+  qr_reserved_result:u32 = call(qr_reserved_reply,qr_reserved_status,qr_reserved_zero) {"function":"write_reply"}
+  ret(qr_reserved_result)
+block begin_validation(qr_begin_reply:mutbuf,qr_begin_state:mutbuf,qr_begin_count:u64,qr_begin_total:u64,qr_begin_reserved:u64,qr_begin_free:u64,qr_begin_index:u64)
+  jump validate_pages(qr_begin_reply,qr_begin_state,qr_begin_count,qr_begin_total,qr_begin_reserved,qr_begin_free,qr_begin_index,qr_begin_index,qr_begin_count)
+block validate_pages(qr_scan_reply:mutbuf,qr_scan_state:mutbuf,qr_scan_count:u64,qr_scan_total:u64,qr_scan_reserved:u64,qr_scan_free:u64,qr_scan_start:u64,qr_scan_index:u64,qr_scan_left:u64)
+  qr_scan_zero:u64 = const() {"value":0}
+  qr_scan_more:bool = compare.gt(qr_scan_left,qr_scan_zero)
+  branch qr_scan_more inspect_page(qr_scan_reply,qr_scan_state,qr_scan_count,qr_scan_total,qr_scan_reserved,qr_scan_free,qr_scan_start,qr_scan_index,qr_scan_left) commit_begin(qr_scan_reply,qr_scan_state,qr_scan_count,qr_scan_free,qr_scan_start)
+block inspect_page(qr_bit_reply:mutbuf,qr_bit_state:mutbuf,qr_bit_count:u64,qr_bit_total:u64,qr_bit_reserved:u64,qr_bit_free:u64,qr_bit_start:u64,qr_bit_index:u64,qr_bit_left:u64)
+  qr_bit_used:bool = call(qr_bit_state,qr_bit_index) {"function":"bitmap_get"}
+  branch qr_bit_used no_memory(qr_bit_reply) next_validation(qr_bit_reply,qr_bit_state,qr_bit_count,qr_bit_total,qr_bit_reserved,qr_bit_free,qr_bit_start,qr_bit_index,qr_bit_left)
+block no_memory(qr_duplicate_reply:mutbuf)
+  qr_duplicate_status:u32 = const() {"value":5}
+  qr_duplicate_zero:u64 = const() {"value":0}
+  qr_duplicate_result:u32 = call(qr_duplicate_reply,qr_duplicate_status,qr_duplicate_zero) {"function":"write_reply"}
+  ret(qr_duplicate_result)
+block next_validation(qr_next_reply:mutbuf,qr_next_state:mutbuf,qr_next_count:u64,qr_next_total:u64,qr_next_reserved:u64,qr_next_free:u64,qr_next_start:u64,qr_next_index:u64,qr_next_left:u64)
+  qr_next_one:u64 = const() {"value":1}
+  qr_next_index_value:u64 = int.add.wrap(qr_next_index,qr_next_one)
+  qr_next_left_value:u64 = int.sub.wrap(qr_next_left,qr_next_one)
+  jump validate_pages(qr_next_reply,qr_next_state,qr_next_count,qr_next_total,qr_next_reserved,qr_next_free,qr_next_start,qr_next_index_value,qr_next_left_value)
+block commit_begin(qr_complete_reply:mutbuf,qr_complete_state:mutbuf,qr_complete_count:u64,qr_complete_free:u64,qr_complete_start:u64)
+  qr_complete_ok:u32 = const() {"value":0}
+  qr_complete_result:u32 = call(qr_complete_reply,qr_complete_ok,qr_complete_count) {"function":"write_reply"}
+  ret(qr_complete_result)
+end
+
 fn free_page(reply:mutbuf,state:mutbuf,address:u64,b:u64,c:u64) -> (u32) effects(read,write,trap) entry(start)
 block start(reply:mutbuf,state:mutbuf,address:u64,b:u64,c:u64)
   zero:u64 = const() {"value":0}

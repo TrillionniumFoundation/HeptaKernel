@@ -94,8 +94,11 @@ def probe(library):
         ((5, 0x508000, 2, 0), (0, 0)),
         ((5, 0x508000, 2, 0), (7, 0)),
         ((3, 0, 0, 0), (0, 15)),
+        ((7, 0x508000, 2, 0), (0, 2)),
+        ((7, 0x503000, 1, 0), (8, 0)),
         ((6, 0x508000, 2, 0), (0, 0)),
         ((6, 0x508000, 2, 0), (5, 0)),
+        ((7, 0x508000, 2, 0), (5, 0)),
         ((5, 0x508000, 2, 0), (0, 0)),
         ((3, 0, 0, 0), (0, 15)),
     ):
@@ -126,7 +129,7 @@ def probe(library):
     absent = Guarded(0)
     call(absent, (0, 0, 0, 0), (1, 0), request_size=0, reply_size=0)
     call(absent, (0, 0, 0, 0), (2, 0), request_size=0)
-    assert calls == 71
+    assert calls == 74
     return {"status": "PASS", "calls": calls,
             "tested_library_sha256": digest(library)}
 
@@ -167,11 +170,11 @@ def main():
         if result.returncode != 0:
             raise RuntimeError("guard-page worker failed or faulted")
         worker = json.loads(result.stdout)
-        if worker.get("status") != "PASS" or worker.get("calls") != 71:
+        if worker.get("status") != "PASS" or worker.get("calls") != 74:
             raise RuntimeError("worker did not report the complete fixed campaign")
         if worker.get("tested_library_sha256") != report["tested_library_sha256"]:
             raise RuntimeError("tested library changed during the campaign")
-        report.update(status="PASS", calls=71)
+        report.update(status="PASS", calls=74)
     except Exception as exc:
         report["error"] = repr(exc)
     args.report.parent.mkdir(parents=True, exist_ok=True)
