@@ -68,16 +68,36 @@ block check_claim_run(cr_route_reply:mutbuf,cr_route_state:mutbuf,cr_route_op:u6
   cr_route_code:u64 = const() {"value":6}
   cr_route_matches:bool = compare.eq(cr_route_op,cr_route_code)
   branch cr_route_matches route_claim(cr_route_reply,cr_route_state,cr_route_address,cr_route_count,cr_route_unused) check_query_run(cr_route_reply,cr_route_state,cr_route_op,cr_route_address,cr_route_count,cr_route_unused)
-block check_query_run(qr_dispatch_reply:mutbuf,qr_dispatch_state:mutbuf,qr_dispatch_op:u64,qr_dispatch_address:u64,qr_dispatch_count:u64,qr_dispatch_unused:u64)
-  qr_dispatch_opcode:u64 = const() {"value":7}
-  qr_dispatch_match:bool = compare.eq(qr_dispatch_op,qr_dispatch_opcode)
-  branch qr_dispatch_match route_query_run(qr_dispatch_reply,qr_dispatch_state,qr_dispatch_address,qr_dispatch_count,qr_dispatch_unused) unknown(qr_dispatch_reply)
-block route_query_run(qr_route_reply:mutbuf,qr_route_state:mutbuf,qr_route_address:u64,qr_route_count:u64,qr_route_unused:u64)
-  qr_route_result:u32 = call(qr_route_reply,qr_route_state,qr_route_address,qr_route_count,qr_route_unused) {"function":"query_free_run"}
-  ret(qr_route_result)
+block check_query_run(qryr:mutbuf,qrys:mutbuf,qryop:u64,qrya:u64,qryn:u64,qryc:u64)
+  qrycode:u64 = const() {"value":7}
+  qrymatch:bool = compare.eq(qryop,qrycode)
+  branch qrymatch query_route(qryr,qrys,qrya,qryn,qryc) unknown(qryr)
+block query_route(qyrr:mutbuf,qyrs:mutbuf,qyra:u64,qyrn:u64,qyrc:u64)
+  qyrzero:u64 = const() {"value":0}
+  qyrvalid:bool = compare.eq(qyrc,qyrzero)
+  branch qyrvalid query_execute(qyrr,qyrs,qyra,qyrn) query_invalid(qyrr)
+block query_execute(qxer:mutbuf,qxes:mutbuf,qxea:u64,qxen:u64)
+  qxemode:u64 = const() {"value":1}
+  qxeresult:u32 = call(qxer,qxes,qxea,qxen,qxemode) {"function":"claim_run"}
+  ret(qxeresult)
+block query_invalid(qir:mutbuf)
+  qistatus:u32 = const() {"value":6}
+  qizero:u64 = const() {"value":0}
+  qiresult:u32 = call(qir,qistatus,qizero) {"function":"write_reply"}
+  ret(qiresult)
 block route_claim(cr_in_reply:mutbuf,cr_in_state:mutbuf,cr_in_address:u64,cr_in_count:u64,cr_in_unused:u64)
-  cr_in_result:u32 = call(cr_in_reply,cr_in_state,cr_in_address,cr_in_count,cr_in_unused) {"function":"claim_run"}
-  ret(cr_in_result)
+  cr_in_zero:u64 = const() {"value":0}
+  cr_in_allowed:bool = compare.eq(cr_in_unused,cr_in_zero)
+  branch cr_in_allowed claim_execute(cr_in_reply,cr_in_state,cr_in_address,cr_in_count) claim_invalid(cr_in_reply)
+block claim_execute(cr_exec_reply:mutbuf,cr_exec_state:mutbuf,cr_exec_address:u64,cr_exec_count:u64)
+  cr_exec_zero:u64 = const() {"value":0}
+  cr_exec_result:u32 = call(cr_exec_reply,cr_exec_state,cr_exec_address,cr_exec_count,cr_exec_zero) {"function":"claim_run"}
+  ret(cr_exec_result)
+block claim_invalid(cr_reject_reply:mutbuf)
+  cr_reject_status:u32 = const() {"value":6}
+  cr_reject_zero:u64 = const() {"value":0}
+  cr_reject_result:u32 = call(cr_reject_reply,cr_reject_status,cr_reject_zero) {"function":"write_reply"}
+  ret(cr_reject_result)
 block release_contiguous(fr_route_reply:mutbuf,fr_route_state:mutbuf,fr_route_address:u64,fr_route_pages:u64,fr_route_unused:u64)
   fr_route_result:u32 = call(fr_route_reply,fr_route_state,fr_route_address,fr_route_pages,fr_route_unused) {"function":"free_run"}
   ret(fr_route_result)
@@ -546,24 +566,25 @@ block start(reply:mutbuf,state:mutbuf,address:u64,run_pages:u64,unused:u64)
   cr_start_low:u64 = bit.and(address,cr_start_page_mask)
   cr_start_aligned:bool = compare.eq(cr_start_low,cr_start_zero)
   cr_start_nonempty:bool = compare.gt(run_pages,cr_start_zero)
-  cr_start_no_extra:bool = compare.eq(unused,cr_start_zero)
+  cr_start_two:u64 = const() {"value":2}
+  cr_start_no_extra:bool = compare.lt(unused,cr_start_two)
   cr_start_first_ok:bool = bool.and(cr_start_aligned,cr_start_nonempty)
   cr_start_valid:bool = bool.and(cr_start_first_ok,cr_start_no_extra)
-  branch cr_start_valid check_state(reply,state,address,run_pages) invalid_arguments(reply)
+  branch cr_start_valid check_state(reply,state,address,run_pages,unused) invalid_arguments(reply)
 block invalid_arguments(cr_invalid_reply:mutbuf)
   cr_invalid_status:u32 = const() {"value":6}
   cr_invalid_zero:u64 = const() {"value":0}
   cr_invalid_result:u32 = call(cr_invalid_reply,cr_invalid_status,cr_invalid_zero) {"function":"write_reply"}
   ret(cr_invalid_result)
-block check_state(cr_verify_reply:mutbuf,cr_verify_state:mutbuf,cr_verify_address:u64,cr_verify_count:u64)
+block check_state(cr_verify_reply:mutbuf,cr_verify_state:mutbuf,cr_verify_address:u64,cr_verify_count:u64,cr_m_check_state:u64)
   cr_verify_ok:bool = call(cr_verify_state) {"function":"state_valid"}
-  branch cr_verify_ok inspect_header(cr_verify_reply,cr_verify_state,cr_verify_address,cr_verify_count) bad_state(cr_verify_reply)
+  branch cr_verify_ok inspect_header(cr_verify_reply,cr_verify_state,cr_verify_address,cr_verify_count,cr_m_check_state) bad_state(cr_verify_reply)
 block bad_state(cr_badstate_reply:mutbuf)
   cr_badstate_status:u32 = const() {"value":4}
   cr_badstate_zero:u64 = const() {"value":0}
   cr_badstate_result:u32 = call(cr_badstate_reply,cr_badstate_status,cr_badstate_zero) {"function":"write_reply"}
   ret(cr_badstate_result)
-block inspect_header(cr_hdr_reply:mutbuf,cr_hdr_state:mutbuf,cr_hdr_address:u64,cr_hdr_count:u64)
+block inspect_header(cr_hdr_reply:mutbuf,cr_hdr_state:mutbuf,cr_hdr_address:u64,cr_hdr_count:u64,cr_m_inspect_header:u64)
   cr_hdr_page_off:usize = const() {"value":8}
   cr_hdr_base_off:usize = const() {"value":16}
   cr_hdr_res_off:usize = const() {"value":24}
@@ -578,40 +599,46 @@ block inspect_header(cr_hdr_reply:mutbuf,cr_hdr_state:mutbuf,cr_hdr_address:u64,
   cr_hdr_above:bool = compare.ge(cr_hdr_address,cr_hdr_base)
   cr_hdr_below:bool = compare.lt(cr_hdr_index,cr_hdr_total)
   cr_hdr_inside:bool = bool.and(cr_hdr_above,cr_hdr_below)
-  branch cr_hdr_inside check_extent(cr_hdr_reply,cr_hdr_state,cr_hdr_count,cr_hdr_total,cr_hdr_reserved,cr_hdr_free,cr_hdr_index) invalid_arguments(cr_hdr_reply)
-block check_extent(cr_ext_reply:mutbuf,cr_ext_state:mutbuf,cr_ext_count:u64,cr_ext_total:u64,cr_ext_reserved:u64,cr_ext_free:u64,cr_ext_index:u64)
+  branch cr_hdr_inside check_extent(cr_hdr_reply,cr_hdr_state,cr_hdr_count,cr_hdr_total,cr_hdr_reserved,cr_hdr_free,cr_hdr_index,cr_m_inspect_header) invalid_arguments(cr_hdr_reply)
+block check_extent(cr_ext_reply:mutbuf,cr_ext_state:mutbuf,cr_ext_count:u64,cr_ext_total:u64,cr_ext_reserved:u64,cr_ext_free:u64,cr_ext_index:u64,cr_m_check_extent:u64)
   cr_ext_remaining:u64 = int.sub.wrap(cr_ext_total,cr_ext_index)
   cr_ext_fits:bool = compare.le(cr_ext_count,cr_ext_remaining)
-  branch cr_ext_fits check_reserved(cr_ext_reply,cr_ext_state,cr_ext_count,cr_ext_total,cr_ext_reserved,cr_ext_free,cr_ext_index) invalid_arguments(cr_ext_reply)
-block check_reserved(cr_res_reply:mutbuf,cr_res_state:mutbuf,cr_res_count:u64,cr_res_total:u64,cr_res_reserved:u64,cr_res_free:u64,cr_res_index:u64)
+  branch cr_ext_fits check_reserved(cr_ext_reply,cr_ext_state,cr_ext_count,cr_ext_total,cr_ext_reserved,cr_ext_free,cr_ext_index,cr_m_check_extent) invalid_arguments(cr_ext_reply)
+block check_reserved(cr_res_reply:mutbuf,cr_res_state:mutbuf,cr_res_count:u64,cr_res_total:u64,cr_res_reserved:u64,cr_res_free:u64,cr_res_index:u64,cr_m_check_reserved:u64)
   cr_res_protected:bool = compare.lt(cr_res_index,cr_res_reserved)
-  branch cr_res_protected reserved_error(cr_res_reply) begin_validation(cr_res_reply,cr_res_state,cr_res_count,cr_res_total,cr_res_reserved,cr_res_free,cr_res_index)
+  branch cr_res_protected reserved_error(cr_res_reply) begin_validation(cr_res_reply,cr_res_state,cr_res_count,cr_res_total,cr_res_reserved,cr_res_free,cr_res_index,cr_m_check_reserved)
 block reserved_error(cr_reserved_reply:mutbuf)
   cr_reserved_status:u32 = const() {"value":8}
   cr_reserved_zero:u64 = const() {"value":0}
   cr_reserved_result:u32 = call(cr_reserved_reply,cr_reserved_status,cr_reserved_zero) {"function":"write_reply"}
   ret(cr_reserved_result)
-block begin_validation(cr_begin_reply:mutbuf,cr_begin_state:mutbuf,cr_begin_count:u64,cr_begin_total:u64,cr_begin_reserved:u64,cr_begin_free:u64,cr_begin_index:u64)
-  jump validate_pages(cr_begin_reply,cr_begin_state,cr_begin_count,cr_begin_total,cr_begin_reserved,cr_begin_free,cr_begin_index,cr_begin_index,cr_begin_count)
-block validate_pages(cr_scan_reply:mutbuf,cr_scan_state:mutbuf,cr_scan_count:u64,cr_scan_total:u64,cr_scan_reserved:u64,cr_scan_free:u64,cr_scan_start:u64,cr_scan_index:u64,cr_scan_left:u64)
+block begin_validation(cr_begin_reply:mutbuf,cr_begin_state:mutbuf,cr_begin_count:u64,cr_begin_total:u64,cr_begin_reserved:u64,cr_begin_free:u64,cr_begin_index:u64,cr_m_begin_validation:u64)
+  jump validate_pages(cr_begin_reply,cr_begin_state,cr_begin_count,cr_begin_total,cr_begin_reserved,cr_begin_free,cr_begin_index,cr_begin_index,cr_begin_count,cr_m_begin_validation)
+block validate_pages(cr_scan_reply:mutbuf,cr_scan_state:mutbuf,cr_scan_count:u64,cr_scan_total:u64,cr_scan_reserved:u64,cr_scan_free:u64,cr_scan_start:u64,cr_scan_index:u64,cr_scan_left:u64,cr_m_validate_pages:u64)
   cr_scan_zero:u64 = const() {"value":0}
   cr_scan_more:bool = compare.gt(cr_scan_left,cr_scan_zero)
-  branch cr_scan_more inspect_page(cr_scan_reply,cr_scan_state,cr_scan_count,cr_scan_total,cr_scan_reserved,cr_scan_free,cr_scan_start,cr_scan_index,cr_scan_left) commit_begin(cr_scan_reply,cr_scan_state,cr_scan_count,cr_scan_free,cr_scan_start)
-block inspect_page(cr_bit_reply:mutbuf,cr_bit_state:mutbuf,cr_bit_count:u64,cr_bit_total:u64,cr_bit_reserved:u64,cr_bit_free:u64,cr_bit_start:u64,cr_bit_index:u64,cr_bit_left:u64)
+  branch cr_scan_more inspect_page(cr_scan_reply,cr_scan_state,cr_scan_count,cr_scan_total,cr_scan_reserved,cr_scan_free,cr_scan_start,cr_scan_index,cr_scan_left,cr_m_validate_pages) commit_begin(cr_scan_reply,cr_scan_state,cr_scan_count,cr_scan_free,cr_scan_start,cr_m_validate_pages)
+block inspect_page(cr_bit_reply:mutbuf,cr_bit_state:mutbuf,cr_bit_count:u64,cr_bit_total:u64,cr_bit_reserved:u64,cr_bit_free:u64,cr_bit_start:u64,cr_bit_index:u64,cr_bit_left:u64,cr_m_inspect_page:u64)
   cr_bit_used:bool = call(cr_bit_state,cr_bit_index) {"function":"bitmap_get"}
-  branch cr_bit_used no_memory(cr_bit_reply) next_validation(cr_bit_reply,cr_bit_state,cr_bit_count,cr_bit_total,cr_bit_reserved,cr_bit_free,cr_bit_start,cr_bit_index,cr_bit_left)
+  branch cr_bit_used no_memory(cr_bit_reply) next_validation(cr_bit_reply,cr_bit_state,cr_bit_count,cr_bit_total,cr_bit_reserved,cr_bit_free,cr_bit_start,cr_bit_index,cr_bit_left,cr_m_inspect_page)
 block no_memory(cr_duplicate_reply:mutbuf)
   cr_duplicate_status:u32 = const() {"value":5}
   cr_duplicate_zero:u64 = const() {"value":0}
   cr_duplicate_result:u32 = call(cr_duplicate_reply,cr_duplicate_status,cr_duplicate_zero) {"function":"write_reply"}
   ret(cr_duplicate_result)
-block next_validation(cr_next_reply:mutbuf,cr_next_state:mutbuf,cr_next_count:u64,cr_next_total:u64,cr_next_reserved:u64,cr_next_free:u64,cr_next_start:u64,cr_next_index:u64,cr_next_left:u64)
+block next_validation(cr_next_reply:mutbuf,cr_next_state:mutbuf,cr_next_count:u64,cr_next_total:u64,cr_next_reserved:u64,cr_next_free:u64,cr_next_start:u64,cr_next_index:u64,cr_next_left:u64,cr_m_next_validation:u64)
   cr_next_one:u64 = const() {"value":1}
   cr_next_index_value:u64 = int.add.wrap(cr_next_index,cr_next_one)
   cr_next_left_value:u64 = int.sub.wrap(cr_next_left,cr_next_one)
-  jump validate_pages(cr_next_reply,cr_next_state,cr_next_count,cr_next_total,cr_next_reserved,cr_next_free,cr_next_start,cr_next_index_value,cr_next_left_value)
-block commit_begin(cr_commitbegin_reply:mutbuf,cr_commitbegin_state:mutbuf,cr_commitbegin_count:u64,cr_commitbegin_free:u64,cr_commitbegin_start:u64)
-  jump commit_pages(cr_commitbegin_reply,cr_commitbegin_state,cr_commitbegin_count,cr_commitbegin_free,cr_commitbegin_start,cr_commitbegin_count)
+  jump validate_pages(cr_next_reply,cr_next_state,cr_next_count,cr_next_total,cr_next_reserved,cr_next_free,cr_next_start,cr_next_index_value,cr_next_left_value,cr_m_next_validation)
+block commit_begin(cr_commitbegin_reply:mutbuf,cr_commitbegin_state:mutbuf,cr_commitbegin_count:u64,cr_commitbegin_free:u64,cr_commitbegin_start:u64,cr_m_commit_begin:u64)
+  cr_query_one:u64 = const() {"value":1}
+  cr_is_query:bool = compare.eq(cr_m_commit_begin,cr_query_one)
+  branch cr_is_query probe_success(cr_commitbegin_reply,cr_commitbegin_count) commit_pages(cr_commitbegin_reply,cr_commitbegin_state,cr_commitbegin_count,cr_commitbegin_free,cr_commitbegin_start,cr_commitbegin_count)
+block probe_success(cr_probe_reply:mutbuf,cr_probe_count:u64)
+  cr_probe_ok:u32 = const() {"value":0}
+  cr_probe_result:u32 = call(cr_probe_reply,cr_probe_ok,cr_probe_count) {"function":"write_reply"}
+  ret(cr_probe_result)
 block commit_pages(cr_commit_reply:mutbuf,cr_commit_state:mutbuf,cr_commit_count:u64,cr_commit_free:u64,cr_commit_index:u64,cr_commit_left:u64)
   cr_commit_zero:u64 = const() {"value":0}
   cr_commit_more:bool = compare.gt(cr_commit_left,cr_commit_zero)
@@ -632,79 +659,6 @@ block publish(cr_publish_reply:mutbuf,cr_publish_state:mutbuf,cr_publish_count:u
   cr_publish_result:u32 = call(cr_publish_reply,cr_publish_ok,cr_publish_zero) {"function":"write_reply"}
   ret(cr_publish_result)
 end
-fn query_free_run(v00:mutbuf,v01:mutbuf,v02:u64,v03:u64,v04:u64) -> (u32) effects(read,write,trap) entry(start)
-block start(v00:mutbuf,v01:mutbuf,v02:u64,v03:u64,v04:u64)
-  v05:u64 = const() {"value":0}
-  v06:u64 = const() {"value":4095}
-  v07:u64 = bit.and(v02,v06)
-  v08:bool = compare.eq(v07,v05)
-  v09:bool = compare.gt(v03,v05)
-  v0a:bool = compare.eq(v04,v05)
-  v0b:bool = bool.and(v08,v09)
-  v0c:bool = bool.and(v0b,v0a)
-  branch v0c verify(v00,v01,v02,v03) invalid(v00)
-block invalid(v10:mutbuf)
-  v11:u32 = const() {"value":6}
-  v12:u64 = const() {"value":0}
-  v13:u32 = call(v10,v11,v12) {"function":"write_reply"}
-  ret(v13)
-block verify(v20:mutbuf,v21:mutbuf,v22:u64,v23:u64)
-  v24:bool = call(v21) {"function":"state_valid"}
-  branch v24 header(v20,v21,v22,v23) corrupt(v20)
-block corrupt(v30:mutbuf)
-  v31:u32 = const() {"value":4}
-  v32:u64 = const() {"value":0}
-  v33:u32 = call(v30,v31,v32) {"function":"write_reply"}
-  ret(v33)
-block header(v40:mutbuf,v41:mutbuf,v42:u64,v43:u64)
-  v44:usize = const() {"value":8}
-  v45:usize = const() {"value":16}
-  v46:usize = const() {"value":24}
-  v47:u64 = const() {"value":12}
-  v48:u64 = call(v41,v44) {"function":"read_state_u64"}
-  v49:u64 = call(v41,v45) {"function":"read_state_u64"}
-  v4a:u64 = call(v41,v46) {"function":"read_state_u64"}
-  v4b:u64 = int.sub.wrap(v42,v49)
-  v4c:u64 = int.shr.checked(v4b,v47)
-  v4d:bool = compare.ge(v42,v49)
-  v4e:bool = compare.lt(v4c,v48)
-  v4f:bool = bool.and(v4d,v4e)
-  branch v4f extent(v40,v41,v43,v4c,v48,v4a) invalid(v40)
-block extent(v50:mutbuf,v51:mutbuf,v52:u64,v53:u64,v54:u64,v55:u64)
-  v56:u64 = int.sub.wrap(v54,v53)
-  v57:bool = compare.le(v52,v56)
-  branch v57 protected(v50,v51,v52,v53,v55) invalid(v50)
-block protected(v60:mutbuf,v61:mutbuf,v62:u64,v63:u64,v64:u64)
-  v65:bool = compare.lt(v63,v64)
-  branch v65 reserved_error(v60) scan(v60,v61,v63,v62,v62)
-block reserved_error(v70:mutbuf)
-  v71:u32 = const() {"value":8}
-  v72:u64 = const() {"value":0}
-  v73:u32 = call(v70,v71,v72) {"function":"write_reply"}
-  ret(v73)
-block scan(v80:mutbuf,v81:mutbuf,v82:u64,v83:u64,v84:u64)
-  v85:u64 = const() {"value":0}
-  v86:bool = compare.gt(v83,v85)
-  branch v86 inspect(v80,v81,v82,v83,v84) success(v80,v84)
-block inspect(v90:mutbuf,v91:mutbuf,v92:u64,v93:u64,v94:u64)
-  v95:bool = call(v91,v92) {"function":"bitmap_get"}
-  branch v95 unavailable(v90) advance(v90,v91,v92,v93,v94)
-block unavailable(va0:mutbuf)
-  va1:u32 = const() {"value":5}
-  va2:u64 = const() {"value":0}
-  va3:u32 = call(va0,va1,va2) {"function":"write_reply"}
-  ret(va3)
-block advance(vb0:mutbuf,vb1:mutbuf,vb2:u64,vb3:u64,vb4:u64)
-  vb5:u64 = const() {"value":1}
-  vb6:u64 = int.add.wrap(vb2,vb5)
-  vb7:u64 = int.sub.wrap(vb3,vb5)
-  jump scan(vb0,vb1,vb6,vb7,vb4)
-block success(vc0:mutbuf,vc1:u64)
-  vc2:u32 = const() {"value":0}
-  vc3:u32 = call(vc0,vc2,vc1) {"function":"write_reply"}
-  ret(vc3)
-end
-
 fn free_page(reply:mutbuf,state:mutbuf,address:u64,b:u64,c:u64) -> (u32) effects(read,write,trap) entry(start)
 block start(reply:mutbuf,state:mutbuf,address:u64,b:u64,c:u64)
   zero:u64 = const() {"value":0}
