@@ -285,8 +285,14 @@ maybe_probe:
     cmpq $1, (%r12)               /* ALLOC: one real physical page */
     je probe_single
     cmpq $4, (%r12)               /* ALLOC_RUN: every physical page */
+    je probe_run
+    cmpq $6, (%r12)               /* CLAIM_RUN: every exact physical page */
     jne case_next
-    movq 8(%r12), %r14            /* requested contiguous run length */
+    movq 16(%r12), %r14           /* exact-claim length is argument b */
+    movq 8(%r12), %r13            /* claimed exact address, not reply value */
+    jmp probe_bounds
+probe_run:
+    movq 8(%r12), %r14            /* ALLOC_RUN length is argument a */
     testq %r14, %r14
     jz fail64
     cmpq $1024, %r14             /* bounded by fixture arena, before shifting */

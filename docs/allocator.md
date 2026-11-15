@@ -1,7 +1,7 @@
 # HIA frame allocator
 
 The authoritative implementation is `src/kernel.hepta`, using the real upstream
-`hia-asm.v1 hepta.hia.program.v8 selfhost_elf` profile. It contains 16 functions,
+`hia-asm.v1 hepta.hia.program.v8 selfhost_elf` profile. It contains 17 functions,
 typed control flow, checked borrowed byte access, and no owned allocation or
 external function call. The native compiler emits an ELF64 object with the
 legacy exported symbol `f0`. Its `.text` is unchanged when linked into either
@@ -49,6 +49,7 @@ the status word distinguishes it from a failure.
 | 3 FREE_COUNT | 0, 0, 0 | Free frames |
 | 4 ALLOC_RUN | contiguous page count, power-of-two alignment in pages, 0 | Lowest physically aligned first frame of a contiguous run |
 | 5 FREE_RUN | starting physical address, contiguous page count, 0 | 0 (atomic release) |
+| 6 CLAIM_RUN | exact physical start address, contiguous page count, 0 | 0 (atomic claim) |
 
 Each page is 4096 bytes. The arena has 1 through 65,536 pages, a 4096-aligned
 base, and an exclusive upper bound at most `2^52`. The permanently reserved
@@ -75,7 +76,14 @@ allocation bit, before clearing any bits. Any already-free member returns
 DOUBLE_FREE without partial release; malformed range returns INVALID_ARGUMENT
 and a protected prefix returns RESERVED. A successful release increases the
 free count by the full run length. FREE remains available for individual
-pages. No run-ownership tracking, zones, SMP locking or buddy merging is yet
+pages. CLAIM_RUN performs exact-address placement (without searching another
+candidate). It validates geometry, reserved prefix, and the complete requested
+bitmap run before modifying any state. An occupied member returns NO_MEMORY,
+without partial claim. Successful CLAIM_RUN returns value zero, even for
+physical address zero; status distinguishes success. This primitive does not
+discover usable firmware RAM or protect arbitrary device ranges.
+
+No run-ownership tracking, zones, SMP locking or buddy merging is yet
 implemented. The caller must prevent stale aliases and coordinate ownership.
 
 | Status | Name | Meaning |

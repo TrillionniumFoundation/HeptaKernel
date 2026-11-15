@@ -292,6 +292,84 @@
         0,
         11
       ]
+    },
+    {
+      "name": "exact-physical-claim",
+      "request": [
+        6,
+        4243456,
+        3,
+        0
+      ],
+      "expected": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "exact-physical-claim-conflict",
+      "request": [
+        6,
+        4243456,
+        3,
+        0
+      ],
+      "expected": [
+        5,
+        0
+      ]
+    },
+    {
+      "name": "exact-physical-claim-overlaps-existing",
+      "request": [
+        6,
+        4210688,
+        2,
+        0
+      ],
+      "expected": [
+        5,
+        0
+      ]
+    },
+    {
+      "name": "exact-physical-claim-reserved",
+      "request": [
+        6,
+        4198400,
+        2,
+        0
+      ],
+      "expected": [
+        8,
+        0
+      ]
+    },
+    {
+      "name": "exact-physical-claim-free",
+      "request": [
+        5,
+        4243456,
+        3,
+        0
+      ],
+      "expected": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "count-after-exact-claim-rollback",
+      "request": [
+        3,
+        0,
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        11
+      ]
     }
   ]
 }
