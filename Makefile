@@ -4,7 +4,7 @@ QEMU ?= qemu-system-x86_64
 PYTHON ?= python3
 COMPILER_SHA256 := 87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54
 
-.PHONY: all check-compiler test test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-closure record-build full-acceptance clean
+.PHONY: all check-compiler test test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-closure test-inventory record-build full-acceptance clean
 
 all: build/kernel-multiboot.elf
 
@@ -162,7 +162,10 @@ record-build: build/owner-binding.so build/owner-boot.o build/owner-alias-multib
 test-closure:
 	$(PYTHON) tests/test_closure.py
 
-test: test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-boot test-closure record-build
+test-inventory:
+	$(PYTHON) tests/test_pinned_inventory.py
+
+test: test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-boot test-closure test-inventory record-build
 
 full-acceptance:
 	$(PYTHON) tools/check_closure.py
