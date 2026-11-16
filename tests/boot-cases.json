@@ -164,6 +164,32 @@
       ]
     },
     {
+      "name": "read-only-live-first-fit",
+      "request": [
+        8,
+        2,
+        4,
+        0
+      ],
+      "expected": [
+        0,
+        4210688
+      ]
+    },
+    {
+      "name": "read-only-live-first-fit-repeated",
+      "request": [
+        8,
+        2,
+        4,
+        0
+      ],
+      "expected": [
+        0,
+        4210688
+      ]
+    },
+    {
       "name": "contiguous-two-frames",
       "request": [
         4,
