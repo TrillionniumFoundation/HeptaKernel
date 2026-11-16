@@ -27,7 +27,7 @@ def entry(path: Path):
     return fn
 
 
-def call(fn, request: bytes, state, *, reply_len: int = 16):
+def call(fn, request: bytes, state, *, reply_len: int = 16, state_immutable: bool = True):
     reply = (ctypes.c_ubyte * (reply_len + 64))()
     ctypes.memset(ctypes.addressof(reply), 0xC7, len(reply))
     snapshot = bytes(state)
@@ -40,7 +40,8 @@ def call(fn, request: bytes, state, *, reply_len: int = 16):
                 ctypes.addressof(reply) + 32, reply_len,
                 ctypes.addressof(state), len(state))
     assert bytes(request_storage) == request_before, "request modified"
-    assert bytes(state) == snapshot, "owner binding mutated PMM state"
+    if state_immutable:
+        assert bytes(state) == snapshot, "owner binding mutated PMM state"
     raw = bytes(reply)
     assert raw[:32] == bytes([0xC7]) * 32
     assert raw[32 + reply_len:] == bytes([0xC7]) * 32
@@ -57,7 +58,7 @@ def build_state(pmm_fn, pages: int, base: int, reserved: int):
     capacity = 64 + (pages + 7) // 8
     state = (ctypes.c_ubyte * capacity)()
     request = struct.pack("<QQQQ", 0, pages, base, reserved)
-    result = call(pmm_fn, request, state)
+    result = call(pmm_fn, request, state, state_immutable=False)
     assert result == (OK, pages - reserved), ("HIA INIT failed", result)
     return state
 
