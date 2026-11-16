@@ -280,7 +280,22 @@ class Campaign:
             assert native.call((3, 0, 0, 0)) == (BAD_STATE, 0), (offset, value)
             assert native.snapshot() == before
             self.commands += 2
-        self.cases.append("header invariants; no claim of protection against arbitrary trusted-state corruption")
+        # The bytes 40..63 are ABI-reserved. Merely checking canonical
+        # initialization is insufficient: forged nonzero bytes must reject
+        # *all* live paths before any state changes. Mutate each byte and
+        # include a high-bit value to catch signedness and short scans.
+        for offset in range(40, 64):
+            for octet in (1, 0x80, 0xFF):
+                native, _ = self.pair()
+                assert native.call((0, 17, 0x400000, 2)) == (OK, 15)
+                ctypes.memmove(native.state_ptr + offset, bytes([octet]), 1)
+                before = native.snapshot()
+                for command in ((3, 0, 0, 0), (8, 1, 1, 0),
+                                (6, 0x402000, 1, 0), (1, 1, 0, 0)):
+                    assert native.call(command) == (BAD_STATE, 0), (offset, octet, command)
+                    assert native.snapshot() == before, ("noncanonical header mutated", offset, command)
+                    self.commands += 1
+        self.cases.append("header invariants: all 24 reserved bytes reject corruption across query and mutation paths; failures preserve bytes")
 
     def bitmap_corruption(self):
         # Check the HIA validation path itself, not the Python set model:
