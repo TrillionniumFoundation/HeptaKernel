@@ -4,7 +4,7 @@ QEMU ?= qemu-system-x86_64
 PYTHON ?= python3
 COMPILER_SHA256 := 87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54
 
-.PHONY: all check-compiler test test-native test-boot test-guard-pages test-memory-map test-closure record-build full-acceptance clean
+.PHONY: all check-compiler test test-native test-boot test-guard-pages test-memory-map test-arenas test-closure record-build full-acceptance clean
 
 all: build/kernel-multiboot.elf
 
@@ -105,13 +105,26 @@ test-memory-map: build/e820-region.so build/e820-allow-all.so
 	timeout 60 $(PYTHON) tests/test_e820_region.py build/e820-region.so
 	$(PYTHON) tests/test_e820_region.py build/e820-allow-all.so --expect-unsafe
 
+# Bounded read-only HIA arena geometry and ownership routing.
+build/arena-router.o: src/arena_router.hepta | build check-compiler
+	@set -eu; tmp=$(mktemp build/.arena-router.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
+	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+
+build/arena-router.so: build/arena-router.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+test-arenas: build/arena-router.so build/e820-allow-all.so
+	timeout 90 $(PYTHON) tests/test_arena_router.py build/arena-router.so
+	$(PYTHON) tests/test_arena_router.py build/e820-allow-all.so --expect-unsafe
+
 record-build: build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
 	$(PYTHON) tools/record_build.py --compiler "$(HEPTA_COMPILER)"
 
 test-closure:
 	$(PYTHON) tests/test_closure.py
 
-test: test-native test-guard-pages test-memory-map test-boot test-closure record-build
+test: test-native test-guard-pages test-memory-map test-arenas test-boot test-closure record-build
 
 full-acceptance:
 	$(PYTHON) tools/check_closure.py
