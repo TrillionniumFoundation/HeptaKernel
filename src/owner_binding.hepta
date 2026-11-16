@@ -100,7 +100,7 @@ block pad_begin(ob_pad_reply:mutbuf,ob_pad_state:mutbuf,ob_pad_free:u64)
 block pad_loop(ob_loop_reply:mutbuf,ob_loop_state:mutbuf,ob_loop_free:u64,ob_loop_index:u64)
   ob_loop_last:u64 = const() {"value":64}
   ob_loop_more:bool = compare.lt(ob_loop_index,ob_loop_last)
-  branch ob_loop_more pad_inspect(ob_loop_reply,ob_loop_state,ob_loop_free,ob_loop_index) accepted(ob_loop_reply,ob_loop_free)
+  branch ob_loop_more pad_inspect(ob_loop_reply,ob_loop_state,ob_loop_free,ob_loop_index) bitmap_begin(ob_loop_reply,ob_loop_state,ob_loop_free)
 block pad_inspect(ob_check_reply:mutbuf,ob_check_state:mutbuf,ob_check_free:u64,ob_check_index:u64)
   ob_check_at:usize = int.cast(ob_check_index) {"mode":"wrap"}
   ob_check_byte:u8 = buffer.load(ob_check_state,ob_check_at)
@@ -111,10 +111,69 @@ block pad_next(ob_next_reply:mutbuf,ob_next_state:mutbuf,ob_next_free:u64,ob_nex
   ob_next_one:u64 = const() {"value":1}
   ob_next_value:u64 = int.add.wrap(ob_next_index,ob_next_one)
   jump pad_loop(ob_next_reply,ob_next_state,ob_next_free,ob_next_value)
+block bitmap_begin(ob_bm_reply:mutbuf,ob_bm_state:mutbuf,ob_bm_free:u64)
+  ob_bm_pages_off:usize = const() {"value":8}
+  ob_bm_reserved_off:usize = const() {"value":24}
+  ob_bm_pages:u64 = call(ob_bm_state,ob_bm_pages_off) {"function":"read_state_u64"}
+  ob_bm_reserved:u64 = call(ob_bm_state,ob_bm_reserved_off) {"function":"read_state_u64"}
+  ob_bm_valid:bool = call(ob_bm_state,ob_bm_pages,ob_bm_reserved,ob_bm_free) {"function":"bitmap_consistent"}
+  branch ob_bm_valid accepted(ob_bm_reply,ob_bm_free) bad_state(ob_bm_reply)
 block accepted(ob_accept_reply:mutbuf,ob_accept_free:u64)
   ob_accept_code:u32 = const() {"value":0}
   ob_accept_result:u32 = call(ob_accept_reply,ob_accept_code,ob_accept_free) {"function":"write_reply"}
   ret(ob_accept_result)
+end
+fn bitmap_consistent(state:mutbuf,pages:u64,reserved:u64,claimed_free:u64) -> (bool) effects(read,trap) entry(start)
+block start(state:mutbuf,pages:u64,reserved:u64,claimed_free:u64)
+  ob_bms_seven:u64 = const() {"value":7}
+  ob_bms_three:u64 = const() {"value":3}
+  ob_bms_round:u64 = int.add.wrap(pages,ob_bms_seven)
+  ob_bms_bytes:u64 = int.shr.checked(ob_bms_round,ob_bms_three)
+  ob_bms_total_bits:u64 = int.shl.checked(ob_bms_bytes,ob_bms_three)
+  ob_bms_initial:u64 = const() {"value":0}
+  jump scan(state,pages,reserved,claimed_free,ob_bms_total_bits,ob_bms_initial,ob_bms_initial)
+block scan(ob_bms_state:mutbuf,ob_bms_pages:u64,ob_bms_reserved:u64,ob_bms_expected:u64,ob_bms_limit:u64,ob_bms_index:u64,ob_bms_count:u64)
+  ob_bms_more:bool = compare.lt(ob_bms_index,ob_bms_limit)
+  branch ob_bms_more inspect(ob_bms_state,ob_bms_pages,ob_bms_reserved,ob_bms_expected,ob_bms_limit,ob_bms_index,ob_bms_count) finish(ob_bms_expected,ob_bms_count)
+block inspect(ob_bmi_state:mutbuf,ob_bmi_pages:u64,ob_bmi_reserved:u64,ob_bmi_expected:u64,ob_bmi_limit:u64,ob_bmi_index:u64,ob_bmi_count:u64)
+  ob_bmi_three:u64 = const() {"value":3}
+  ob_bmi_seven:u64 = const() {"value":7}
+  ob_bmi_header:u64 = const() {"value":64}
+  ob_bmi_one:u64 = const() {"value":1}
+  ob_bmi_zero:u64 = const() {"value":0}
+  ob_bmi_byte_index:u64 = int.shr.checked(ob_bmi_index,ob_bmi_three)
+  ob_bmi_offset:u64 = int.add.wrap(ob_bmi_header,ob_bmi_byte_index)
+  ob_bmi_usize:usize = int.cast(ob_bmi_offset) {"mode":"wrap"}
+  ob_bmi_byte:u8 = buffer.load(ob_bmi_state,ob_bmi_usize)
+  ob_bmi_word:u64 = int.cast(ob_bmi_byte) {"mode":"wrap"}
+  ob_bmi_position:u64 = bit.and(ob_bmi_index,ob_bmi_seven)
+  ob_bmi_mask:u64 = int.shl.checked(ob_bmi_one,ob_bmi_position)
+  ob_bmi_present:u64 = bit.and(ob_bmi_word,ob_bmi_mask)
+  ob_bmi_set:bool = compare.ne(ob_bmi_present,ob_bmi_zero)
+  ob_bmi_reserved_bit:bool = compare.lt(ob_bmi_index,ob_bmi_reserved)
+  ob_bmi_active:bool = compare.lt(ob_bmi_index,ob_bmi_pages)
+  ob_bmi_not_set:bool = bool.not(ob_bmi_set)
+  ob_bmi_not_active:bool = bool.not(ob_bmi_active)
+  ob_bmi_bad_prefix:bool = bool.and(ob_bmi_reserved_bit,ob_bmi_not_set)
+  ob_bmi_bad_tail:bool = bool.and(ob_bmi_not_active,ob_bmi_set)
+  ob_bmi_bad:bool = bool.or(ob_bmi_bad_prefix,ob_bmi_bad_tail)
+  branch ob_bmi_bad invalid() count_bit(ob_bmi_state,ob_bmi_pages,ob_bmi_reserved,ob_bmi_expected,ob_bmi_limit,ob_bmi_index,ob_bmi_count,ob_bmi_active,ob_bmi_reserved_bit,ob_bmi_not_set)
+block count_bit(ob_bmc_state:mutbuf,ob_bmc_pages:u64,ob_bmc_reserved:u64,ob_bmc_expected:u64,ob_bmc_limit:u64,ob_bmc_index:u64,ob_bmc_count:u64,ob_bmc_active:bool,ob_bmc_reserved_bit:bool,ob_bmc_not_set:bool)
+  ob_bmc_dynamic:bool = bool.not(ob_bmc_reserved_bit)
+  ob_bmc_v0:bool = bool.and(ob_bmc_active,ob_bmc_dynamic)
+  ob_bmc_is_free:bool = bool.and(ob_bmc_v0,ob_bmc_not_set)
+  ob_bmc_one:u64 = const() {"value":1}
+  ob_bmc_zero:u64 = const() {"value":0}
+  ob_bmc_delta:u64 = select(ob_bmc_is_free,ob_bmc_one,ob_bmc_zero)
+  ob_bmc_next_count:u64 = int.add.wrap(ob_bmc_count,ob_bmc_delta)
+  ob_bmc_next_index:u64 = int.add.wrap(ob_bmc_index,ob_bmc_one)
+  jump scan(ob_bmc_state,ob_bmc_pages,ob_bmc_reserved,ob_bmc_expected,ob_bmc_limit,ob_bmc_next_index,ob_bmc_next_count)
+block finish(ob_bmf_expected:u64,ob_bmf_actual:u64)
+  ob_bmf_ok:bool = compare.eq(ob_bmf_expected,ob_bmf_actual)
+  ret(ob_bmf_ok)
+block invalid()
+  ob_bmf_reject:bool = const() {"value":false}
+  ret(ob_bmf_reject)
 end
 fn read_request_u64(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
 block start(bytes:readbuf,offset:usize)
