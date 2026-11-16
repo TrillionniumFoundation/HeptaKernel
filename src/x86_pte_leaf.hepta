@@ -10,7 +10,7 @@ block reply_short()
   ret(pt_short_code)
 block request_check(pt_req:readbuf,pt_rep:mutbuf)
   pt_size:usize = buffer.len(pt_req)
-  pt_expected:usize = const() {"value":24}
+  pt_expected:usize = const() {"value":32}
   pt_exact:bool = compare.eq(pt_size,pt_expected)
   branch pt_exact decode(pt_req,pt_rep) bad_request(pt_rep)
 block bad_request(pt_out:mutbuf)
@@ -22,16 +22,30 @@ block decode(pt_wire:readbuf,pt_output:mutbuf)
   pt_0:usize = const() {"value":0}
   pt_8:usize = const() {"value":8}
   pt_16:usize = const() {"value":16}
+  pt_24:usize = const() {"value":24}
   pt_virtual:u64 = call(pt_wire,pt_0) {"function":"read_u64"}
   pt_physical:u64 = call(pt_wire,pt_8) {"function":"read_u64"}
   pt_permission:u64 = call(pt_wire,pt_16) {"function":"read_u64"}
-  jump geometry(pt_output,pt_virtual,pt_physical,pt_permission)
-block geometry(pt_geo_out:mutbuf,pt_geo_virtual:u64,pt_geo_physical:u64,pt_geo_flags:u64)
+  pt_capabilities:u64 = call(pt_wire,pt_24) {"function":"read_u64"}
+  jump cap_admission(pt_output,pt_virtual,pt_physical,pt_permission,pt_capabilities)
+block cap_admission(pt_cap_out:mutbuf,pt_cap_va:u64,pt_cap_pa:u64,pt_cap_flags:u64,pt_cap_input:u64)
+  pt_cap_mask:u64 = const() {"value":1023}
+  pt_cap_width_mask:u64 = const() {"value":255}
+  pt_cap_min_width:u64 = const() {"value":32}
+  pt_cap_max_width:u64 = const() {"value":52}
+  pt_cap_allowed:bool = compare.le(pt_cap_input,pt_cap_mask)
+  pt_cap_width:u64 = bit.and(pt_cap_input,pt_cap_width_mask)
+  pt_cap_min_ok:bool = compare.le(pt_cap_min_width,pt_cap_width)
+  pt_cap_max_ok:bool = compare.le(pt_cap_width,pt_cap_max_width)
+  pt_cap_size_ok:bool = bool.and(pt_cap_min_ok,pt_cap_max_ok)
+  pt_cap_ok:bool = bool.and(pt_cap_allowed,pt_cap_size_ok)
+  branch pt_cap_ok geometry(pt_cap_out,pt_cap_va,pt_cap_pa,pt_cap_flags,pt_cap_input,pt_cap_width) invalid(pt_cap_out)
+block geometry(pt_geo_out:mutbuf,pt_geo_virtual:u64,pt_geo_physical:u64,pt_geo_flags:u64,pt_geo_caps:u64,pt_geo_width:u64)
   pt_page_mask:u64 = const() {"value":4095}
   pt_zero:u64 = const() {"value":0}
-  pt_limit:u64 = const() {"value":4503599627370496}
-  pt_max_flags:u64 = const() {"value":31}
   pt_one:u64 = const() {"value":1}
+  pt_limit:u64 = int.shl.checked(pt_one,pt_geo_width)
+  pt_max_flags:u64 = const() {"value":31}
   pt_poff:u64 = bit.and(pt_geo_physical,pt_page_mask)
   pt_voff:u64 = bit.and(pt_geo_virtual,pt_page_mask)
   pt_pa_aligned:bool = compare.eq(pt_poff,pt_zero)
@@ -57,13 +71,13 @@ block geometry(pt_geo_out:mutbuf,pt_geo_virtual:u64,pt_geo_physical:u64,pt_geo_f
   pt_g2:bool = bool.and(pt_readable,pt_canonical)
   pt_g3:bool = bool.and(pt_g0,pt_g1)
   pt_ok:bool = bool.and(pt_g3,pt_g2)
-  branch pt_ok policy(pt_geo_out,pt_geo_physical,pt_geo_flags,pt_is_high_half) invalid(pt_geo_out)
+  branch pt_ok policy(pt_geo_out,pt_geo_physical,pt_geo_flags,pt_is_high_half,pt_geo_caps) invalid(pt_geo_out)
 block invalid(pt_invalid_out:mutbuf)
   pt_invalid_code:u32 = const() {"value":6}
   pt_invalid_zero:u64 = const() {"value":0}
   pt_invalid_written:u32 = call(pt_invalid_out,pt_invalid_code,pt_invalid_zero) {"function":"write_reply"}
   ret(pt_invalid_written)
-block policy(pt_pol_out:mutbuf,pt_pol_physical:u64,pt_pol_flags:u64,pt_pol_high_half:bool)
+block policy(pt_pol_out:mutbuf,pt_pol_physical:u64,pt_pol_flags:u64,pt_pol_high_half:bool,pt_pol_caps:u64)
   pt_pol_zero:u64 = const() {"value":0}
   pt_mask_w:u64 = const() {"value":2}
   pt_mask_x:u64 = const() {"value":4}
@@ -82,12 +96,32 @@ block policy(pt_pol_out:mutbuf,pt_pol_physical:u64,pt_pol_flags:u64,pt_pol_high_
   pt_user_kernel:bool = bool.and(pt_u,pt_pol_high_half)
   pt_unsafe_1:bool = bool.or(pt_wx,pt_ug)
   pt_unsafe:bool = bool.or(pt_unsafe_1,pt_user_kernel)
-  branch pt_unsafe unsafe(pt_pol_out) encode(pt_pol_out,pt_pol_physical,pt_w,pt_x,pt_u,pt_g)
+  branch pt_unsafe unsafe(pt_pol_out) cap_policy(pt_pol_out,pt_pol_physical,pt_w,pt_x,pt_u,pt_g,pt_pol_caps)
 block unsafe(pt_unsafe_out:mutbuf)
   pt_unsafe_code:u32 = const() {"value":7}
   pt_unsafe_zero:u64 = const() {"value":0}
   pt_unsafe_written:u32 = call(pt_unsafe_out,pt_unsafe_code,pt_unsafe_zero) {"function":"write_reply"}
   ret(pt_unsafe_written)
+block cap_policy(pt_cp_out:mutbuf,pt_cp_pa:u64,pt_cp_write:bool,pt_cp_exec:bool,pt_cp_user:bool,pt_cp_global:bool,pt_cp_caps:u64)
+  pt_cp_zero:u64 = const() {"value":0}
+  pt_cp_nxe_bit:u64 = const() {"value":256}
+  pt_cp_pge_bit:u64 = const() {"value":512}
+  pt_cp_nxe_value:u64 = bit.and(pt_cp_caps,pt_cp_nxe_bit)
+  pt_cp_pge_value:u64 = bit.and(pt_cp_caps,pt_cp_pge_bit)
+  pt_cp_nxe:bool = compare.ne(pt_cp_nxe_value,pt_cp_zero)
+  pt_cp_pge:bool = compare.ne(pt_cp_pge_value,pt_cp_zero)
+  pt_cp_missing_nxe:bool = bool.not(pt_cp_nxe)
+  pt_cp_missing_pge:bool = bool.not(pt_cp_pge)
+  pt_cp_noexec:bool = bool.not(pt_cp_exec)
+  pt_cp_nx_refused:bool = bool.and(pt_cp_noexec,pt_cp_missing_nxe)
+  pt_cp_g_refused:bool = bool.and(pt_cp_global,pt_cp_missing_pge)
+  pt_cp_refused:bool = bool.or(pt_cp_nx_refused,pt_cp_g_refused)
+  branch pt_cp_refused unsupported_cpu(pt_cp_out) encode(pt_cp_out,pt_cp_pa,pt_cp_write,pt_cp_exec,pt_cp_user,pt_cp_global)
+block unsupported_cpu(pt_cpu_out:mutbuf)
+  pt_cpu_code:u32 = const() {"value":8}
+  pt_cpu_zero:u64 = const() {"value":0}
+  pt_cpu_written:u32 = call(pt_cpu_out,pt_cpu_code,pt_cpu_zero) {"function":"write_reply"}
+  ret(pt_cpu_written)
 block encode(pt_enc_out:mutbuf,pt_enc_pa:u64,pt_enc_w:bool,pt_enc_x:bool,pt_enc_u:bool,pt_enc_g:bool)
   pt_enc_zero:u64 = const() {"value":0}
   pt_present:u64 = const() {"value":1}
