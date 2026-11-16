@@ -53,3 +53,20 @@ The inventory artifact is retained by GitHub Actions, rather than committing
 tens of thousands of upstream identifiers into the HeptaKernel development
 history. An artifact is only evidence for the exact baseline and candidate
 referenced by its workflow run.
+
+## Directory Git objects and UAPI subindex
+
+The pinned Linux source audit now records every recursive directory's Git
+tree OID in `directory-objects.jsonl`, preserving raw-byte names; the root
+tree OID remains in the report. The `uapi-paths.jsonl` artifact projects
+tracked architecture and common UAPI source entries from the complete source
+path ledger, with original object modes, OIDs and sizes. Each new artifact
+has its own SHA-256 in the same exact-candidate report. The existing full
+Git-tree CI now independently compares all directory paths and object IDs
+with a second `git ls-tree -r -t -z` traversal, and checks that the UAPI
+projection is exactly present in the source ledger.
+
+Generated headers, dependency resolution, device ID coverage and ABI
+semantics are **not** established by these source indexes. The earlier
+experimental duplicate Python inventory was removed so this remains the
+single canonical inventory implementation and workflow.

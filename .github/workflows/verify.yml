@@ -88,6 +88,9 @@ jobs:
         run: |
           make test-owner-binding HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Independently test full Linux inventory parser and refusal controls
+        run: make test-linux-inventory
+
       - name: Boot two positive machines and two negative kernels
         shell: bash
         run: |

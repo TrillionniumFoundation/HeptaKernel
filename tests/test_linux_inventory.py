@@ -74,10 +74,19 @@ def inspect(report_dir: Path, commit: str) -> None:
              (report_dir / "source-paths.jsonl").read_text().splitlines()]
     declarations = [json.loads(line) for line in
                     (report_dir / "kconfig-declarations.jsonl").read_text().splitlines()]
+    directories = [json.loads(line) for line in
+                   (report_dir / "directory-objects.jsonl").read_text().splitlines()]
+    uapi = [json.loads(line) for line in
+            (report_dir / "uapi-paths.jsonl").read_text().splitlines()]
     assert len(paths) == report["counts"]["tracked_paths"] == 11
     assert len(declarations) == report["counts"]["kconfig_declarations"] == 4
     assert report["counts"]["distinct_kconfig_symbol_names"] == 3
-    assert report["counts"]["uapi_tree_entries"] == 2
+    assert report["counts"]["uapi_tree_entries"] == len(uapi) == 2
+    assert report["counts"]["directory_tree_objects"] == len(directories) > 0
+    assert {base64.b64decode(x["path_b64"]) for x in uapi} == {
+        b"include/uapi/linux/demo.h", b"arch/x86/include/uapi/asm/unistd.h"}
+    assert all(x["mode"] == "040000" and x["type"] == "tree" for x in directories)
+    assert all(len(x["oid"]) == 40 for x in directories)
     assert report["counts"]["selected_syscall_abi_sources"] == 1
     assert report["counts"]["mode_120000"] == 1
     assert report["counts"]["mode_160000"] == 1
@@ -96,7 +105,9 @@ def inspect(report_dir: Path, commit: str) -> None:
     assert next(x for x in paths if base64.b64decode(x["path_b64"]) ==
                 b"nonutf8_\xff.c")["path"] is None
     for file, field in [("source-paths.jsonl", "source_paths_sha256"),
-                        ("kconfig-declarations.jsonl", "kconfig_declarations_sha256")]:
+                        ("kconfig-declarations.jsonl", "kconfig_declarations_sha256"),
+                        ("directory-objects.jsonl", "directory_objects_sha256"),
+                        ("uapi-paths.jsonl", "uapi_entries_sha256")]:
         assert hashlib.sha256((report_dir / file).read_bytes()).hexdigest() == report[field]
 
 
@@ -114,7 +125,8 @@ def main() -> None:
         put(source, "arch/x86/Kconfig", "config UNCOMMITTED_POISON\n")
         second = parent / "second"
         inventory.build(source, lock, second)
-        for name in ("source-paths.jsonl", "kconfig-declarations.jsonl", "report.json"):
+        for name in ("source-paths.jsonl", "kconfig-declarations.jsonl",
+                     "directory-objects.jsonl", "uapi-paths.jsonl", "report.json"):
             assert (first / name).read_bytes() == (second / name).read_bytes()
         inspect(second, commit)
 

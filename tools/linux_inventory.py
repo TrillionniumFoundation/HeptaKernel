@@ -83,6 +83,33 @@ def enumerate_entries(repo: Path, commit: str) -> list[tuple[bytes, dict]]:
     return result
 
 
+
+def enumerate_directory_objects(repo: Path, commit: str) -> list[tuple[bytes, dict]]:
+    """All recursive directory names and exact immutable tree object IDs."""
+    raw = git(repo, "ls-tree", "--full-tree", "-r", "-t", "-z", commit)
+    result = []
+    seen = set()
+    for entry in raw.split(b"\x00"):
+        if not entry:
+            continue
+        metadata, separator, path = entry.partition(b"\t")
+        if separator != b"\t" or not path:
+            raise ValueError("malformed recursive Git directory entry")
+        parts = metadata.split()
+        if len(parts) != 3:
+            raise ValueError("malformed recursive Git directory metadata")
+        mode, kind, oid = parts
+        if kind != b"tree":
+            continue
+        if mode != b"040000" or not OID.fullmatch(oid) or path in seen:
+            raise ValueError("invalid or duplicate directory object")
+        seen.add(path)
+        result.append((path, {**encode_path(path), "mode": "040000",
+                              "type": "tree", "oid": oid.decode("ascii")}))
+    result.sort(key=lambda item: item[0])
+    return result
+
+
 def is_kconfig(path: bytes) -> bool:
     base = path.rsplit(b"/", 1)[-1]
     return base == b"Kconfig" or base.startswith(b"Kconfig.")
@@ -112,9 +139,12 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
         raise ValueError("pinned object is not a Git commit")
     tree = git(repo, "rev-parse", f"{pinned}^{{tree}}").decode("ascii").strip()
     entries = enumerate_entries(repo, pinned)
+    directories = enumerate_directory_objects(repo, pinned)
 
     source_lines = bytearray()
     kconfig_lines = bytearray()
+    uapi_lines = bytearray()
+    directory_bytes = b"".join(json_line(record) for _, record in directories)
     path_counts = Counter()
     kconfig_declarations = 0
     kconfig_files = 0
@@ -128,6 +158,7 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
             path_counts["driver_tree_entries"] += 1
         if is_uapi(path):
             path_counts["uapi_tree_entries"] += 1
+            uapi_lines.extend(json_line(record))
         if is_abi_source(path):
             path_counts["selected_syscall_abi_sources"] += 1
         if not is_kconfig(path):
@@ -158,6 +189,7 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
 
     source_bytes = bytes(source_lines)
     kconfig_bytes = bytes(kconfig_lines)
+    uapi_bytes = bytes(uapi_lines)
     report = {
         "schema": "heptakernel.pinned-linux-tree-inventory.v1",
         "status": "PARTIAL_SOURCE_INVENTORY_NOT_LINUX_IMPLEMENTATION",
@@ -167,8 +199,13 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
         "source_paths_sha256": hashlib.sha256(source_bytes).hexdigest(),
         "kconfig_declarations_file": "kconfig-declarations.jsonl",
         "kconfig_declarations_sha256": hashlib.sha256(kconfig_bytes).hexdigest(),
+        "directory_objects_file": "directory-objects.jsonl",
+        "directory_objects_sha256": hashlib.sha256(directory_bytes).hexdigest(),
+        "uapi_entries_file": "uapi-paths.jsonl",
+        "uapi_entries_sha256": hashlib.sha256(uapi_bytes).hexdigest(),
         "counts": {
             **dict(sorted(path_counts.items())),
+            "directory_tree_objects": len(directories),
             "kconfig_paths": kconfig_files,
             "kconfig_declarations": kconfig_declarations,
             "distinct_kconfig_symbol_names": len(kconfig_names),
@@ -193,6 +230,8 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
     # accidentally be paired with a complete-looking report.
     (destination / "source-paths.jsonl").write_bytes(source_bytes)
     (destination / "kconfig-declarations.jsonl").write_bytes(kconfig_bytes)
+    (destination / "directory-objects.jsonl").write_bytes(directory_bytes)
+    (destination / "uapi-paths.jsonl").write_bytes(uapi_bytes)
     (destination / "report.json").write_bytes(
         json.dumps(report, ensure_ascii=True, sort_keys=True,
                    indent=2).encode("ascii") + b"\n"
@@ -215,6 +254,8 @@ def main() -> None:
         "counts": report["counts"],
         "source_paths_sha256": report["source_paths_sha256"],
         "kconfig_declarations_sha256": report["kconfig_declarations_sha256"],
+        "directory_objects_sha256": report["directory_objects_sha256"],
+        "uapi_entries_sha256": report["uapi_entries_sha256"],
     }, sort_keys=True))
 
 
