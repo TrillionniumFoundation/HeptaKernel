@@ -29,8 +29,11 @@ build/boot-cases.bin: tests/boot-cases.json tools/pack_boot_cases.py | build
 build/boot.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
-build/kernel.elf: build/boot.o build/kernel.o arch/x86_64/linker.ld
-	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot.o build/kernel.o
+build/e820-boot.o: build/e820-region.o
+	objcopy --redefine-sym f0=e820_f0 "$<" "$@"
+
+build/kernel.elf: build/boot.o build/kernel.o build/e820-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot.o build/kernel.o build/e820-boot.o
 
 build/kernel-multiboot.elf: build/kernel.elf
 	objcopy -O elf32-i386 "$<" "$@"
@@ -43,8 +46,8 @@ build/%.o: tests/negative/%.hepta | build check-compiler
 	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
 	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
-build/%-multiboot.elf: build/%.o build/boot.o arch/x86_64/linker.ld
-	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/$*.elf build/boot.o build/$*.o
+build/%-multiboot.elf: build/%.o build/boot.o build/e820-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/$*.elf build/boot.o build/$*.o build/e820-boot.o
 	objcopy -O elf32-i386 build/$*.elf "$@"
 
 test-boot: build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf

@@ -59,8 +59,16 @@ protected_entry:
     jae fail32
     testl $1, (%ebx)                /* mem_lower/mem_upper are present */
     jz fail32
-    cmpl $7168, 8(%ebx)             /* contiguous upper memory reaches 8 MiB */
+    cmpl $7168, 8(%ebx)             /* only a preliminary lower bound */
     jb fail32
+    cmpl $ARENA_MIN, %ebx           /* handoff info outside our probe arena */
+    jae fail32
+    testl $8, (%ebx)                /* no Multiboot modules in this fixture */
+    jz no_modules32
+    cmpl $0, 20(%ebx)
+    jne fail32
+no_modules32:
+    call import_multiboot_map32
     movl $0x80000000, %eax
     cpuid
     cmpl $0x80000001, %eax
@@ -105,6 +113,93 @@ protected_entry:
     orl $0x80010003, %eax           /* PG, WP, PE, MP */
     movl %eax, %cr0
     ljmp $0x08, $long_entry
+
+/* Multiboot v1 mmap variable records: size:u32 + base:u64 +
+ * length:u64 + type:u32 + optional ext_attrs:u32. This explicit non-HIA
+ * transport rejects unknown widths, overflow and omission. The native HIA
+ * function, not this converter, decides whether the arena is usable.
+ */
+import_multiboot_map32:
+    movl boot_info, %ebx
+    testl $0x40, (%ebx)
+    jz fail32
+    movl 44(%ebx), %ecx
+    testl %ecx, %ecx
+    jz fail32
+    movl 48(%ebx), %esi
+    testl %esi, %esi
+    jz fail32
+    cmpl $0x3ffff000, %esi
+    jae fail32
+    movl %esi, %eax
+    addl %ecx, %eax
+    jc fail32
+    cmpl $0x40000000, %eax
+    jae fail32
+    /* Source firmware records may not occupy the arena we intend to test. */
+    cmpl $ARENA_MIN, %esi
+    jae map_above_arena32
+    cmpl $ARENA_MIN, %eax
+    ja fail32
+    jmp map_location_ok32
+map_above_arena32:
+    cmpl $ARENA_MAX, %esi
+    jb fail32
+map_location_ok32:
+    movl %eax, mmap_end32
+    movl $ARENA_MIN, e820_request
+    movl $0, e820_request+4
+    movl $1024, e820_request+8
+    movl $0, e820_request+12
+    movl $0, e820_request+20
+    movl $e820_request+24, %edi
+    xorl %edx, %edx
+mmap_loop32:
+    cmpl mmap_end32, %esi
+    je mmap_done32
+    ja fail32
+    movl mmap_end32, %eax
+    subl %esi, %eax
+    cmpl $24, %eax
+    jb fail32
+    movl (%esi), %ecx
+    cmpl $20, %ecx
+    je mmap_size_ok32
+    cmpl $24, %ecx
+    jne fail32
+mmap_size_ok32:
+    subl $4, %eax
+    cmpl %ecx, %eax
+    jb fail32
+    cmpl $128, %edx
+    jae fail32
+    movl 4(%esi), %eax
+    movl %eax, 0(%edi)
+    movl 8(%esi), %eax
+    movl %eax, 4(%edi)
+    movl 12(%esi), %eax
+    movl %eax, 8(%edi)
+    movl 16(%esi), %eax
+    movl %eax, 12(%edi)
+    movl 20(%esi), %eax
+    movl %eax, 16(%edi)
+    cmpl $24, %ecx
+    jne legacy_attrs32
+    movl 24(%esi), %eax
+    jmp attrs_stored32
+legacy_attrs32:
+    movl $1, %eax
+attrs_stored32:
+    movl %eax, 20(%edi)
+    leal 4(%esi,%ecx,1), %esi
+    addl $24, %edi
+    incl %edx
+    jmp mmap_loop32
+mmap_done32:
+    testl %edx, %edx
+    jz fail32
+    movl %edx, e820_request+16
+    ret
 
 fail32:
     movl $message_fail32, %esi
@@ -200,6 +295,29 @@ long_entry:
     addq $16, %rdi
     loop 7b
     lidt idt64_descriptor(%rip)
+
+    /* Real Multiboot loader map, passed to the actual HIA-generated
+     * E820 checker before any test physical frame is touched.
+     */
+    movq $-1, e820_reply(%rip)
+    movq $-1, e820_reply+8(%rip)
+    leaq e820_request(%rip), %rdi
+    movq e820_request+16(%rip), %rsi
+    imulq $24, %rsi, %rsi
+    addq $24, %rsi
+    leaq e820_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq e820_unused(%rip), %r8
+    movl $16, %r9d
+    call e820_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, e820_reply(%rip)
+    jne fail64
+    cmpq $1024, e820_reply+8(%rip)
+    jne fail64
+    leaq message_map_pass(%rip), %rsi
+    call puts64
 
     movabsq $0xa55aa55a5aa55aa5, %rax
     movq %rax, state_guard_before(%rip)
@@ -442,6 +560,8 @@ gdt_descriptor:
 idt64_descriptor:
     .word 4095
     .quad idt64
+message_map_pass:
+    .asciz "HEPTAKERNEL HIA E820 VERIFIED\r\n"
 message_pass:
     .asciz "HEPTAKERNEL HIA PMM PASS\r\n"
 message_fail32:
@@ -481,6 +601,11 @@ reply_guard_after:  .skip 8
 .balign 8
 boot_magic:       .skip 4
 boot_info:        .skip 4
+mmap_end32:       .skip 4
+.balign 8
+e820_request:     .skip (24 + 128 * 24)
+e820_reply:       .skip 16
+e820_unused:      .skip 16
 case_cursor:      .skip 8
 case_index:       .skip 8
 physical_probes:  .skip 8

@@ -20,8 +20,10 @@ HIA kernel remain unfinished.
   each entry, rejects overlapping enabled non-RAM regions, and never modifies
   the map. This is **not firmware discovery or boot integration**.
 - `arch/x86_64/boot.S`: an explicitly **non-HIA** Multiboot/long-mode bootstrap and
-  independent boot-test observer. It provides page tables, a stack, exception
-  failure handlers and serial output while HIA lacks those target primitives.
+  independent boot-test observer. It parses bounded actual loader memory-map
+  entries, calls the native HIA E820 checker before physical-page probes,
+  and provides page tables, a stack, exception failure handlers and serial
+  output while HIA lacks those target primitives.
 - Independent tests: set-model traces, exact bounds and read-only guard pages,
   two QEMU machine configurations, actual physical-page readback, 3,033 native
   E820 map validation calls, and broken-HIA negative controls.

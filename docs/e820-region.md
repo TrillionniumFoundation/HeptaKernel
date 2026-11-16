@@ -31,14 +31,13 @@ A candidate has 1..65,536 pages, a 4096-byte-aligned physical base, and an
 exclusive end at most `2^52`. Every provided record must have nonzero length
 and a representable exclusive end (`base + length` must not overflow u64).
 **The whole table is validated**, including records that do not intersect the
-candidate. A candidate is admitted only when at least one *enabled type-1*
-record contains the **entire proposed arena** and no *enabled non-type-1*
-record intersects any byte of it. Checks are independent of record order.
-
-This conservative rule deliberately rejects some legitimate RAM unions that
-are covered only by adjacent type-1 entries; it has no false-positive grant
-from joining fragments, and does not yet provide a fully normalized map or
-an OS-level reservation policy. In particular, kernel image, stack, firmware
+candidate. A candidate is admitted only when the union of *enabled type-1*
+records covers the **entire proposed arena**, without gaps, and no *enabled
+non-type-1* record intersects any byte of it. Checks are independent of record
+order. Native HIA uses bounded repeated scans instead of sorting. Each useful
+pass strictly extends the covered prefix; at most 128 such passes can occur.
+The map is not a fully normalized, ownership-tracked OS memory map and there
+is no general OS-level reservation policy. In particular, kernel image, stack, firmware
 handoff data and page-table regions can exist *inside* a type-1 RAM region:
 the caller must separately reserve them before the allocator may use that
 arena. The HIA check cannot establish that they are protected.
@@ -60,15 +59,38 @@ section against the object's `.text` bytes, and runs an independently coded
 Python oracle. Fixed cases include complete coverage, enabled reserved-region
 overlap, disabled attributes, unsorted overlapping records, wraparound,
 empty/short/malformed buffers, maximum entry count and physical bounds.
-3,000 deterministic randomized cases exercise the same actual machine code.
+3,000 deterministic randomized cases and 640 shuffled fragmented/overlap/
+gap/reservation cases exercise the same actual machine code.
 An independently compiled HIA always-allow negative control returns false
 success on a reserved overlap; the oracle rejects that result explicitly.
 Failures are reported rather than being silently skipped. CI runs a separate
 upstream HIA Core syntax/semantic verifier before compilation.
 
-**Not yet demonstrated:** obtaining E820 from a real QEMU Multiboot firmware
-handoff, mapping canonicalization, 24-byte attribute provenance, a multi-arena
-physical allocator, page-table/device reservations, QEMU execution of this
-component, SMP concurrency and Linux userspace ABI. The existing `boot.S`
-fixture still passes a hardcoded arena directly to the allocator. No
-full-target ledger gate is closed by this isolated capability.
+## Native HIA check of the actual QEMU loader handoff
+
+`arch/x86_64/boot.S` now requires the real Multiboot v1 mmap flag and
+reads every variable-length entry provided by the loader. The temporary
+assembly bridge rejects zero/overlong/incomplete maps, more than 128 entries,
+unknown row widths (only the standard 20-byte and extended 24-byte body
+are accepted), wraparound, a map buffer overlapping the 4–8 MiB probe arena,
+and a loader module list with nonzero module count. Legacy 20-byte rows have
+no extended attributes: the bridge explicitly marks them enabled before
+creating the 24-byte native HIA request. Extended rows keep their original
+attribute bits. No records may be silently dropped.
+
+The actual native HIA E820 object is linked alongside the native HIA allocator
+with a **symbol-only** `f0` → `e820_f0` rename. Both ELF boot containers
+are checked for byte-exact preservation of the HIA E820 `.text`. Before
+the allocator accesses a page, the native HIA admission checker must
+approve all 1,024 pages of the fixed 4–8 MiB arena. The QEMU test requires an
+explicit `HEPTAKERNEL HIA E820 VERIFIED` marker on both positive boots
+and deliberately broken kernel runs, proving those negative controls were
+not rejected at an unrelated early-boot check.
+
+**Still missing:** independent firmware authenticity beyond the loader,
+UEFI and architecture-specific memory handoffs, arbitrary E820 extension
+sizes, general memory discovery, full firmware/module/MMIO reservations,
+ownership and multi-arena allocation, SMP locking, virtual memory and Linux
+userspace compatibility. `boot.S` remains GNU assembly and the chosen arena
+remains a test fixture; this is not a production memory safety guarantee.
+The full Linux acceptance ledger remains HOLD.
