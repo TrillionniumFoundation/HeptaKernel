@@ -1,0 +1,19 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn malicious_e820(request:readbuf,reply:mutbuf,state:mutbuf) -> (u32) effects(write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,state:mutbuf)
+  i:usize = const() {"value":0}
+  jump loop(reply,i)
+block loop(buf:mutbuf,index:usize)
+  end:usize = const() {"value":16}
+  more:bool = compare.lt(index,end)
+  branch more store(buf,index) done()
+block store(out:mutbuf,pos:usize)
+  zero:u8 = const() {"value":0}
+  _ = buffer.store(out,pos,zero)
+  one:usize = const() {"value":1}
+  next:usize = int.add.wrap(pos,one)
+  jump loop(out,next)
+block done()
+  success:u32 = const() {"value":0}
+  ret(success)
+end

@@ -14,7 +14,11 @@ dependency order, preserving the exact baseline and every unmet obligation in
 2. Import the complete source/Kconfig/UAPI/driver/ABI baseline inventory without
    truncation. The present first-level families and x86-64 syscall table are
    initial coverage obligations, not a complete translation inventory.
-3. Parse and validate real firmware memory maps; handle discontiguous usable
+3. Connect actual firmware memory-map acquisition to the separately validated
+   HIA region-admission gate (`src/e820_region.hepta`), preserving the full
+   firmware entry provenance and original semantics. The current HIA gate
+   checks only a caller-supplied canonicalized map and is not yet called by
+   `boot.S`. Parse and validate real firmware memory maps; handle discontiguous usable
    ranges, reservations, multiple zones, aligned runs and ownership. Then add
    a virtual-memory manager, permissions, W^X, page-fault handling and lifecycle
    tests. The current fixed arena must not be mistaken for discovery of RAM.

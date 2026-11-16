@@ -155,6 +155,23 @@ Metadata is trusted kernel memory. Header invariants and encountered
 contradictions are checked, but arbitrary metadata tampering is not covered by
 a complete bitmap/popcount validation on each call.
 
+## Separately validated HIA E820 RAM-region admission
+
+```sh
+make test-memory-map HEPTA_COMPILER="$PWD/.toolchain/compiler/native-compiler"
+```
+
+The freestanding HIA object `build/e820-region.o` accepts a canonicalized
+E820-style firmware map supplied by a trusted caller, evaluates whether one
+proposed arena is wholly contained in enabled type-1 RAM, and refuses overlap
+with any enabled non-RAM region. It does **not** read a real firmware handoff
+and is **not yet linked into the QEMU boot**. The native test makes 3,033
+checks against an independently implemented model, binds the shared library
+`.text` to the HIA object, checks that buffers are not corrupted, and executes
+an intentionally unsafe always-allow HIA negative control. The pinned Core
+verifier checks both HIA sources independently. The scope and limitations are
+in [e820-region.md](e820-region.md).
+
 ## Bare-metal execution acceptance
 
 ```sh
