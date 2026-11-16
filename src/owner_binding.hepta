@@ -1,6 +1,6 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn owner_binding(request:readbuf,reply:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
-block start(request:readbuf,reply:mutbuf,state:mutbuf)
+fn owner_binding(request:readbuf,reply:mutbuf,state:readbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,state:readbuf)
   ob_reply_length:usize = buffer.len(reply)
   ob_min_reply:usize = const() {"value":16}
   ob_reply_ok:bool = compare.ge(ob_reply_length,ob_min_reply)
@@ -8,7 +8,7 @@ block start(request:readbuf,reply:mutbuf,state:mutbuf)
 block reply_short()
   ob_short_code:u32 = const() {"value":1}
   ret(ob_short_code)
-block request_check(ob_request:readbuf,ob_reply:mutbuf,ob_state:mutbuf)
+block request_check(ob_request:readbuf,ob_reply:mutbuf,ob_state:readbuf)
   ob_request_length:usize = buffer.len(ob_request)
   ob_expected_length:usize = const() {"value":24}
   ob_request_ok:bool = compare.eq(ob_request_length,ob_expected_length)
@@ -18,7 +18,7 @@ block bad_request(ob_bad_reply:mutbuf)
   ob_bad_zero:u64 = const() {"value":0}
   ob_bad_result:u32 = call(ob_bad_reply,ob_bad_code,ob_bad_zero) {"function":"write_reply"}
   ret(ob_bad_result)
-block decode(ob_wire:readbuf,ob_result:mutbuf,ob_memory:mutbuf)
+block decode(ob_wire:readbuf,ob_result:mutbuf,ob_memory:readbuf)
   ob_off0:usize = const() {"value":0}
   ob_off8:usize = const() {"value":8}
   ob_off16:usize = const() {"value":16}
@@ -26,7 +26,7 @@ block decode(ob_wire:readbuf,ob_result:mutbuf,ob_memory:mutbuf)
   ob_pages:u64 = call(ob_wire,ob_off8) {"function":"read_request_u64"}
   ob_reserved:u64 = call(ob_wire,ob_off16) {"function":"read_request_u64"}
   jump geometry(ob_result,ob_memory,ob_base,ob_pages,ob_reserved)
-block geometry(ob_geo_reply:mutbuf,ob_geo_state:mutbuf,ob_geo_base:u64,ob_geo_pages:u64,ob_geo_reserved:u64)
+block geometry(ob_geo_reply:mutbuf,ob_geo_state:readbuf,ob_geo_base:u64,ob_geo_pages:u64,ob_geo_reserved:u64)
   ob_geo_zero:u64 = const() {"value":0}
   ob_geo_page_max:u64 = const() {"value":65536}
   ob_geo_page_bytes:u64 = const() {"value":4096}
@@ -52,7 +52,7 @@ block invalid(ob_invalid_reply:mutbuf)
   ob_invalid_zero:u64 = const() {"value":0}
   ob_invalid_result:u32 = call(ob_invalid_reply,ob_invalid_code,ob_invalid_zero) {"function":"write_reply"}
   ret(ob_invalid_result)
-block capacity_check(ob_cap_reply:mutbuf,ob_cap_state:mutbuf,ob_cap_base:u64,ob_cap_pages:u64,ob_cap_reserved:u64)
+block capacity_check(ob_cap_reply:mutbuf,ob_cap_state:readbuf,ob_cap_base:u64,ob_cap_pages:u64,ob_cap_reserved:u64)
   ob_cap_size:usize = buffer.len(ob_cap_state)
   ob_cap_64:usize = const() {"value":64}
   ob_cap_enough_header:bool = compare.ge(ob_cap_size,ob_cap_64)
@@ -71,7 +71,7 @@ block bad_state(ob_state_reply:mutbuf)
   ob_state_zero:u64 = const() {"value":0}
   ob_state_result:u32 = call(ob_state_reply,ob_state_code,ob_state_zero) {"function":"write_reply"}
   ret(ob_state_result)
-block header_check(ob_hdr_reply:mutbuf,ob_hdr_state:mutbuf,ob_hdr_base:u64,ob_hdr_pages:u64,ob_hdr_reserved:u64)
+block header_check(ob_hdr_reply:mutbuf,ob_hdr_state:readbuf,ob_hdr_base:u64,ob_hdr_pages:u64,ob_hdr_reserved:u64)
   ob_hdr_off0:usize = const() {"value":0}
   ob_hdr_off8:usize = const() {"value":8}
   ob_hdr_off16:usize = const() {"value":16}
@@ -94,24 +94,24 @@ block header_check(ob_hdr_reply:mutbuf,ob_hdr_state:mutbuf,ob_hdr_base:u64,ob_hd
   ob_hdr_v2:bool = bool.and(ob_hdr_v0,ob_hdr_v1)
   ob_hdr_valid:bool = bool.and(ob_hdr_v2,ob_hdr_free_ok)
   branch ob_hdr_valid pad_begin(ob_hdr_reply,ob_hdr_state,ob_hdr_free_read) bad_state(ob_hdr_reply)
-block pad_begin(ob_pad_reply:mutbuf,ob_pad_state:mutbuf,ob_pad_free:u64)
+block pad_begin(ob_pad_reply:mutbuf,ob_pad_state:readbuf,ob_pad_free:u64)
   ob_pad_first:u64 = const() {"value":40}
   jump pad_loop(ob_pad_reply,ob_pad_state,ob_pad_free,ob_pad_first)
-block pad_loop(ob_loop_reply:mutbuf,ob_loop_state:mutbuf,ob_loop_free:u64,ob_loop_index:u64)
+block pad_loop(ob_loop_reply:mutbuf,ob_loop_state:readbuf,ob_loop_free:u64,ob_loop_index:u64)
   ob_loop_last:u64 = const() {"value":64}
   ob_loop_more:bool = compare.lt(ob_loop_index,ob_loop_last)
   branch ob_loop_more pad_inspect(ob_loop_reply,ob_loop_state,ob_loop_free,ob_loop_index) bitmap_begin(ob_loop_reply,ob_loop_state,ob_loop_free)
-block pad_inspect(ob_check_reply:mutbuf,ob_check_state:mutbuf,ob_check_free:u64,ob_check_index:u64)
+block pad_inspect(ob_check_reply:mutbuf,ob_check_state:readbuf,ob_check_free:u64,ob_check_index:u64)
   ob_check_at:usize = int.cast(ob_check_index) {"mode":"wrap"}
   ob_check_byte:u8 = buffer.load(ob_check_state,ob_check_at)
   ob_check_zero:u8 = const() {"value":0}
   ob_check_clear:bool = compare.eq(ob_check_byte,ob_check_zero)
   branch ob_check_clear pad_next(ob_check_reply,ob_check_state,ob_check_free,ob_check_index) bad_state(ob_check_reply)
-block pad_next(ob_next_reply:mutbuf,ob_next_state:mutbuf,ob_next_free:u64,ob_next_index:u64)
+block pad_next(ob_next_reply:mutbuf,ob_next_state:readbuf,ob_next_free:u64,ob_next_index:u64)
   ob_next_one:u64 = const() {"value":1}
   ob_next_value:u64 = int.add.wrap(ob_next_index,ob_next_one)
   jump pad_loop(ob_next_reply,ob_next_state,ob_next_free,ob_next_value)
-block bitmap_begin(ob_bm_reply:mutbuf,ob_bm_state:mutbuf,ob_bm_free:u64)
+block bitmap_begin(ob_bm_reply:mutbuf,ob_bm_state:readbuf,ob_bm_free:u64)
   ob_bm_pages_off:usize = const() {"value":8}
   ob_bm_reserved_off:usize = const() {"value":24}
   ob_bm_pages:u64 = call(ob_bm_state,ob_bm_pages_off) {"function":"read_state_u64"}
@@ -123,8 +123,8 @@ block accepted(ob_accept_reply:mutbuf,ob_accept_free:u64)
   ob_accept_result:u32 = call(ob_accept_reply,ob_accept_code,ob_accept_free) {"function":"write_reply"}
   ret(ob_accept_result)
 end
-fn bitmap_consistent(state:mutbuf,pages:u64,reserved:u64,claimed_free:u64) -> (bool) effects(read,trap) entry(start)
-block start(state:mutbuf,pages:u64,reserved:u64,claimed_free:u64)
+fn bitmap_consistent(state:readbuf,pages:u64,reserved:u64,claimed_free:u64) -> (bool) effects(read,trap) entry(start)
+block start(state:readbuf,pages:u64,reserved:u64,claimed_free:u64)
   ob_bms_seven:u64 = const() {"value":7}
   ob_bms_three:u64 = const() {"value":3}
   ob_bms_round:u64 = int.add.wrap(pages,ob_bms_seven)
@@ -132,10 +132,10 @@ block start(state:mutbuf,pages:u64,reserved:u64,claimed_free:u64)
   ob_bms_total_bits:u64 = int.shl.checked(ob_bms_bytes,ob_bms_three)
   ob_bms_initial:u64 = const() {"value":0}
   jump scan(state,pages,reserved,claimed_free,ob_bms_total_bits,ob_bms_initial,ob_bms_initial)
-block scan(ob_bms_state:mutbuf,ob_bms_pages:u64,ob_bms_reserved:u64,ob_bms_expected:u64,ob_bms_limit:u64,ob_bms_index:u64,ob_bms_count:u64)
+block scan(ob_bms_state:readbuf,ob_bms_pages:u64,ob_bms_reserved:u64,ob_bms_expected:u64,ob_bms_limit:u64,ob_bms_index:u64,ob_bms_count:u64)
   ob_bms_more:bool = compare.lt(ob_bms_index,ob_bms_limit)
   branch ob_bms_more inspect(ob_bms_state,ob_bms_pages,ob_bms_reserved,ob_bms_expected,ob_bms_limit,ob_bms_index,ob_bms_count) finish(ob_bms_expected,ob_bms_count)
-block inspect(ob_bmi_state:mutbuf,ob_bmi_pages:u64,ob_bmi_reserved:u64,ob_bmi_expected:u64,ob_bmi_limit:u64,ob_bmi_index:u64,ob_bmi_count:u64)
+block inspect(ob_bmi_state:readbuf,ob_bmi_pages:u64,ob_bmi_reserved:u64,ob_bmi_expected:u64,ob_bmi_limit:u64,ob_bmi_index:u64,ob_bmi_count:u64)
   ob_bmi_three:u64 = const() {"value":3}
   ob_bmi_seven:u64 = const() {"value":7}
   ob_bmi_header:u64 = const() {"value":64}
@@ -158,7 +158,7 @@ block inspect(ob_bmi_state:mutbuf,ob_bmi_pages:u64,ob_bmi_reserved:u64,ob_bmi_ex
   ob_bmi_bad_tail:bool = bool.and(ob_bmi_not_active,ob_bmi_set)
   ob_bmi_bad:bool = bool.or(ob_bmi_bad_prefix,ob_bmi_bad_tail)
   branch ob_bmi_bad invalid() count_bit(ob_bmi_state,ob_bmi_pages,ob_bmi_reserved,ob_bmi_expected,ob_bmi_limit,ob_bmi_index,ob_bmi_count,ob_bmi_active,ob_bmi_reserved_bit,ob_bmi_not_set)
-block count_bit(ob_bmc_state:mutbuf,ob_bmc_pages:u64,ob_bmc_reserved:u64,ob_bmc_expected:u64,ob_bmc_limit:u64,ob_bmc_index:u64,ob_bmc_count:u64,ob_bmc_active:bool,ob_bmc_reserved_bit:bool,ob_bmc_not_set:bool)
+block count_bit(ob_bmc_state:readbuf,ob_bmc_pages:u64,ob_bmc_reserved:u64,ob_bmc_expected:u64,ob_bmc_limit:u64,ob_bmc_index:u64,ob_bmc_count:u64,ob_bmc_active:bool,ob_bmc_reserved_bit:bool,ob_bmc_not_set:bool)
   ob_bmc_dynamic:bool = bool.not(ob_bmc_reserved_bit)
   ob_bmc_v0:bool = bool.and(ob_bmc_active,ob_bmc_dynamic)
   ob_bmc_is_free:bool = bool.and(ob_bmc_v0,ob_bmc_not_set)
@@ -199,16 +199,16 @@ block read_byte(byte_input:readbuf,word_offset:usize,byte_index:u64,current:u64)
 block done(value:u64)
   ret(value)
 end
-fn read_state_u64(bytes:mutbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
-block start(bytes:mutbuf,offset:usize)
+fn read_state_u64(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
   first:u64 = const() {"value":0}
   initial:u64 = const() {"value":0}
   jump loop(bytes,offset,first,initial)
-block loop(input:mutbuf,base_offset:usize,index:u64,accumulator:u64)
+block loop(input:readbuf,base_offset:usize,index:u64,accumulator:u64)
   width:u64 = const() {"value":8}
   more:bool = compare.lt(index,width)
   branch more read_byte(input,base_offset,index,accumulator) done(accumulator)
-block read_byte(byte_input:mutbuf,word_offset:usize,byte_index:u64,current:u64)
+block read_byte(byte_input:readbuf,word_offset:usize,byte_index:u64,current:u64)
   index_usize:usize = int.cast(byte_index) {"mode":"wrap"}
   address:usize = int.add.wrap(word_offset,index_usize)
   octet:u8 = buffer.load(byte_input,address)

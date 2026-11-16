@@ -15,3 +15,7 @@ The QEMU PC/Q35 test-only handoff invokes this new HIA component on both initial
 **Consistent metadata is not authenticated ownership.** The checker now recomputes bitmap/free-count consistency, reserved-prefix and tail-bit invariants, but it cannot authenticate foreign buffer pointers, attest E820 provenance, reject a coherently rewritten bitmap/count, or prevent multiple views of the same physical memory. After binding, the existing PMM `state_valid()` remains mandatory for every mutable PMM operation; a separate native HIA consistency check is not a license to remove per-operation checks. It does not atomically lock an arena, implement cross-zone transaction semantics or establish SMP safety. Firmware, virtual memory, interrupt entry, atomics, drivers, syscalls, and Linux compatibility are still open.
 
 All 17 full-Linux acceptance gates and 422 x86-64 syscall obligations remain unchanged in `compatibility/coverage.json`. `make full-acceptance` must continue to exit 2 HOLD.
+
+## Native HIA state capability
+
+The PMM-state input is now typed `readbuf` in the HIA entry point and all state-only helpers. Only the separate reply retains writable capability. CI compiles a deliberately injected `buffer.store` on this read-only state and requires the native verifier to reject it, while the otherwise-identical writable-state positive control must compile. This establishes a narrower **static write authority** for the native checker, not authenticated pointer provenance or SMP safety: callers can still possess independent writable aliases.

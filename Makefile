@@ -153,6 +153,7 @@ test-arenas: build/arena-router.so build/e820-allow-all.so
 
 # Genuine PMM INIT feeds a separately compiled HIA descriptor/state gate.
 test-owner-binding: build/owner-binding.so build/kernel-host.so build/e820-allow-all.so
+	$(PYTHON) tests/test_owner_binding_capabilities.py "$(HEPTA_COMPILER)"
 	timeout 90 $(PYTHON) tests/test_owner_binding.py build/owner-binding.so build/kernel-host.so
 	$(PYTHON) tests/test_owner_binding.py build/e820-allow-all.so build/kernel-host.so --expect-unsafe
 
