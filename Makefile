@@ -38,9 +38,9 @@ build/arena-boot.o: build/arena-router.o
 
 # Native HIA descriptor/PMM state identity binding; no non-HIA implementation.
 build/owner-binding.o: src/owner_binding.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.owner-binding.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.owner-binding.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/owner-binding.so: build/owner-binding.o
 	ld -shared -z noexecstack -o "$@" "$<"
