@@ -70,8 +70,12 @@ jobs:
           assert report["linux_full_rewrite_complete"] is False
           source = (root / report["source_paths_file"]).read_bytes()
           kconfig = (root / report["kconfig_declarations_file"]).read_bytes()
+          directories = (root / report["directory_objects_file"]).read_bytes()
+          uapi = (root / report["uapi_entries_file"]).read_bytes()
           assert hashlib.sha256(source).hexdigest() == report["source_paths_sha256"]
           assert hashlib.sha256(kconfig).hexdigest() == report["kconfig_declarations_sha256"]
+          assert hashlib.sha256(directories).hexdigest() == report["directory_objects_sha256"]
+          assert hashlib.sha256(uapi).hexdigest() == report["uapi_entries_sha256"]
           rows = [json.loads(x) for x in source.splitlines()]
           paths = [base64.b64decode(x["path_b64"]) for x in rows]
           actual = subprocess.check_output([
@@ -82,6 +86,28 @@ jobs:
           assert set(paths) == set(actual)
           assert paths == sorted(paths)
           assert len(paths) == len(set(paths))
+          directory_rows = [json.loads(x) for x in directories.splitlines()]
+          uapi_rows = [json.loads(x) for x in uapi.splitlines()]
+          ref_tree = subprocess.check_output([
+              "git", "-C", ".upstream/linux", "ls-tree",
+              "-r", "-t", "-z", "--full-tree", commit
+          ])
+          ref_directories = {}
+          for entry in ref_tree.split(b"\x00"):
+              if not entry:
+                  continue
+              metadata, path = entry.split(b"\t", 1)
+              mode, kind, oid = metadata.split()
+              if kind == b"tree":
+                  assert mode == b"040000"
+                  ref_directories[path] = oid.decode("ascii")
+          assert {base64.b64decode(x["path_b64"]): x["oid"]
+                  for x in directory_rows} == ref_directories
+          assert len(directory_rows) == report["counts"]["directory_tree_objects"]
+          by_path = {base64.b64decode(x["path_b64"]): x for x in rows}
+          assert len(uapi_rows) == report["counts"]["uapi_tree_entries"]
+          for uapi_record in uapi_rows:
+              assert by_path[base64.b64decode(uapi_record["path_b64"])] == uapi_record
           assert report["counts"]["kconfig_declarations"] > 0
           print("FULL_GIT_TREE_LOSSLESS_INVENTORY: PASS", len(rows))
           print("KCONFIG_DECLARATION_RECORDS:", report["counts"]["kconfig_declarations"])
@@ -104,5 +130,7 @@ jobs:
           path: |
             build/linux-inventory/source-paths.jsonl
             build/linux-inventory/kconfig-declarations.jsonl
+            build/linux-inventory/directory-objects.jsonl
+            build/linux-inventory/uapi-paths.jsonl
             build/linux-inventory/report.json
             build/linux-inventory/closure-state.json
