@@ -53,7 +53,7 @@ def oracle(data, rlen):
         if not (address < LIMIT and address % PAGE == 0
                 and 1 <= pages <= 65536 and pages * PAGE <= LIMIT - address):
             return 6, 0
-    elif not (1 <= address <= 65536 and address & (address - 1) == 0
+    elif not (1 <= address <= MAX and address & (address - 1) == 0
               and 1 <= pages <= 65536):
         return 6, 0
     arenas = [struct.unpack_from("<3Q", data, 32 + 24 * i) for i in range(count)]
@@ -141,6 +141,19 @@ def cases():
         (encode(2, 1, 1, [(0, 1, 0)]), 16),
         (encode(2, 2, 1, [(0, 1, 0)]), 16),
         (encode(2, 65536, 1, [(LIMIT-PAGE, 1, 0)]), 16),
+        # Valid large physical alignments must match ALLOC_RUN's u64
+        # power-of-two contract, including address zero as a valid answer.
+        (encode(2, 1 << 17, 1, [(0, 1, 0)]), 16),
+        (encode(2, 1 << 63, 1, [(0, 1, 0)]), 16),
+        (encode(2, 1 << 63, 1, [(PAGE, 2, 0)]), 16),
+        (encode(2, 1 << 17, 1, [(1 << 29, 1, 0)]), 16),
+        (encode(2, 1 << 17, 2, [(1 << 29, 1, 0)]), 16),
+        (encode(2, 1 << 39, 1, [(LIMIT-PAGE, 1, 0)]), 16),
+        (encode(2, 1 << 63, 1, [(0, 2, 1)]), 16),
+        (encode(2, 1 << 63, 1, [(0, 2, 0), (1 << 29, 1, 0)]), 16),
+        (encode(2, MAX, 1, [(0, 1, 0)]), 16),
+        (encode(2, 1 << 40, 1, [(0, 2, 0)]), 16),
+        (encode(2, 1 << 40, 1, [(LIMIT-2*PAGE, 2, 0)]), 16),
         (encode(2, 0, 1, [(0, 2, 0)]), 16),
         (encode(2, 3, 1, [(0, 2, 0)]), 16),
         (encode(2, 65537, 1, [(0, 2, 0)]), 16),
@@ -161,6 +174,18 @@ def cases():
         (encode(0, 0, 0, [(i*2*PAGE, 1, 0) for i in range(33)]), 16),
     ]
     rng = random.Random(0xA8E20261116)
+    # Mix unsorted arenas, high physical bases, and wide power-of-two
+    # alignments; reject impossible nonzero fits without arithmetic wrap.
+    for _ in range(128):
+        alignment = 1 << rng.randrange(17, 64)
+        base = rng.choice([0, PAGE, 1 << 29, LIMIT - PAGE,
+                           rng.randrange(1, 1 << 20) * PAGE])
+        size = rng.randrange(1, 33)
+        if base + size * PAGE > LIMIT:
+            size = 1
+        reserved = rng.randrange(size + 1)
+        fixed.append((encode(2, alignment, rng.randrange(1, 34),
+                             [(base, size, reserved)]), 16))
     for _ in range(800):
         n = rng.randrange(0, 33)
         # Deliberately unsorted, disjoint, sometimes completely reserved arenas.
@@ -218,6 +243,11 @@ def main():
         print(json.dumps({"status":"REJECTED", "negative_control":"dishonest native HIA",
                           "oracle_status":5, "observed_status":status}))
         return
+    # This accepted input distinguishes the fixed HIA implementation from
+    # the historical <=65536-page alignment cap (an unintended rejection).
+    assert oracle(encode(2, 1 << 63, 1, [(0, 1, 0)]), 16) == (0, 0)
+    assert oracle(encode(2, 1 << 63, 1, [(PAGE, 2, 0)]), 16) == (5, 0)
+    assert oracle(encode(2, MAX, 1, [(0, 1, 0)]), 16) == (6, 0)
     assert object_text(args.library) == object_text("build/arena-router.o")
     report = {"schema":"heptakernel.hia-arena-router-test.v1",
               "scope":"bounded read-only multi-arena validation, exact-range routing, and aligned first-fit candidate selection; not free-frame allocation",
