@@ -108,6 +108,19 @@ def main():
         arena_code = Elf("build/arena-router.o").section_bytes(".text")
         if Elf("build/arena-boot.o").section_bytes(".text") != arena_code:
             raise ValueError("native HIA arena router symbol rename changed code")
+        owner_source = Path("src/owner_binding.hepta").read_bytes()
+        owner_object = Path("build/owner-binding.o").read_bytes()
+        owner_rebuilt = subprocess.run([compiler], input=owner_source, capture_output=True,
+                                     timeout=20, env={"PATH": ""})
+        if owner_rebuilt.returncode or owner_rebuilt.stderr or owner_rebuilt.stdout != owner_object:
+            raise ValueError("native HIA owner/state binder bytes not reproducible")
+        if subprocess.check_output(["nm", "-u", "build/owner-binding.o"], text=True).strip():
+            raise ValueError("HIA owner/state binder has undefined symbols")
+        owner_code = Elf("build/owner-binding.o").section_bytes(".text")
+        if Elf("build/owner-binding.so").section_bytes(".text") != owner_code:
+            raise ValueError("HIA owner binding loaded image differs from source object")
+        if Elf("build/owner-boot.o").section_bytes(".text") != owner_code:
+            raise ValueError("native owner binding symbol rename changed code")
         e820_source = Path("src/e820_region.hepta").read_bytes()
         e820_object = Path("build/e820-region.o").read_bytes()
         rebuilt_e820 = subprocess.run([compiler], input=e820_source, capture_output=True,
@@ -134,6 +147,12 @@ def main():
         if (image64.text_at(arena_entry, len(arena_code)) != arena_code or
                 image32.text_at(arena_entry, len(arena_code)) != arena_code):
             raise ValueError("default QEMU boot images lack exact native HIA arena machine code")
+        owner_entry = image64.symbol("owner_f0")
+        if image32.symbol("owner_f0") != owner_entry:
+            raise ValueError("native HIA owner binding entry mismatch in packed image")
+        if (image64.text_at(owner_entry, len(owner_code)) != owner_code or
+                image32.text_at(owner_entry, len(owner_code)) != owner_code):
+            raise ValueError("default QEMU boot images lack exact HIA owner binding machine code")
         e820_entry = image64.symbol("e820_f0")
         if image32.symbol("e820_f0") != e820_entry:
             raise ValueError("E820 Multiboot entry mismatch")
@@ -167,7 +186,7 @@ def main():
             linked64 = Elf("build/" + stem + ".elf")
             packed32 = Elf("build/" + stem + "-multiboot.elf")
             for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820),
-                                          ("arena_f0", expected_arena)):
+                                          ("arena_f0", expected_arena), ("owner_f0", owner_code)):
                 symbol_address = linked64.symbol(symbol)
                 if packed32.symbol(symbol) != symbol_address:
                     raise ValueError(stem + " symbol differs after Multiboot wrapping")
@@ -198,7 +217,14 @@ def main():
                       arena_router_boot_entry=arena_entry,
                       arena_router_boot_code_matches=True,
                       arena_router_dishonest_mutant_rejected_by_tests=True,
-                      e820_source_sha256=sha(e820_source),
+                      owner_binding_source_sha256=sha(owner_source),
+                       owner_binding_object_sha256=sha(owner_object),
+                       owner_binding_text_sha256=sha(owner_code),
+                       owner_binding_boot_entry=owner_entry,
+                       owner_binding_exact_recompilation=True,
+                       owner_binding_loaded_text_matches=True,
+                       owner_binding_boot_code_matches=True,
+                       e820_source_sha256=sha(e820_source),
                       e820_object_sha256=sha(e820_object),
                       e820_text_sha256=sha(e820_code),
                       e820_entry_address=e820_entry,

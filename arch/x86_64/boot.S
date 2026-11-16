@@ -633,6 +633,19 @@ owner_exercise64:
     movq $0, %rdx
     movq $16, %rcx
     call owner_call64
+
+    /* Validate each HIA-created PMM header against its physical arena
+     * descriptor in separately native-compiled HIA, before touching pages.
+     * This does not replace the full PMM state_valid() or E820 admission. */
+    leaq owner_descriptors(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    movq $15, %rdx
+    call owner_bind64
+    leaq owner_descriptors+24(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    movq $16, %rdx
+    call owner_bind64
+
     leaq owner_alloc_two(%rip), %rdi
     movq owner_choice_a(%rip), %rsi
     movq $0, %rdx
@@ -785,6 +798,41 @@ owner_route64:
     decq %rax
     leaq owner_state_table(%rip), %rdx
     movq (%rdx,%rax,8), %rax
+    ret
+
+/* Input: rdi=24-byte trusted descriptor, rsi=HIA-initialized PMM state,
+ * rdx=expected free frames. Actual native HIA object validates identity. */
+owner_bind64:
+    pushq %r12
+    movq %rdx, %r12
+    movq %rsi, %r8
+    movq $-1, owner_alloc_reply(%rip)
+    movq $-1, owner_alloc_reply+8(%rip)
+    movl $24, %esi
+    leaq owner_alloc_reply(%rip), %rdx
+    movl $16, %ecx
+    movl $STATE_BYTES, %r9d
+    call owner_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, owner_alloc_reply(%rip)
+    jne fail64
+    cmpq %r12, owner_alloc_reply+8(%rip)
+    jne fail64
+    movabsq $0xa55aa55a5aa55aa5, %rax
+    cmpq %rax, owner_reply_guard_before(%rip)
+    jne fail64
+    cmpq %rax, owner_reply_guard_after(%rip)
+    jne fail64
+    cmpq %rax, owner_a_guard_before(%rip)
+    jne fail64
+    cmpq %rax, owner_a_guard_after(%rip)
+    jne fail64
+    cmpq %rax, owner_b_guard_before(%rip)
+    jne fail64
+    cmpq %rax, owner_b_guard_after(%rip)
+    jne fail64
+    popq %r12
     ret
 
 /* Input: rdi=immutable request, rsi=state chosen by HIA router,

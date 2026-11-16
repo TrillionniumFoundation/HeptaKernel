@@ -52,7 +52,7 @@ jobs:
           PYTHONPATH=.toolchain/hepta python3 - <<'PY'
           from pathlib import Path
           from hepta.hia_agent_assembly import assemble_program
-          for source in ("src/kernel.hepta", "src/e820_region.hepta", "src/arena_router.hepta", "tests/negative/e820_allow_all.hepta"):
+          for source in ("src/kernel.hepta", "src/e820_region.hepta", "src/arena_router.hepta", "src/owner_binding.hepta", "tests/negative/e820_allow_all.hepta"):
               checked = assemble_program(Path(source).read_bytes())
               print("Independent HIA Core syntax/semantics verification: PASS", source)
               print("Verified functions:", len(checked.as_dict()["functions"]))
@@ -82,6 +82,11 @@ jobs:
         shell: bash
         run: |
           make test-arenas HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
+      - name: Validate native HIA PMM ownership binding and malicious control
+        shell: bash
+        run: |
+          make test-owner-binding HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
       - name: Boot two positive machines and two negative kernels
         shell: bash
@@ -125,6 +130,9 @@ jobs:
             build/native-report.json
             build/e820-region-report.json
             build/arena-router-report.json
+            build/owner-binding.o
+            build/owner-binding.so
+            build/owner-boot.o
             build/arena-router.o
             build/arena-router.so
             build/arena-boot.o
