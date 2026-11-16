@@ -61,10 +61,10 @@ def campaign(path: Path) -> dict:
                       ctypes.addressof(unused), 64)
         assert (bytes(read), bytes(unused)) == before, "HIA wrote an input/unused capability"
         data = bytes(reply)
-        assert data[:32] == b"\xb6" * 32 and data[32 + reply_length:] == b"\xb6" * 32
+        assert data[:32] == b"\xb6" * 32 and data[32 + reply_length:32 + reply_length + 32] == b"\xb6" * 32
         want = oracle(raw, reply_length)
         if reply_length < 16:
-            assert data == b"\xb6" * (reply_length + 64), "short reply was modified"
+            assert data == b"\xb6" * (reply_length + 64) + b"\0", "short reply was modified"
             got = returned, None
         else:
             status, value = struct.unpack_from("<2Q", data, 32)
