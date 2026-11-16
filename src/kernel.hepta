@@ -190,8 +190,6 @@ block inspect(memory:mutbuf,capacity:usize)
   storage_valid:bool = bool.and(count_valid,capacity_valid)
   accepted:bool = bool.and(header_valid,storage_valid)
   branch accepted pad_start(memory,page_count,reserved_count,available_count) invalid()
-# Canonical HIA state header: offsets 40..63 are reserved and must be zero.
-# Validation occurs before the bitmap scan or any allocator mutation.
 block pad_start(pad_s:mutbuf,pad_p:u64,pad_r:u64,pad_f:u64)
   pad_initial:u64 = const() {"value":40}
   jump pad_scan(pad_s,pad_p,pad_r,pad_f,pad_initial)
