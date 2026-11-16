@@ -111,7 +111,7 @@ def tests(binding_fn, pmm_fn):
                 assert call(binding_fn, request, state)[0] == BAD_STATE, offset
                 overwrite(state, 0, before)
                 cases += 1
-        for cut in (0, 7, 39, 63, capacity - 1):
+        for cut in (0, 7, 39, 63, len(state) - 1):
             short_state = (ctypes.c_ubyte * cut).from_buffer_copy(bytes(state)[:cut])
             assert call(binding_fn, request, short_state)[0] == BAD_STATE
             cases += 1
