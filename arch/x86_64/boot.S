@@ -77,6 +77,21 @@ no_modules32:
     cpuid
     testl $0x20000000, %edx          /* long mode */
     jz fail32
+    testl $0x00100000, %edx          /* CPUID NX */
+    jz fail32
+    movl $0x80000000, %eax
+    cpuid
+    cmpl $0x80000008, %eax
+    jb fail32
+    movl $0x80000008, %eax
+    cpuid
+    andl $0xff, %eax                /* MAXPHYADDR */
+    cmpl $32, %eax
+    jb fail32
+    cmpl $52, %eax
+    ja fail32
+    orl $0x100, %eax               /* observed width with active NXE */
+    movl %eax, pte_caps
 
     /* Mask both PICs; this fixture does not enable asynchronous interrupts. */
     movb $0xff, %al
@@ -106,7 +121,7 @@ no_modules32:
     movl %eax, %cr3
     movl $0xc0000080, %ecx          /* EFER */
     rdmsr
-    orl $0x100, %eax                /* LME */
+    orl $0x900, %eax                /* LME + NXE, after CPUID NX admission */
     wrmsr
     movl %cr0, %eax
     andl $0xfffffffb, %eax          /* clear EM */
@@ -345,6 +360,9 @@ long_entry:
     call reservation_admit64
     leaq message_reservation_pass(%rip), %rsi
     call puts64
+    call pte_live_exercise64
+    leaq message_pte_pass(%rip), %rsi
+    call puts64
 
     /* Genuine HIA multi-arena router, after the E820 admission gate.
      * Each read-only fixture includes independent expected return fields.
@@ -573,6 +591,75 @@ debug_exit64:
     hlt
     jmp 8b
 
+
+
+/* One active 4KiB PTE is native HIA generated. The parent PDE and other
+ * leaves remain in the explicitly non-HIA test bridge. */
+pte_live_exercise64:
+    movabsq $0xa55aa55a5aa55aa5, %r10
+    movq %r10, pte_guard_before(%rip)
+    movq %r10, pte_guard_after(%rip)
+    movq %r10, pte_unused(%rip)
+    movq %r10, pte_unused+8(%rip)
+    movq $0x400000, pte_request(%rip)
+    movq $0x400000, pte_request+8(%rip)
+#ifdef HEPTAKERNEL_TEST_INJECT_PTE_UNSAFE
+    movq $7, pte_request+16(%rip) /* illegal W+X, must be refused */
+#else
+    movq $3, pte_request+16(%rip) /* R+W, NX */
+#endif
+    movl pte_caps(%rip), %eax
+    movq %rax, pte_request+24(%rip)
+    movq $-1, pte_reply(%rip)
+    movq $-1, pte_reply+8(%rip)
+    leaq pte_request(%rip), %rdi
+    movl $32, %esi
+    leaq pte_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq pte_unused(%rip), %r8
+    movl $16, %r9d
+    call pte_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, pte_reply(%rip)
+    jne fail64
+    movabsq $0x8000000000400003, %r10
+    cmpq %r10, pte_reply+8(%rip)
+    jne fail64
+    movabsq $0xa55aa55a5aa55aa5, %r10
+    cmpq %r10, pte_guard_before(%rip)
+    jne fail64
+    cmpq %r10, pte_guard_after(%rip)
+    jne fail64
+    cmpq %r10, pte_unused(%rip)
+    jne fail64
+    cmpq %r10, pte_unused+8(%rip)
+    jne fail64
+
+    /* Existing 4-6MiB 2MiB PDE becomes a regular PT. Only the first
+     * actual leaf is sourced from HIA; do not claim whole-page-table purity. */
+    leaq page_table_4m(%rip), %rdi
+    movabsq $0x8000000000400003, %rax
+    movl $512, %ecx
+pte_fill_4m:
+    movq %rax, (%rdi)
+    addq $4096, %rax
+    addq $8, %rdi
+    loop pte_fill_4m
+    movq pte_reply+8(%rip), %rax
+    movq %rax, page_table_4m(%rip)
+    leaq page_table_4m(%rip), %rax
+    orq $3, %rax
+    movq %rax, page_directory+16(%rip)
+    movq %cr3, %rax
+    movq %rax, %cr3
+    movq $0x400000, %rdi
+    movabsq $0x1122334455667788, %r10
+    movq %r10, (%rdi)
+    cmpq %r10, (%rdi)
+    jne fail64
+    movq $0, (%rdi)
+    ret
 
 /* The non-HIA Multiboot transport populates a bounded native-HIA request.
  * Three actual live intervals cover the image/BSS/stack, Multiboot info,
@@ -1008,6 +1095,8 @@ message_map_pass:
     .asciz "HEPTAKERNEL HIA E820 VERIFIED\r\n"
 message_reservation_pass:
     .asciz "HEPTAKERNEL HIA RESERVATIONS VERIFIED\r\n"
+message_pte_pass:
+    .asciz "HEPTAKERNEL HIA LIVE PTE VERIFIED\r\n"
 message_router_pass:
     .asciz "HEPTAKERNEL HIA ARENA ROUTER VERIFIED\r\n"
 message_owner_pass:
@@ -1112,6 +1201,7 @@ owner_count:     .quad 3, 0, 0, 0
 pml4:             .skip 4096
 pdpt:             .skip 4096
 page_directory:   .skip 4096
+page_table_4m:    .skip 4096
 idt64:            .skip 4096
 .balign 16
 state_guard_before: .skip 8
@@ -1122,6 +1212,7 @@ reply:              .skip 16
 reply_guard_after:  .skip 8
 .balign 8
 boot_magic:       .skip 4
+pte_caps:         .skip 4
 boot_info:        .skip 4
 mmap_end32:       .skip 4
 .balign 8
@@ -1134,6 +1225,11 @@ reservation_guard_before: .skip 8
 reservation_reply:        .skip 16
 reservation_guard_after:  .skip 8
 reservation_unused:       .skip 16
+pte_request:      .skip 32
+pte_guard_before: .skip 8
+pte_reply:        .skip 16
+pte_guard_after:  .skip 8
+pte_unused:       .skip 16
 arena_guard_before: .skip 8
 arena_reply:       .skip 16
 arena_guard_after: .skip 8
