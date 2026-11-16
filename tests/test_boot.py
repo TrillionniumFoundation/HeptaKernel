@@ -34,11 +34,12 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
             # Wrong allocator must fail after the genuine HIA map gate.
             accepted = (map_verified and p.returncode == 35 and
                         FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
-        elif mode == "reserved_rejected":
-            # Real HIA E820 must reject a type-2 record before map marker.
+        elif mode in ("reserved_rejected", "nonvolatile_rejected"):
+            # Real HIA E820 must reject both enabled type-2 reservations
+            # and enabled type-1 nonvolatile ranges before any RAM probe.
             accepted = (not map_verified and p.returncode == 35 and
                         FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
-        elif mode == "unsafe_map_bypass":
+        elif mode in ("unsafe_map_bypass", "unsafe_nonvolatile_bypass"):
             # Deliberately dishonest HIA E820 object falsely accepts the
             # identical injected reservation. This is a negative control.
             accepted = (map_verified and p.returncode == 33 and
@@ -78,6 +79,11 @@ def main():
                                       machine, memory, mode="reserved_rejected"))
         report["runs"].append(run(args.qemu, Path("build/e820-bypass-multiboot.elf"),
                                   mode="unsafe_map_bypass"))
+        for machine, memory in (("pc", "32"), ("q35", "64")):
+            report["runs"].append(run(args.qemu, Path("build/e820-persistent-multiboot.elf"),
+                                      machine, memory, mode="nonvolatile_rejected"))
+        report["runs"].append(run(args.qemu, Path("build/e820-persistent-bypass-multiboot.elf"),
+                                  mode="unsafe_nonvolatile_bypass"))
         report["status"] = "PASS" if all(r["status"] == "PASS" for r in report["runs"]) else "FAIL"
     except Exception as exc:
         report.update(status="FAIL", error=repr(exc))

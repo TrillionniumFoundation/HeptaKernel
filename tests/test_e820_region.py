@@ -45,9 +45,10 @@ def oracle(data, reply_length):
         if length == 0 or x > MAX - length:
             return 6, 0
         enabled = bool(attr & 1)
-        if enabled and kind == 1:
+        nonvolatile = bool(attr & 2)  # ACPI 3.0 extended E820 attribute bit 1
+        if enabled and kind == 1 and not nonvolatile:
             usable.append((x, x + length))
-        if enabled and kind != 1 and x < end and x + length > base:
+        if enabled and (kind != 1 or nonvolatile) and x < end and x + length > base:
             has_exclusion = True
     # Independent sorted-interval oracle; HIA uses repeated unsorted scans.
     cursor = base
@@ -120,7 +121,12 @@ def campaign(path):
         (encode(0, 1, [(0, PAGE, 0, 1)]), 16),
         (encode(0, 1, [(0, PAGE, 3, 1)]), 16),
         (encode(0, 1, [(0, PAGE, 1, 2)]), 16),
-        (encode(0, 1, [(0, PAGE, 1, 3)]), 16),
+        (encode(0, 1, [(0, PAGE, 1, 3)]), 16),  # persistent RAM is unavailable
+        (encode(0, 1, [(0, PAGE, 1, 1), (0, PAGE, 1, 3)]), 16),
+        (encode(0, 2, [(0, 2 * PAGE, 1, 1), (PAGE, 1, 1, 3)]), 16),
+        (encode(0, 1, [(0, PAGE, 1, 1), (0, PAGE, 1, 2)]), 16),
+        (encode(0, 1, [(0, PAGE, 1, 0xFFFFFFFD)]), 16),
+        (encode(0, 1, [(0, PAGE, 1, 1), (PAGE, PAGE, 1, 3)]), 16),
         # Adjacent/overlapping, reverse-ordered and reserved fragments.
         (encode(0, 2, [(PAGE, PAGE, 1, 1), (0, PAGE, 1, 1)]), 16),
         (encode(0, 3, [(2 * PAGE, PAGE, 1, 1),
@@ -158,7 +164,7 @@ def campaign(path):
     ]
     for data, rlen in fixed:
         call(data, rlen)
-    case_names.append("43 deterministic positive, fragmented, geometry, overflow, attribute, overlap and rejection cases")
+    case_names.append(f"{len(fixed)} deterministic positive, fragmented, geometry, overflow, attribute, nonvolatile precedence, overlap and rejection cases")
     rng = random.Random(0xE82020261116)
     for i in range(3000):
         pages = rng.choice([0, 1, 2, 3, 8, 65, 65536, 65537])

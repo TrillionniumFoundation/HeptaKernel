@@ -198,10 +198,11 @@ attrs_stored32:
 mmap_done32:
     testl %edx, %edx
     jz fail32
-#ifdef HEPTAKERNEL_TEST_INJECT_RESERVED
-    /* NEGATIVE CONTROL ONLY: append enabled type-2 reserved region
-     * overlapping the arena. Preserve all authentic loader entries.
-     * Never define this for the standard kernel boot object.
+#if defined(HEPTAKERNEL_TEST_INJECT_RESERVED) || defined(HEPTAKERNEL_TEST_INJECT_NONVOLATILE)
+    /* NEGATIVE CONTROLS ONLY. Preserve all real loader records, then
+     * inject an enabled exclusion overlapping the first physical page.
+     * ACPI extended attr bit 1 indicates nonvolatile memory even if
+     * the E820 type is 1 (RAM); neither case may be used as scratch RAM.
      */
     cmpl $128, %edx
     jae fail32
@@ -209,8 +210,13 @@ mmap_done32:
     movl $0, 4(%edi)
     movl $PAGE_BYTES, 8(%edi)
     movl $0, 12(%edi)
+#ifdef HEPTAKERNEL_TEST_INJECT_NONVOLATILE
+    movl $1, 16(%edi)
+    movl $3, 20(%edi)
+#else
     movl $2, 16(%edi)
     movl $1, 20(%edi)
+#endif
     incl %edx
 #endif
     movl %edx, e820_request+16

@@ -36,6 +36,10 @@ build/e820-boot.o: build/e820-region.o
 build/boot-reserved.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_INJECT_RESERVED=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
+# Test-only firmware conflict: enabled type-1 RAM with persistent attribute.
+build/boot-persistent.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_INJECT_NONVOLATILE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
 build/e820-unsafe-boot.o: build/e820-allow-all.o
 	objcopy --redefine-sym f0=e820_f0 "$<" "$@"
 
@@ -46,6 +50,14 @@ build/e820-reserved-multiboot.elf: build/boot-reserved.o build/kernel.o build/e8
 build/e820-bypass-multiboot.elf: build/boot-reserved.o build/kernel.o build/e820-unsafe-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/e820-bypass.elf build/boot-reserved.o build/kernel.o build/e820-unsafe-boot.o
 	objcopy -O elf32-i386 build/e820-bypass.elf "$@"
+
+build/e820-persistent-multiboot.elf: build/boot-persistent.o build/kernel.o build/e820-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/e820-persistent.elf build/boot-persistent.o build/kernel.o build/e820-boot.o
+	objcopy -O elf32-i386 build/e820-persistent.elf "$@"
+
+build/e820-persistent-bypass-multiboot.elf: build/boot-persistent.o build/kernel.o build/e820-unsafe-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/e820-persistent-bypass.elf build/boot-persistent.o build/kernel.o build/e820-unsafe-boot.o
+	objcopy -O elf32-i386 build/e820-persistent-bypass.elf "$@"
 
 build/kernel.elf: build/boot.o build/kernel.o build/e820-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot.o build/kernel.o build/e820-boot.o
@@ -65,7 +77,7 @@ build/%-multiboot.elf: build/%.o build/boot.o build/e820-boot.o arch/x86_64/link
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/$*.elf build/boot.o build/$*.o build/e820-boot.o
 	objcopy -O elf32-i386 build/$*.elf "$@"
 
-test-boot: build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf
+test-boot: build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
 	$(PYTHON) tests/test_boot.py --qemu "$(QEMU)"
 
 test-guard-pages: build/kernel-host.so
@@ -93,7 +105,7 @@ test-memory-map: build/e820-region.so build/e820-allow-all.so
 	timeout 60 $(PYTHON) tests/test_e820_region.py build/e820-region.so
 	$(PYTHON) tests/test_e820_region.py build/e820-allow-all.so --expect-unsafe
 
-record-build: build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf
+record-build: build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
 	$(PYTHON) tools/record_build.py --compiler "$(HEPTA_COMPILER)"
 
 test-closure:
