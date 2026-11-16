@@ -121,6 +121,30 @@ def main():
         if (image64.text_at(e820_entry, len(e820_code)) != e820_code or
                 image32.text_at(e820_entry, len(e820_code)) != e820_code):
             raise ValueError("native HIA E820 code not preserved in boot images")
+        # Test-only reserved-memory images must carry byte-exact HIA.
+        liar_source = Path("tests/negative/e820_allow_all.hepta").read_bytes()
+        liar_object = Path("build/e820-allow-all.o").read_bytes()
+        rebuilt_liar = subprocess.run([compiler], input=liar_source, capture_output=True,
+                                      timeout=20, env={"PATH": ""})
+        if rebuilt_liar.returncode or rebuilt_liar.stderr or rebuilt_liar.stdout != liar_object:
+            raise ValueError("dishonest HIA E820 control not reproducible")
+        liar_code = Elf("build/e820-allow-all.o").section_bytes(".text")
+        if Elf("build/e820-unsafe-boot.o").section_bytes(".text") != liar_code:
+            raise ValueError("dishonest E820 symbol rename changed code")
+        if (Elf("build/boot.o").section_bytes(".text.boot") ==
+                Elf("build/boot-reserved.o").section_bytes(".text.boot")):
+            raise ValueError("reserved-map fault injection is absent")
+        for stem, expected_e820 in (("e820-reserved", e820_code),
+                                    ("e820-bypass", liar_code)):
+            linked64 = Elf("build/" + stem + ".elf")
+            packed32 = Elf("build/" + stem + "-multiboot.elf")
+            for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820)):
+                symbol_address = linked64.symbol(symbol)
+                if packed32.symbol(symbol) != symbol_address:
+                    raise ValueError(stem + " symbol differs after Multiboot wrapping")
+                if (linked64.text_at(symbol_address, len(expected_code)) != expected_code or
+                        packed32.text_at(symbol_address, len(expected_code)) != expected_code):
+                    raise ValueError(stem + " lacks exact native HIA code for " + symbol)
         host = Elf("build/kernel-host.so")
         if host.section_bytes(".text") != code:
             raise ValueError("native library changed HIA code")
@@ -143,6 +167,11 @@ def main():
                       e820_text_sha256=sha(e820_code),
                       e820_entry_address=e820_entry,
                       linked_hia_e820_bytes_match=True,
+                      injected_reserved_boot_differs=True,
+                      reserved_boot_contains_genuine_hia_e820=True,
+                      bypass_boot_contains_dishonest_native_hia_e820=True,
+                      dishonest_e820_source_sha256=sha(liar_source),
+                      dishonest_e820_object_sha256=sha(liar_object),
                       inputs=input_hashes, artifacts=artifacts,
                       input_manifest_sha256=sha(json.dumps(input_hashes, sort_keys=True,
                                                           separators=(",", ":")).encode()),

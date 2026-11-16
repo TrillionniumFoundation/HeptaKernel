@@ -61,6 +61,9 @@ def main():
               "all_kernel_code_in_hia": False,
               "source_sha256": digest("src/kernel.hepta"), "hia_object_sha256": digest("build/kernel.o"),
               "bridge_sha256": digest("arch/x86_64/boot.S"),
+              "native_hia_e820_object_sha256": digest("build/e820-region.o"),
+              "dishonest_hia_e820_object_sha256": digest("build/e820-allow-all.o"),
+              "reserved_boot_object_sha256": digest("build/boot-reserved.o"),
               "fixtures_sha256": digest("tests/boot-cases.json"), "runs": []}
     try:
         version = subprocess.run([args.qemu, "--version"], capture_output=True, text=True, timeout=10, check=True)
