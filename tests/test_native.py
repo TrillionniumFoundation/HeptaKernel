@@ -71,7 +71,7 @@ class Model:
 
     def call(self, c):
         op, a, b, d = c
-        if op not in range(8):
+        if op not in range(9):
             return BAD_OP, 0
         if op == 0:
             if not 1 <= a <= 65536 or b % PAGE or b >= LIMIT or a > (LIMIT - b) // PAGE or d > a:
@@ -86,7 +86,7 @@ class Model:
         if ((op == 1 and (a == 0 or a & (a - 1) or b or d))
                 or (op == 2 and (a % PAGE or b or d))
                 or (op == 3 and (a or b or d))
-                or (op == 4 and (a == 0 or b == 0 or (b & (b - 1)) or d))
+                or (op in (4, 8) and (a == 0 or b == 0 or (b & (b - 1)) or d))
                 or (op == 5 and (a % PAGE or b == 0 or d))
                 or (op == 6 and (a % PAGE or b == 0 or d))
                 or (op == 7 and (a % PAGE or b == 0 or d))):
@@ -111,14 +111,15 @@ class Model:
                 return DOUBLE_FREE, 0
             self.free.add(a)
             return OK, 0
-        if op == 4:
+        if op in (4, 8):
             if a > len(self.free):
                 return NO_MEMORY, 0
             for index in range(self.reserved, self.n - a + 1):
                 physical = self.base + index * PAGE
                 run = {physical + offset * PAGE for offset in range(a)}
                 if (physical // PAGE) % b == 0 and run.issubset(self.free):
-                    self.free.difference_update(run)
+                    if op == 4:
+                        self.free.difference_update(run)
                     return OK, physical
             return NO_MEMORY, 0
         if op == 5:
@@ -191,7 +192,7 @@ class Campaign:
         assert actual == expected, {"command": command, "actual": actual, "expected": expected}
         if actual[0] != OK:
             assert native.snapshot() == before, ("failure mutated allocator state", command)
-        elif command[0] in (3, 7):
+        elif command[0] in (3, 7, 8):
             assert native.snapshot() == before, "read-only query mutated state"
         if model.initialized:
             end = 64 + (model.n + 7) // 8
@@ -438,6 +439,35 @@ class Campaign:
         assert self.call(ceiling, (7, LIMIT - PAGE, 2, 0)) == (INVALID, 0)
         self.cases.append("read-only exact run query: independent set model, fragmentation, zero address, reserved, boundaries and immutability")
 
+    def query_first_runs(self):
+        # Query the real allocation bitmap without claiming the run. This is
+        # the precursor to a single-owner multi-arena query-then-claim protocol.
+        pair = self.pair(67)
+        assert self.call(pair, (8, 4, 8, 0)) == (BAD_STATE, 0)
+        for command in ((8, 0, 1, 0), (8, 1, 0, 0),
+                        (8, 1, 3, 0), (8, 1, 1, 1)):
+            assert self.call(pair, command) == (INVALID, 0)
+        self.call(pair, (0, 17, 0x503000, 2))
+        assert self.call(pair, (8, 4, 8, 0)) == (OK, 0x508000)
+        assert self.call(pair, (8, 4, 8, 0)) == (OK, 0x508000)
+        assert self.call(pair, (6, 0x508000, 4, 0)) == (OK, 0)
+        assert self.call(pair, (8, 4, 8, 0)) == (OK, 0x510000)
+        assert self.call(pair, (6, 0x510000, 4, 0)) == (OK, 0)
+        assert self.call(pair, (8, 4, 8, 0)) == (NO_MEMORY, 0)
+        assert self.call(pair, (5, 0x508000, 4, 0)) == (OK, 0)
+        assert self.call(pair, (8, 4, 8, 0)) == (OK, 0x508000)
+        zero = self.pair(65)
+        self.call(zero, (0, 1, 0, 0))
+        assert self.call(zero, (8, 1, 1, 0)) == (OK, 0)
+        assert self.call(zero, (8, 1, 1, 0)) == (OK, 0)
+        assert self.call(zero, (6, 0, 1, 0)) == (OK, 0)
+        assert self.call(zero, (8, 1, 1, 0)) == (NO_MEMORY, 0)
+        ceiling = self.pair(65)
+        self.call(ceiling, (0, 1, LIMIT - PAGE, 0))
+        assert self.call(ceiling, (8, 1, 1, 0)) == (OK, LIMIT - PAGE)
+        assert self.call(ceiling, (8, 2, 1, 0)) == (NO_MEMORY, 0)
+        self.cases.append("read-only live-bitmap aligned first-fit: fragmentation, occupied candidates, independence, physical zero, limit and immutable state")
+
     def randomized(self):
         for seed in range(32):
             rng = random.Random(0x48494100 + seed)
@@ -446,7 +476,7 @@ class Campaign:
             base = rng.randrange(0, 1024) * PAGE
             self.call(pair, (0, n, base, reserved))
             for _ in range(250):
-                choice = rng.randrange(17)
+                choice = rng.randrange(19)
                 if choice < 5:
                     c = (1, 1 << rng.randrange(9), 0, 0)
                 elif choice < 8:
@@ -459,6 +489,8 @@ class Campaign:
                     c = (6, base + rng.randrange(n + 2) * PAGE, rng.randint(1, 5), 0)
                 elif choice in (14, 15):
                     c = (7, base + rng.randrange(n + 2) * PAGE, rng.randint(1, 5), 0)
+                elif choice in (16, 17):
+                    c = (8, rng.randint(1, 5), 1 << rng.randrange(6), 0)
                 else:
                     c = (3, 0, 0, 0)
                 self.call(pair, c)
@@ -479,7 +511,7 @@ def main():
     parser.add_argument("--report", type=Path, default=Path("build/native-report.json"))
     args = parser.parse_args()
     campaign = Campaign(args.library)
-    report = {"schema": "heptakernel.native-tests.v1", "scope": "HIA single-arena allocator with atomic contiguous allocation, release, exact claim and read-only availability query",
+    report = {"schema": "heptakernel.native-tests.v1", "scope": "HIA single-arena allocator with atomic contiguous allocation, release, exact claim and two read-only live-bitmap query modes",
               "linux_compatibility_tested": False, "formal_proof": False,
               "tested_library": str(args.library.resolve()),
               "tested_library_sha256": hashlib.sha256(args.library.read_bytes()).hexdigest(),
@@ -512,6 +544,7 @@ def main():
         campaign.free_runs()
         campaign.exact_claim_runs()
         campaign.query_free_runs()
+        campaign.query_first_runs()
         campaign.randomized()
         campaign.maximum()
         report.update(status="PASS", calls=campaign.commands, cases=campaign.cases)

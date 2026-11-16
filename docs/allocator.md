@@ -51,6 +51,7 @@ the status word distinguishes it from a failure.
 | 5 FREE_RUN | starting physical address, contiguous page count, 0 | 0 (atomic release) |
 | 6 CLAIM_RUN | exact physical start address, contiguous page count, 0 | 0 (atomic claim) |
 | 7 QUERY_FREE_RUN | exact physical start address, contiguous page count, 0 | Requested count if every frame is free (read-only) |
+| 8 QUERY_FIRST_FREE_RUN | contiguous page count, power-of-two alignment in pages, 0 | Lowest physically aligned, currently free contiguous-run start (read-only) |
 
 Each page is 4096 bytes. The arena has 1 through 65,536 pages, a 4096-aligned
 base, and an exclusive upper bound at most `2^52`. The permanently reserved
@@ -89,6 +90,14 @@ argument, geometry, reserved-prefix and complete-bitmap checks as CLAIM_RUN.
 It returns NO_MEMORY when any requested frame is in use and never modifies
 the allocator state. It is not an atomic claim, and callers must use CLAIM_RUN
 to reserve pages; probing is safe only under the stated single-owner contract.
+
+QUERY_FIRST_FREE_RUN uses the same bounded state-integrity validation,
+live bitmap first-fit scan, physical alignment and reserved-prefix rules as
+ALLOC_RUN, but publishes the address without writing the bitmap or free count.
+It can support speculative cross-zone selection under single-owner
+serialization; a caller must still use CLAIM_RUN to reserve that address and
+handle a changed occupancy result. This is not an atomic multi-zone allocation
+or SMP-safe read-modify-write transaction.
 
 No run-ownership tracking, zones, SMP locking or buddy merging is yet
 implemented. The caller must prevent stale aliases and coordinate ownership.

@@ -25,8 +25,11 @@ dependency order, preserving the exact baseline and every unmet obligation in
    tests. The current fixed arena must not be mistaken for discovery of RAM.
    A two-zone QEMU observer now exercises distinct E820-admitted HIA PMM
    states and physical readbacks, but routing/state binding lives in a
-   non-HIA fixture; replace it with HIA-native dynamic ownership and
-   synchronization rather than claiming allocator closure.
+   non-HIA fixture. The HIA read-only bitmap first-fit query can inspect
+   current per-arena occupancy without claiming pages; link it to the HIA
+   exact-claim primitive through a verified single-owner zone coordinator,
+   then implement concurrent linearizable ownership and synchronization.
+   Neither query nor a query-then-claim fixture establishes SMP safety.
 4. Implement interrupt controllers, clocks, task/context switching, user-mode
    entry, ELF loading and Linux syscall dispatch, with independent success and
    error-path tests before treating any syscall as implemented.
