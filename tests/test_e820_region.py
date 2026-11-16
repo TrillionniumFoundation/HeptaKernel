@@ -164,7 +164,7 @@ def campaign(path):
     ]
     for data, rlen in fixed:
         call(data, rlen)
-    case_names.append("49 deterministic positive, fragmented, geometry, overflow, attribute, nonvolatile precedence, overlap and rejection cases")
+    case_names.append(f"{len(fixed)} deterministic positive, fragmented, geometry, overflow, attribute, nonvolatile precedence, overlap and rejection cases")
     rng = random.Random(0xE82020261116)
     for i in range(3000):
         pages = rng.choice([0, 1, 2, 3, 8, 65, 65536, 65537])
