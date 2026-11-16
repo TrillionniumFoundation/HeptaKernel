@@ -1,23 +1,46 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn malicious_e820(request:readbuf,reply:mutbuf,state:mutbuf) -> (u32) effects(write,trap) entry(start)
+/* Deliberately dishonest native HIA oracle control. It ACCEPTS every
+ * syntactically sized query, ignores the real E820 rows, and parrots the
+ * requested page count. Thus its lie stays visible in both the original
+ * 1024-page request and independent 17-page ownership admissions.
+ * This object is never linked into the positive boot image.
+ */
+fn malicious_e820(request:readbuf,reply:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
 block start(request:readbuf,reply:mutbuf,state:mutbuf)
-  i:usize = const() {"value":0}
-  jump loop(reply,i)
-block loop(buf:mutbuf,index:usize)
-  end:usize = const() {"value":16}
-  more:bool = compare.lt(index,end)
-  branch more store(buf,index) done()
-block store(out:mutbuf,pos:usize)
+  qlen:usize = buffer.len(request)
+  rlen:usize = buffer.len(reply)
+  minimum:usize = const() {"value":16}
+  enough_query:bool = compare.ge(qlen,minimum)
+  enough_reply:bool = compare.ge(rlen,minimum)
+  enough:bool = bool.and(enough_query,enough_reply)
+  branch enough begin_copy(request,reply) too_short()
+block too_short()
+  bad:u32 = const() {"value":2}
+  ret(bad)
+block begin_copy(q:readbuf,r:mutbuf)
+  initial:usize = const() {"value":0}
+  jump copy_loop(q,r,initial)
+block copy_loop(q:readbuf,r:mutbuf,index:usize)
+  width:usize = const() {"value":16}
+  more:bool = compare.lt(index,width)
+  branch more choose_byte(q,r,index) done()
+block choose_byte(q:readbuf,r:mutbuf,index:usize)
+  start_value:usize = const() {"value":8}
+  from_query:bool = compare.ge(index,start_value)
+  branch from_query echo_byte(q,r,index) zero_byte(q,r,index)
+block echo_byte(q:readbuf,r:mutbuf,index:usize)
+  byte:u8 = buffer.load(q,index)
+  _ = buffer.store(r,index,byte)
+  jump next_byte(q,r,index)
+block zero_byte(q:readbuf,r:mutbuf,index:usize)
   zero:u8 = const() {"value":0}
-  four:u8 = const() {"value":4}
-  value_high_position:usize = const() {"value":9}
-  is_value_high:bool = compare.eq(pos,value_high_position)
-  dishonest_byte:u8 = select(is_value_high,four,zero)
-  _ = buffer.store(out,pos,dishonest_byte)
+  _ = buffer.store(r,index,zero)
+  jump next_byte(q,r,index)
+block next_byte(q:readbuf,r:mutbuf,index:usize)
   one:usize = const() {"value":1}
-  next:usize = int.add.wrap(pos,one)
-  jump loop(out,next)
+  next:usize = int.add.wrap(index,one)
+  jump copy_loop(q,r,next)
 block done()
-  success:u32 = const() {"value":0}
-  ret(success)
+  ok:u32 = const() {"value":0}
+  ret(ok)
 end

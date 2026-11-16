@@ -109,3 +109,10 @@ not a native-HIA dynamic zone manager, a trusted real-firmware memory
 provenance proof, a Linux NUMA/buddy subsystem, or SMP-safe allocation.
 Allocation metadata remains private, single-threaded and not protected
 against firmware compromise. The 17 Linux-wide acceptance gates remain HOLD.
+
+The E820 negative-control HIA object was intentionally strengthened to echo
+its requested page count while still **ignoring every firmware reservation**.
+This avoids a hard-coded 1024-page reply accidentally rejecting the independent
+17-page E820 probes; the unsafe image must still reach the physical readback,
+so the independent false-acceptance control remains observable. All original
+negative tests remain mandatory.
