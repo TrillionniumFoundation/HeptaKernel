@@ -57,13 +57,13 @@ block geometry(pt_geo_out:mutbuf,pt_geo_virtual:u64,pt_geo_physical:u64,pt_geo_f
   pt_g2:bool = bool.and(pt_readable,pt_canonical)
   pt_g3:bool = bool.and(pt_g0,pt_g1)
   pt_ok:bool = bool.and(pt_g3,pt_g2)
-  branch pt_ok policy(pt_geo_out,pt_geo_physical,pt_geo_flags) invalid(pt_geo_out)
+  branch pt_ok policy(pt_geo_out,pt_geo_physical,pt_geo_flags,pt_is_high_half) invalid(pt_geo_out)
 block invalid(pt_invalid_out:mutbuf)
   pt_invalid_code:u32 = const() {"value":6}
   pt_invalid_zero:u64 = const() {"value":0}
   pt_invalid_written:u32 = call(pt_invalid_out,pt_invalid_code,pt_invalid_zero) {"function":"write_reply"}
   ret(pt_invalid_written)
-block policy(pt_pol_out:mutbuf,pt_pol_physical:u64,pt_pol_flags:u64)
+block policy(pt_pol_out:mutbuf,pt_pol_physical:u64,pt_pol_flags:u64,pt_pol_high_half:bool)
   pt_pol_zero:u64 = const() {"value":0}
   pt_mask_w:u64 = const() {"value":2}
   pt_mask_x:u64 = const() {"value":4}
@@ -79,7 +79,9 @@ block policy(pt_pol_out:mutbuf,pt_pol_physical:u64,pt_pol_flags:u64)
   pt_g:bool = compare.ne(pt_pol_gval,pt_pol_zero)
   pt_wx:bool = bool.and(pt_w,pt_x)
   pt_ug:bool = bool.and(pt_u,pt_g)
-  pt_unsafe:bool = bool.or(pt_wx,pt_ug)
+  pt_user_kernel:bool = bool.and(pt_u,pt_pol_high_half)
+  pt_unsafe_1:bool = bool.or(pt_wx,pt_ug)
+  pt_unsafe:bool = bool.or(pt_unsafe_1,pt_user_kernel)
   branch pt_unsafe unsafe(pt_pol_out) encode(pt_pol_out,pt_pol_physical,pt_w,pt_x,pt_u,pt_g)
 block unsafe(pt_unsafe_out:mutbuf)
   pt_unsafe_code:u32 = const() {"value":7}
