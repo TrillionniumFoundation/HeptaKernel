@@ -115,9 +115,55 @@ def tests(binding_fn, pmm_fn):
             short_state = (ctypes.c_ubyte * cut).from_buffer_copy(bytes(state)[:cut])
             assert call(binding_fn, request, short_state)[0] == BAD_STATE
             cases += 1
-    # A matching header can still have a corrupted allocation bitmap.
-    # This limited guard is not the PMM's state_valid() and MUST NOT be
-    # used as an independent authorization to allocate or free pages.
+    # Independent bitmap oracle: canonical real PMM INIT states must pass.
+    # A single-bit corruption with unchanged free-count must be rejected
+    # throughout the complete bitmap, including protected prefix and tail.
+    for pages, base, reserved in (
+        (1, 0, 1), (7, 0x400000, 3), (8, 0x600000, 0),
+        (9, 0x800000, 1), (17, 0xA00000, 2),
+        (65536, LIMIT - 65536 * PAGE, 4),
+    ):
+        state = build_state(pmm_fn, pages, base, reserved)
+        request = struct.pack("<QQQ", base, pages, reserved)
+        assert call(binding_fn, request, state) == (OK, pages - reserved)
+        cases += 1
+        # Test first and last used bytes, plus reserved-to-dynamic boundary.
+        for index in sorted({0, reserved - 1, reserved, pages // 2, pages - 1}):
+            if not 0 <= index < pages:
+                continue
+            byte_offset, mask = 64 + index // 8, 1 << (index % 8)
+            before = bytes(state)
+            overwrite(state, byte_offset, bytes([before[byte_offset] ^ mask]))
+            assert call(binding_fn, request, state) == (BAD_STATE, 0), (
+                pages, reserved, index
+            )
+            overwrite(state, 0, before)
+            cases += 1
+        if pages % 8:
+            index = pages  # forbidden tail bit in the final partially used byte
+            byte_offset, mask = 64 + index // 8, 1 << (index % 8)
+            before = bytes(state)
+            overwrite(state, byte_offset, bytes([before[byte_offset] | mask]))
+            assert call(binding_fn, request, state) == (BAD_STATE, 0), pages
+            overwrite(state, 0, before)
+            cases += 1
+    # A matching canonical header is not sufficient: a legitimate CLAIM_RUN
+    # updates the bitmap and free count together and must remain accepted.
+    state = build_state(pmm_fn, 17, 0xA00000, 2)
+    request = struct.pack("<QQQ", 0xA00000, 17, 2)
+    assert call(pmm_fn, struct.pack("<QQQQ", 6, 0xA00000 + 4 * PAGE, 1, 0),
+                state, state_immutable=False) == (OK, 0)
+    assert call(binding_fn, request, state) == (OK, 14)
+    cases += 2
+    # Corrupt only the new occupied bit. Header geometry and free count
+    # remain valid-looking, but actual live occupancy no longer agrees.
+    before = bytes(state)
+    overwrite(state, 64, bytes([before[64] ^ (1 << 4)]))
+    assert call(binding_fn, request, state) == (BAD_STATE, 0)
+    overwrite(state, 0, before)
+    cases += 1
+    # Bitmap validation is still not pointer authentication, E820 attestation,
+    # or a concurrency lock; callers cannot treat it as authorization.
     state = build_state(pmm_fn, 9, 0x400000, 1)
     request = struct.pack("<QQQ", 0x400000, 9, 1)
     for invalid in (
