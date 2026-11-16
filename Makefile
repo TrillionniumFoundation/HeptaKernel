@@ -4,7 +4,7 @@ QEMU ?= qemu-system-x86_64
 PYTHON ?= python3
 COMPILER_SHA256 := 87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54
 
-.PHONY: all check-compiler test test-native test-boot test-guard-pages test-closure record-build full-acceptance clean
+.PHONY: all check-compiler test test-native test-boot test-guard-pages test-memory-map test-closure record-build full-acceptance clean
 
 all: build/kernel-multiboot.elf
 
@@ -53,13 +53,35 @@ test-boot: build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bou
 test-guard-pages: build/kernel-host.so
 	timeout 30 $(PYTHON) tests/test_guard_pages.py build/kernel-host.so
 
+# The independent E820 admission object has its own f0 ABI and is intentionally
+# not yet linked into the QEMU boot bridge.
+build/e820-region.o: src/e820_region.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.e820-region.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/e820-region.so: build/e820-region.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/e820-allow-all.o: tests/negative/e820_allow_all.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.e820-negative.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/e820-allow-all.so: build/e820-allow-all.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+test-memory-map: build/e820-region.so build/e820-allow-all.so
+	timeout 60 $(PYTHON) tests/test_e820_region.py build/e820-region.so
+	$(PYTHON) tests/test_e820_region.py build/e820-allow-all.so --expect-unsafe
+
 record-build: build/kernel-host.so build/kernel-multiboot.elf
 	$(PYTHON) tools/record_build.py --compiler "$(HEPTA_COMPILER)"
 
 test-closure:
 	$(PYTHON) tests/test_closure.py
 
-test: test-native test-guard-pages test-boot test-closure record-build
+test: test-native test-guard-pages test-memory-map test-boot test-closure record-build
 
 full-acceptance:
 	$(PYTHON) tools/check_closure.py

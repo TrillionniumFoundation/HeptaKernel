@@ -1,0 +1,185 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn e820_region(request:readbuf,reply:mutbuf,unused:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,unused:mutbuf)
+  mm_start_reply_size:usize = buffer.len(reply)
+  mm_start_minimum:usize = const() {"value":16}
+  mm_start_short:bool = compare.lt(mm_start_reply_size,mm_start_minimum)
+  branch mm_start_short reply_short() check_header(request,reply)
+block reply_short()
+  mm_reply_short_status:u32 = const() {"value":1}
+  ret(mm_reply_short_status)
+block check_header(mm_check_header_wire:readbuf,mm_check_header_result:mutbuf)
+  mm_check_header_length:usize = buffer.len(mm_check_header_wire)
+  mm_check_header_minimum:usize = const() {"value":24}
+  mm_check_header_enough:bool = compare.ge(mm_check_header_length,mm_check_header_minimum)
+  branch mm_check_header_enough decode(mm_check_header_wire,mm_check_header_result,mm_check_header_length) bad_request(mm_check_header_result)
+block bad_request(mm_bad_request_bad_reply:mutbuf)
+  mm_bad_request_status:u32 = const() {"value":2}
+  mm_bad_request_zero:u64 = const() {"value":0}
+  mm_bad_request_result:u32 = call(mm_bad_request_bad_reply,mm_bad_request_status,mm_bad_request_zero) {"function":"write_reply"}
+  ret(mm_bad_request_result)
+block decode(mm_decode_wire:readbuf,mm_decode_result:mutbuf,mm_decode_bytes:usize)
+  mm_decode_offset0:usize = const() {"value":0}
+  mm_decode_offset8:usize = const() {"value":8}
+  mm_decode_offset16:usize = const() {"value":16}
+  mm_decode_base:u64 = call(mm_decode_wire,mm_decode_offset0) {"function":"read_u64"}
+  mm_decode_pages:u64 = call(mm_decode_wire,mm_decode_offset8) {"function":"read_u64"}
+  mm_decode_entries:u64 = call(mm_decode_wire,mm_decode_offset16) {"function":"read_u64"}
+  mm_decode_max_entries:u64 = const() {"value":128}
+  mm_decode_acceptable:bool = compare.le(mm_decode_entries,mm_decode_max_entries)
+  branch mm_decode_acceptable length_check(mm_decode_wire,mm_decode_result,mm_decode_bytes,mm_decode_base,mm_decode_pages,mm_decode_entries) bad_request(mm_decode_result)
+block length_check(mm_length_check_wire:readbuf,mm_length_check_result:mutbuf,mm_length_check_bytes:usize,mm_length_check_base:u64,mm_length_check_pages:u64,mm_length_check_entries:u64)
+  mm_length_check_width:u64 = const() {"value":24}
+  mm_length_check_payload:u64 = int.mul.wrap(mm_length_check_entries,mm_length_check_width)
+  mm_length_check_expected:u64 = int.add.wrap(mm_length_check_payload,mm_length_check_width)
+  mm_length_check_actual:u64 = int.cast(mm_length_check_bytes) {"mode":"wrap"}
+  mm_length_check_exact:bool = compare.eq(mm_length_check_actual,mm_length_check_expected)
+  branch mm_length_check_exact geometry(mm_length_check_wire,mm_length_check_result,mm_length_check_base,mm_length_check_pages,mm_length_check_entries) bad_request(mm_length_check_result)
+block geometry(mm_geometry_wire:readbuf,mm_geometry_result:mutbuf,mm_geometry_base:u64,mm_geometry_pages:u64,mm_geometry_entries:u64)
+  mm_geometry_zero:u64 = const() {"value":0}
+  mm_geometry_max_pages:u64 = const() {"value":65536}
+  mm_geometry_page_bytes:u64 = const() {"value":4096}
+  mm_geometry_page_mask:u64 = const() {"value":4095}
+  mm_geometry_physical_limit:u64 = const() {"value":4503599627370496}
+  mm_geometry_positive:bool = compare.gt(mm_geometry_pages,mm_geometry_zero)
+  mm_geometry_count_ok:bool = compare.le(mm_geometry_pages,mm_geometry_max_pages)
+  mm_geometry_aligned_bits:u64 = bit.and(mm_geometry_base,mm_geometry_page_mask)
+  mm_geometry_aligned:bool = compare.eq(mm_geometry_aligned_bits,mm_geometry_zero)
+  mm_geometry_inside:bool = compare.lt(mm_geometry_base,mm_geometry_physical_limit)
+  mm_geometry_available:u64 = int.sub.wrap(mm_geometry_physical_limit,mm_geometry_base)
+  mm_geometry_extent:u64 = int.mul.wrap(mm_geometry_pages,mm_geometry_page_bytes)
+  mm_geometry_fits:bool = compare.le(mm_geometry_extent,mm_geometry_available)
+  mm_geometry_first:bool = bool.and(mm_geometry_positive,mm_geometry_count_ok)
+  mm_geometry_second:bool = bool.and(mm_geometry_aligned,mm_geometry_inside)
+  mm_geometry_third:bool = bool.and(mm_geometry_first,mm_geometry_second)
+  mm_geometry_valid:bool = bool.and(mm_geometry_third,mm_geometry_fits)
+  branch mm_geometry_valid begin_scan(mm_geometry_wire,mm_geometry_result,mm_geometry_base,mm_geometry_pages,mm_geometry_entries,mm_geometry_extent) invalid(mm_geometry_result)
+block invalid(mm_invalid_bad_reply:mutbuf)
+  mm_invalid_status:u32 = const() {"value":6}
+  mm_invalid_zero:u64 = const() {"value":0}
+  mm_invalid_result:u32 = call(mm_invalid_bad_reply,mm_invalid_status,mm_invalid_zero) {"function":"write_reply"}
+  ret(mm_invalid_result)
+block begin_scan(mm_begin_scan_wire:readbuf,mm_begin_scan_result:mutbuf,mm_begin_scan_base:u64,mm_begin_scan_pages:u64,mm_begin_scan_entries:u64,mm_begin_scan_extent:u64)
+  mm_begin_scan_end:u64 = int.add.wrap(mm_begin_scan_base,mm_begin_scan_extent)
+  mm_begin_scan_zero:u64 = const() {"value":0}
+  mm_begin_scan_no:bool = const() {"value":false}
+  jump scan(mm_begin_scan_wire,mm_begin_scan_result,mm_begin_scan_base,mm_begin_scan_end,mm_begin_scan_pages,mm_begin_scan_entries,mm_begin_scan_zero,mm_begin_scan_no,mm_begin_scan_no)
+block scan(mm_scan_wire:readbuf,mm_scan_result:mutbuf,mm_scan_base:u64,mm_scan_end:u64,mm_scan_pages:u64,mm_scan_entries:u64,mm_scan_index:u64,mm_scan_covered:bool,mm_scan_blocked:bool)
+  mm_scan_more:bool = compare.lt(mm_scan_index,mm_scan_entries)
+  branch mm_scan_more inspect(mm_scan_wire,mm_scan_result,mm_scan_base,mm_scan_end,mm_scan_pages,mm_scan_entries,mm_scan_index,mm_scan_covered,mm_scan_blocked) complete(mm_scan_result,mm_scan_pages,mm_scan_covered,mm_scan_blocked)
+block inspect(mm_inspect_wire:readbuf,mm_inspect_result:mutbuf,mm_inspect_base:u64,mm_inspect_end:u64,mm_inspect_pages:u64,mm_inspect_entries:u64,mm_inspect_index:u64,mm_inspect_covered:bool,mm_inspect_blocked:bool)
+  mm_inspect_width:u64 = const() {"value":24}
+  mm_inspect_offset:u64 = int.mul.wrap(mm_inspect_index,mm_inspect_width)
+  mm_inspect_first:u64 = int.add.wrap(mm_inspect_offset,mm_inspect_width)
+  mm_inspect_second:u64 = const() {"value":8}
+  mm_inspect_third:u64 = const() {"value":16}
+  mm_inspect_next_offset:u64 = int.add.wrap(mm_inspect_first,mm_inspect_second)
+  mm_inspect_type_offset:u64 = int.add.wrap(mm_inspect_first,mm_inspect_third)
+  mm_inspect_start_at:usize = int.cast(mm_inspect_first) {"mode":"wrap"}
+  mm_inspect_length_at:usize = int.cast(mm_inspect_next_offset) {"mode":"wrap"}
+  mm_inspect_type_at:usize = int.cast(mm_inspect_type_offset) {"mode":"wrap"}
+  mm_inspect_entry_base:u64 = call(mm_inspect_wire,mm_inspect_start_at) {"function":"read_u64"}
+  mm_inspect_entry_bytes:u64 = call(mm_inspect_wire,mm_inspect_length_at) {"function":"read_u64"}
+  mm_inspect_type_and_attrs:u64 = call(mm_inspect_wire,mm_inspect_type_at) {"function":"read_u64"}
+  mm_inspect_zero:u64 = const() {"value":0}
+  mm_inspect_max:u64 = const() {"value":18446744073709551615}
+  mm_inspect_has_length:bool = compare.gt(mm_inspect_entry_bytes,mm_inspect_zero)
+  mm_inspect_max_add:u64 = int.sub.wrap(mm_inspect_max,mm_inspect_entry_base)
+  mm_inspect_no_overflow:bool = compare.le(mm_inspect_entry_bytes,mm_inspect_max_add)
+  mm_inspect_valid:bool = bool.and(mm_inspect_has_length,mm_inspect_no_overflow)
+  branch mm_inspect_valid classify(mm_inspect_wire,mm_inspect_result,mm_inspect_base,mm_inspect_end,mm_inspect_pages,mm_inspect_entries,mm_inspect_index,mm_inspect_covered,mm_inspect_blocked,mm_inspect_entry_base,mm_inspect_entry_bytes,mm_inspect_type_and_attrs) invalid(mm_inspect_result)
+block classify(mm_classify_wire:readbuf,mm_classify_result:mutbuf,mm_classify_base:u64,mm_classify_end:u64,mm_classify_pages:u64,mm_classify_entries:u64,mm_classify_index:u64,mm_classify_covered:bool,mm_classify_blocked:bool,mm_classify_entry_base:u64,mm_classify_entry_bytes:u64,mm_classify_type_and_attrs:u64)
+  mm_classify_entry_end:u64 = int.add.wrap(mm_classify_entry_base,mm_classify_entry_bytes)
+  mm_classify_mask:u64 = const() {"value":4294967295}
+  mm_classify_kind:u64 = bit.and(mm_classify_type_and_attrs,mm_classify_mask)
+  mm_classify_shift:u64 = const() {"value":32}
+  mm_classify_attr:u64 = int.shr.checked(mm_classify_type_and_attrs,mm_classify_shift)
+  mm_classify_one:u64 = const() {"value":1}
+  mm_classify_attrbit:u64 = bit.and(mm_classify_attr,mm_classify_one)
+  mm_classify_enabled:bool = compare.eq(mm_classify_attrbit,mm_classify_one)
+  mm_classify_usable:bool = compare.eq(mm_classify_kind,mm_classify_one)
+  mm_classify_before:bool = compare.le(mm_classify_entry_base,mm_classify_base)
+  mm_classify_after:bool = compare.ge(mm_classify_entry_end,mm_classify_end)
+  mm_classify_whole:bool = bool.and(mm_classify_before,mm_classify_after)
+  mm_classify_green:bool = bool.and(mm_classify_enabled,mm_classify_usable)
+  mm_classify_cover_now:bool = bool.and(mm_classify_green,mm_classify_whole)
+  mm_classify_next_covered:bool = bool.or(mm_classify_covered,mm_classify_cover_now)
+  mm_classify_not_usable:bool = bool.not(mm_classify_usable)
+  mm_classify_dangerous:bool = bool.and(mm_classify_enabled,mm_classify_not_usable)
+  mm_classify_starts_before_end:bool = compare.lt(mm_classify_entry_base,mm_classify_end)
+  mm_classify_ends_after_start:bool = compare.gt(mm_classify_entry_end,mm_classify_base)
+  mm_classify_overlap:bool = bool.and(mm_classify_starts_before_end,mm_classify_ends_after_start)
+  mm_classify_collision:bool = bool.and(mm_classify_dangerous,mm_classify_overlap)
+  mm_classify_next_blocked:bool = bool.or(mm_classify_blocked,mm_classify_collision)
+  mm_classify_next_index:u64 = int.add.wrap(mm_classify_index,mm_classify_one)
+  jump scan(mm_classify_wire,mm_classify_result,mm_classify_base,mm_classify_end,mm_classify_pages,mm_classify_entries,mm_classify_next_index,mm_classify_next_covered,mm_classify_next_blocked)
+block complete(mm_complete_result:mutbuf,mm_complete_pages:u64,mm_complete_covered:bool,mm_complete_blocked:bool)
+  mm_complete_not_blocked:bool = bool.not(mm_complete_blocked)
+  mm_complete_safe:bool = bool.and(mm_complete_covered,mm_complete_not_blocked)
+  branch mm_complete_safe success(mm_complete_result,mm_complete_pages) unavailable(mm_complete_result)
+block success(mm_success_result:mutbuf,mm_success_pages:u64)
+  mm_success_code:u32 = const() {"value":0}
+  mm_success_status:u32 = call(mm_success_result,mm_success_code,mm_success_pages) {"function":"write_reply"}
+  ret(mm_success_status)
+block unavailable(mm_unavailable_result:mutbuf)
+  mm_unavailable_code:u32 = const() {"value":5}
+  mm_unavailable_zero:u64 = const() {"value":0}
+  mm_unavailable_status:u32 = call(mm_unavailable_result,mm_unavailable_code,mm_unavailable_zero) {"function":"write_reply"}
+  ret(mm_unavailable_status)
+end
+fn read_u64(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
+  mm_start_first:u64 = const() {"value":0}
+  mm_start_initial:u64 = const() {"value":0}
+  jump loop(bytes,offset,mm_start_first,mm_start_initial)
+block loop(mm_loop_input:readbuf,mm_loop_base_offset:usize,mm_loop_index:u64,mm_loop_accumulator:u64)
+  mm_loop_width:u64 = const() {"value":8}
+  mm_loop_more:bool = compare.lt(mm_loop_index,mm_loop_width)
+  branch mm_loop_more read_byte(mm_loop_input,mm_loop_base_offset,mm_loop_index,mm_loop_accumulator) done(mm_loop_accumulator)
+block read_byte(mm_read_byte_byte_input:readbuf,mm_read_byte_word_offset:usize,mm_read_byte_byte_index:u64,mm_read_byte_current:u64)
+  mm_read_byte_index_usize:usize = int.cast(mm_read_byte_byte_index) {"mode":"wrap"}
+  mm_read_byte_address:usize = int.add.wrap(mm_read_byte_word_offset,mm_read_byte_index_usize)
+  mm_read_byte_octet:u8 = buffer.load(mm_read_byte_byte_input,mm_read_byte_address)
+  mm_read_byte_widened:u64 = int.cast(mm_read_byte_octet) {"mode":"wrap"}
+  mm_read_byte_eight:u64 = const() {"value":8}
+  mm_read_byte_shift:u64 = int.mul.wrap(mm_read_byte_byte_index,mm_read_byte_eight)
+  mm_read_byte_shifted:u64 = int.shl.checked(mm_read_byte_widened,mm_read_byte_shift)
+  mm_read_byte_combined:u64 = bit.or(mm_read_byte_current,mm_read_byte_shifted)
+  mm_read_byte_one:u64 = const() {"value":1}
+  mm_read_byte_next:u64 = int.add.wrap(mm_read_byte_byte_index,mm_read_byte_one)
+  jump loop(mm_read_byte_byte_input,mm_read_byte_word_offset,mm_read_byte_next,mm_read_byte_combined)
+block done(mm_done_value:u64)
+  ret(mm_done_value)
+end
+fn write_u64(bytes:mutbuf,offset:usize,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(bytes:mutbuf,offset:usize,value:u64)
+  mm_start_first:u64 = const() {"value":0}
+  jump loop(bytes,offset,value,mm_start_first)
+block loop(mm_loop_output:mutbuf,mm_loop_base_offset:usize,mm_loop_word:u64,mm_loop_index:u64)
+  mm_loop_width:u64 = const() {"value":8}
+  mm_loop_more:bool = compare.lt(mm_loop_index,mm_loop_width)
+  branch mm_loop_more write_byte(mm_loop_output,mm_loop_base_offset,mm_loop_word,mm_loop_index) done()
+block write_byte(mm_write_byte_byte_output:mutbuf,mm_write_byte_word_offset:usize,mm_write_byte_source:u64,mm_write_byte_byte_index:u64)
+  mm_write_byte_index_usize:usize = int.cast(mm_write_byte_byte_index) {"mode":"wrap"}
+  mm_write_byte_address:usize = int.add.wrap(mm_write_byte_word_offset,mm_write_byte_index_usize)
+  mm_write_byte_eight:u64 = const() {"value":8}
+  mm_write_byte_shift:u64 = int.mul.wrap(mm_write_byte_byte_index,mm_write_byte_eight)
+  mm_write_byte_shifted:u64 = int.shr.checked(mm_write_byte_source,mm_write_byte_shift)
+  mm_write_byte_octet:u8 = int.cast(mm_write_byte_shifted) {"mode":"wrap"}
+  _ = buffer.store(mm_write_byte_byte_output,mm_write_byte_address,mm_write_byte_octet)
+  mm_write_byte_one:u64 = const() {"value":1}
+  mm_write_byte_next:u64 = int.add.wrap(mm_write_byte_byte_index,mm_write_byte_one)
+  jump loop(mm_write_byte_byte_output,mm_write_byte_word_offset,mm_write_byte_source,mm_write_byte_next)
+block done()
+  mm_done_success:u32 = const() {"value":0}
+  ret(mm_done_success)
+end
+fn write_reply(reply:mutbuf,status:u32,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(reply:mutbuf,status:u32,value:u64)
+  mm_start_status_offset:usize = const() {"value":0}
+  mm_start_value_offset:usize = const() {"value":8}
+  mm_start_wide_status:u64 = int.cast(status) {"mode":"wrap"}
+  mm_start_status_written:u32 = call(reply,mm_start_status_offset,mm_start_wide_status) {"function":"write_u64"}
+  mm_start_value_written:u32 = call(reply,mm_start_value_offset,value) {"function":"write_u64"}
+  ret(status)
+end

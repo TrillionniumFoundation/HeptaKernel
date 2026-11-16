@@ -52,9 +52,10 @@ jobs:
           PYTHONPATH=.toolchain/hepta python3 - <<'PY'
           from pathlib import Path
           from hepta.hia_agent_assembly import assemble_program
-          checked = assemble_program(Path("src/kernel.hepta").read_bytes())
-          print("Independent HIA Core syntax/semantics verification: PASS")
-          print("Verified functions:", len(checked.as_dict()["functions"]))
+          for source in ("src/kernel.hepta", "src/e820_region.hepta", "tests/negative/e820_allow_all.hepta"):
+              checked = assemble_program(Path(source).read_bytes())
+              print("Independent HIA Core syntax/semantics verification: PASS", source)
+              print("Verified functions:", len(checked.as_dict()["functions"]))
           PY
 
       - name: Build the HIA object and boot image
@@ -71,6 +72,11 @@ jobs:
         shell: bash
         run: |
           make test-guard-pages HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
+      - name: Verify native HIA E820 region admission and unsafe negative control
+        shell: bash
+        run: |
+          make test-memory-map HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
       - name: Boot two positive machines and two negative kernels
         shell: bash
@@ -112,6 +118,9 @@ jobs:
             .toolchain/compiler/B3.receipt.json
             .toolchain/compiler/native-compiler.receipt.json
             build/native-report.json
+            build/e820-region-report.json
+            build/e820-region.o
+            build/e820-allow-all.o
             build/guard-pages-report.json
             build/boot-report.json
             build/build-report.json

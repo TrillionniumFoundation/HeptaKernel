@@ -15,12 +15,16 @@ HIA kernel remain unfinished.
   pinned native HIA compiler. It implements initialization, physically aligned
   frame allocation, release, free-count queries, reserved-prefix protection and
   explicit failure results. There is no C allocator or hosted fallback.
+- `src/e820_region.hepta`: an independently compiled native HIA validator for
+  a proposed page arena against a supplied, canonicalized E820 map. It checks
+  each entry, rejects overlapping enabled non-RAM regions, and never modifies
+  the map. This is **not firmware discovery or boot integration**.
 - `arch/x86_64/boot.S`: an explicitly **non-HIA** Multiboot/long-mode bootstrap and
   independent boot-test observer. It provides page tables, a stack, exception
   failure handlers and serial output while HIA lacks those target primitives.
 - Independent tests: set-model traces, exact bounds and read-only guard pages,
-  two QEMU machine configurations, actual physical-page readback, and broken-HIA
-  negative controls.
+  two QEMU machine configurations, actual physical-page readback, 3,033 native
+  E820 map validation calls, and broken-HIA negative controls.
 - A fixed upstream source/ABI ledger and a full-acceptance command that continues
   to report `HOLD` while any required implementation or evidence is missing.
 
@@ -55,6 +59,7 @@ driver stack. The assembly bridge remains part of the unfinished HIA work.
 
 - [Initial audit and full target](docs/initial-audit.md)
 - [Allocator ABI and invariants](docs/allocator.md)
+- [HIA E820-region admission contract](docs/e820-region.md)
 - [Build and test instructions](docs/build.md)
 - [Full compatibility ledger](compatibility/coverage.json)
 - [Ordered implementation backlog](docs/next-steps.md)
