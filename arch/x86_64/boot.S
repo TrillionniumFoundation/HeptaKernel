@@ -949,9 +949,24 @@ arena_cases:
     .quad 0x400000, 512, 0
     .quad 5242880, 512, 1
     .quad 6, 0
+    /* Native HIA first-fit: align 4 pages, two-page span after 3 reserved. */
+    .quad 2, 4, 2, 2
+    .quad 0x400000, 512, 3
+    .quad 0x600000, 512, 1
+    .quad 0, 0x404000
+    /* First region is exhausted: second region at aligned absolute page. */
+    .quad 2, 8, 3, 2
+    .quad 0x400000, 2, 2
+    .quad 0x600000, 17, 1
+    .quad 0, 0x608000
+    /* Both regions lack enough pages: never return a partial candidate. */
+    .quad 2, 2, 4, 2
+    .quad 0x400000, 2, 1
+    .quad 0x600000, 2, 1
+    .quad 5, 0
 arena_cases_end:
-.if ((arena_cases_end - arena_cases) != 576)
-.error "arena fixture length must be exactly 6 records"
+.if ((arena_cases_end - arena_cases) != 864)
+.error "arena fixture length must be exactly 9 records"
 .endif
 
 
