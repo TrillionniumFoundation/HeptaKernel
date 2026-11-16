@@ -18,15 +18,20 @@ HIA kernel remain unfinished.
 - `src/e820_region.hepta`: an independently compiled native HIA validator for
   a proposed page arena against a supplied, canonicalized E820 map. It checks
   each entry, rejects overlapping enabled non-RAM regions, and never modifies
-  the map. This is **not firmware discovery or boot integration**.
+  the map. The QEMU boot bridge invokes it against actual loader-supplied E820
+  records, but firmware provenance remains unverified.
+- `src/arena_router.hepta`: a separately compiled native HIA component that
+  verifies non-overlapping physical arenas and routes exact page ranges to
+  their non-reserved region. Its native object runs on QEMU after E820
+  admission, but persistent allocation ownership remains unimplemented.
 - `arch/x86_64/boot.S`: an explicitly **non-HIA** Multiboot/long-mode bootstrap and
   independent boot-test observer. It parses bounded actual loader memory-map
   entries, calls the native HIA E820 checker before physical-page probes,
   and provides page tables, a stack, exception failure handlers and serial
   output while HIA lacks those target primitives.
 - Independent tests: set-model traces, exact bounds and read-only guard pages,
-  two QEMU machine configurations, actual physical-page readback, 3,033 native
-  E820 map validation calls, and broken-HIA negative controls.
+  two QEMU machine configurations, actual physical-page readback, native
+  E820 admission, bounded multi-arena routing, and broken-HIA negative controls.
 - A fixed upstream source/ABI ledger and a full-acceptance command that continues
   to report `HOLD` while any required implementation or evidence is missing.
 
@@ -48,7 +53,9 @@ The source-bootstrap recipe and CI are in [docs/build.md](docs/build.md).
 ## Evidence and boundaries
 
 The initial native campaign passed 9,895 allocator ABI calls, including 32 fixed
-random traces, plus a separate guard-page campaign. Two QEMU configurations
+random traces, plus a separate guard-page campaign. Later commits add native
+E820 and multi-arena routing checks; inspect each exact-commit CI receipt for
+current counts, QEMU negative controls and object identities. Two QEMU configurations
 passed the boot fixture; an always-success stub and an out-of-bounds HIA program
 both entered the explicit guest failure path. Source/object/image hashes and
 the exact observed commands are retained in [validation/](validation/).
@@ -62,6 +69,7 @@ driver stack. The assembly bridge remains part of the unfinished HIA work.
 - [Initial audit and full target](docs/initial-audit.md)
 - [Allocator ABI and invariants](docs/allocator.md)
 - [HIA E820-region admission contract](docs/e820-region.md)
+- [Native HIA multi-arena router contract](docs/arena-router.md)
 - [Build and test instructions](docs/build.md)
 - [Full compatibility ledger](compatibility/coverage.json)
 - [Ordered implementation backlog](docs/next-steps.md)
