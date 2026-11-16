@@ -32,6 +32,21 @@ build/boot.o: arch/x86_64/boot.S build/boot-cases.bin
 build/e820-boot.o: build/e820-region.o
 	objcopy --redefine-sym f0=e820_f0 "$<" "$@"
 
+# Fault-injected boot observer is ONLY for negative-control images.
+build/boot-reserved.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_INJECT_RESERVED=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/e820-unsafe-boot.o: build/e820-allow-all.o
+	objcopy --redefine-sym f0=e820_f0 "$<" "$@"
+
+build/e820-reserved-multiboot.elf: build/boot-reserved.o build/kernel.o build/e820-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/e820-reserved.elf build/boot-reserved.o build/kernel.o build/e820-boot.o
+	objcopy -O elf32-i386 build/e820-reserved.elf "$@"
+
+build/e820-bypass-multiboot.elf: build/boot-reserved.o build/kernel.o build/e820-unsafe-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/e820-bypass.elf build/boot-reserved.o build/kernel.o build/e820-unsafe-boot.o
+	objcopy -O elf32-i386 build/e820-bypass.elf "$@"
+
 build/kernel.elf: build/boot.o build/kernel.o build/e820-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot.o build/kernel.o build/e820-boot.o
 
@@ -50,14 +65,14 @@ build/%-multiboot.elf: build/%.o build/boot.o build/e820-boot.o arch/x86_64/link
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/$*.elf build/boot.o build/$*.o build/e820-boot.o
 	objcopy -O elf32-i386 build/$*.elf "$@"
 
-test-boot: build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf
+test-boot: build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf
 	$(PYTHON) tests/test_boot.py --qemu "$(QEMU)"
 
 test-guard-pages: build/kernel-host.so
 	timeout 30 $(PYTHON) tests/test_guard_pages.py build/kernel-host.so
 
-# The independent E820 admission object has its own f0 ABI and is intentionally
-# not yet linked into the QEMU boot bridge.
+# The E820 source is independently compiled and its exact machine code
+# is linked into the QEMU kernel under the distinct e820_f0 symbol.
 build/e820-region.o: src/e820_region.hepta | build check-compiler
 	@set -eu; tmp=$$(mktemp build/.e820-region.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
 	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
@@ -78,7 +93,7 @@ test-memory-map: build/e820-region.so build/e820-allow-all.so
 	timeout 60 $(PYTHON) tests/test_e820_region.py build/e820-region.so
 	$(PYTHON) tests/test_e820_region.py build/e820-allow-all.so --expect-unsafe
 
-record-build: build/kernel-host.so build/kernel-multiboot.elf
+record-build: build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf
 	$(PYTHON) tools/record_build.py --compiler "$(HEPTA_COMPILER)"
 
 test-closure:

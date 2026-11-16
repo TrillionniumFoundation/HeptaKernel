@@ -15,25 +15,36 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def run(qemu, image, machine="pc", memory="32", positive=True):
+def run(qemu, image, machine="pc", memory="32", mode="positive"):
     cmd = [qemu, "-accel", "tcg", "-machine", machine, "-cpu", "qemu64", "-m", memory,
            "-nodefaults", "-display", "none", "-serial", "stdio", "-monitor", "none",
            "-no-reboot", "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04",
            "-kernel", str(image)]
     record = {"image": str(image), "image_sha256": digest(image), "machine": machine,
-              "memory_mib": int(memory), "positive": positive, "command": cmd}
+              "memory_mib": int(memory), "mode": mode, "positive": mode == "positive", "command": cmd}
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
         record.update(returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
         map_verified = p.stdout.count(MAP_MARKER) == 1
         record["native_hia_e820_gate_observed"] = map_verified
-        if positive:
+        if mode == "positive":
+            accepted = (map_verified and p.returncode == 33 and
+                        p.stdout.count(PASS_MARKER) == 1 and FAIL_MARKER not in p.stdout)
+        elif mode == "allocator_negative":
+            # Wrong allocator must fail after the genuine HIA map gate.
+            accepted = (map_verified and p.returncode == 35 and
+                        FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
+        elif mode == "reserved_rejected":
+            # Real HIA E820 must reject a type-2 record before map marker.
+            accepted = (not map_verified and p.returncode == 35 and
+                        FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
+        elif mode == "unsafe_map_bypass":
+            # Deliberately dishonest HIA E820 object falsely accepts the
+            # identical injected reservation. This is a negative control.
             accepted = (map_verified and p.returncode == 33 and
                         p.stdout.count(PASS_MARKER) == 1 and FAIL_MARKER not in p.stdout)
         else:
-            # Wrong HIA kernel must fail *after* the actual E820 map gate.
-            accepted = (map_verified and p.returncode == 35 and
-                        FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
+            raise ValueError("unknown boot mode " + mode)
         record["status"] = "PASS" if accepted else "FAIL"
     except subprocess.TimeoutExpired as e:
         record.update(status="FAIL", error="QEMU timed out", stdout=str(e.stdout), stderr=str(e.stderr))
@@ -57,7 +68,13 @@ def main():
         for machine, memory in (("pc", "32"), ("q35", "64")):
             report["runs"].append(run(args.qemu, Path("build/kernel-multiboot.elf"), machine, memory))
         for name in ("success_stub", "bounds_trap"):
-            report["runs"].append(run(args.qemu, Path("build/" + name + "-multiboot.elf"), positive=False))
+            report["runs"].append(run(args.qemu, Path("build/" + name + "-multiboot.elf"),
+                                      mode="allocator_negative"))
+        for machine, memory in (("pc", "32"), ("q35", "64")):
+            report["runs"].append(run(args.qemu, Path("build/e820-reserved-multiboot.elf"),
+                                      machine, memory, mode="reserved_rejected"))
+        report["runs"].append(run(args.qemu, Path("build/e820-bypass-multiboot.elf"),
+                                  mode="unsafe_map_bypass"))
         report["status"] = "PASS" if all(r["status"] == "PASS" for r in report["runs"]) else "FAIL"
     except Exception as exc:
         report.update(status="FAIL", error=repr(exc))
