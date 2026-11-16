@@ -4,7 +4,7 @@ QEMU ?= qemu-system-x86_64
 PYTHON ?= python3
 COMPILER_SHA256 := 87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54
 
-.PHONY: all check-compiler test test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-closure test-linux-inventory record-build full-acceptance clean
+.PHONY: all check-compiler test test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-closure test-linux-inventory record-build full-acceptance clean
 
 all: build/kernel-multiboot.elf
 
@@ -157,7 +157,20 @@ test-owner-binding: build/owner-binding.so build/kernel-host.so build/e820-allow
 	timeout 90 $(PYTHON) tests/test_owner_binding.py build/owner-binding.so build/kernel-host.so
 	$(PYTHON) tests/test_owner_binding.py build/e820-allow-all.so build/kernel-host.so --expect-unsafe
 
-record-build: build/owner-binding.so build/owner-boot.o build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/arena-router.so build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
+# An independent native HIA suffix-reservation precondition; no assembly stub.
+build/reservation-gate.o: src/reservation_gate.hepta | build check-compiler
+	@set -eu; tmp=$(mktemp build/.reservation.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
+	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+
+build/reservation-gate.so: build/reservation-gate.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+test-reservations: build/reservation-gate.so build/e820-allow-all.so
+	timeout 90 $(PYTHON) tests/test_reservation_gate.py build/reservation-gate.so
+	$(PYTHON) tests/test_reservation_gate.py build/e820-allow-all.so --expect-unsafe
+
+record-build: build/reservation-gate.so build/owner-binding.so build/owner-boot.o build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/arena-router.so build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
 	$(PYTHON) tools/record_build.py --compiler "$(HEPTA_COMPILER)"
 
 test-closure:
@@ -166,7 +179,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-boot test-closure test-linux-inventory record-build
+test: test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-boot test-closure test-linux-inventory record-build
 
 full-acceptance:
 	$(PYTHON) tools/check_closure.py
