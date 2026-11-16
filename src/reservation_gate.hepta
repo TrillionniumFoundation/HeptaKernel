@@ -51,14 +51,14 @@ block geometry(rg_geo_wire:readbuf,rg_geo_reply:mutbuf,rg_geo_base:u64,rg_geo_pa
   rg_aligned:bool = compare.eq(rg_mod,rg_zero)
   rg_inside:bool = compare.lt(rg_geo_base,rg_limit)
   rg_remaining:u64 = int.sub.wrap(rg_limit,rg_geo_base)
-  rg_bytes:u64 = int.mul.wrap(rg_geo_pages,rg_page)
-  rg_end_ok:bool = compare.le(rg_bytes,rg_remaining)
+  rg_geometry_extent:u64 = int.mul.wrap(rg_geo_pages,rg_page)
+  rg_end_ok:bool = compare.le(rg_geometry_extent,rg_remaining)
   rg_a:bool = bool.and(rg_positive,rg_count_ok)
   rg_b:bool = bool.and(rg_prefix_ok,rg_aligned)
   rg_c:bool = bool.and(rg_inside,rg_end_ok)
   rg_d:bool = bool.and(rg_a,rg_b)
   rg_good:bool = bool.and(rg_d,rg_c)
-  branch rg_good setup(rg_geo_wire,rg_geo_reply,rg_geo_base,rg_geo_pages,rg_geo_reserved,rg_geo_count,rg_bytes) invalid(rg_geo_reply)
+  branch rg_good setup(rg_geo_wire,rg_geo_reply,rg_geo_base,rg_geo_pages,rg_geo_reserved,rg_geo_count,rg_geometry_extent) invalid(rg_geo_reply)
 block invalid(rg_invalid_reply:mutbuf)
   rg_invalid_status:u32 = const() {"value":6}
   rg_invalid_zero:u64 = const() {"value":0}
