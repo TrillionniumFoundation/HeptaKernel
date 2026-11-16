@@ -161,14 +161,16 @@ a complete bitmap/popcount validation on each call.
 make test-memory-map HEPTA_COMPILER="$PWD/.toolchain/compiler/native-compiler"
 ```
 
-The freestanding HIA object `build/e820-region.o` accepts a canonicalized
-E820-style firmware map supplied by a trusted caller, evaluates whether one
-proposed arena is wholly contained in enabled type-1 RAM, and refuses overlap
-with any enabled non-RAM region. It does **not** read a real firmware handoff
-and is **not yet linked into the QEMU boot**. The native test makes 3,033
-checks against an independently implemented model, binds the shared library
-`.text` to the HIA object, checks that buffers are not corrupted, and executes
-an intentionally unsafe always-allow HIA negative control. The pinned Core
+The freestanding HIA object `build/e820-region.o` checks complete
+enabled type-1 RAM coverage, including unordered gapless unions, and refuses
+any enabled non-RAM overlap. The native test makes 3,683 checks against
+an independently implemented sorted-interval oracle, binds the host
+`.text` to the HIA object, checks that buffers are not corrupted, and
+rejects an intentionally unsafe always-allow HIA negative control.
+In addition, a symbol-only rename produces `build/e820-boot.o` for
+linking this same native HIA machine code into the QEMU guest. The explicit
+GNU assembly bridge converts actual Multiboot-v1 memory-map entries, and the
+HIA check must authorize the fixed fixture arena before page probes. The pinned Core
 verifier checks both HIA sources independently. The scope and limitations are
 in [e820-region.md](e820-region.md).
 
@@ -178,9 +180,13 @@ in [e820-region.md](e820-region.md).
 make test-boot HEPTA_COMPILER="$PWD/.toolchain/compiler/native-compiler"
 ```
 
-The guest bridge validates the Multiboot handoff, establishes its stack and
-supervisor page tables, enters long mode, installs exception handlers, and
-calls the separately compiled HIA object. It checks the allocator's replies,
+The guest bridge validates the Multiboot handoff, imports every bounded
+20/24-byte loader memory-map row, establishes its stack and supervisor page
+tables, enters long mode, installs exception handlers, and calls the
+independently compiled native HIA E820 checker **before** the actual HIA
+allocator. The map must authorize the 4–8 MiB fixture arena; no unsupported
+or over-capacity map may be truncated to manufacture a success.
+Both positive and negative QEMU runs require the post-check E820 marker. It checks the allocator's replies,
 metadata and guarded memory, and touches the allocated physical frames in the
 guest. `tests/boot-cases.json` is an explicit external table of expected results;
 it is not consumed by the HIA allocator as an oracle.
