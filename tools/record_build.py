@@ -135,6 +135,8 @@ def main():
         reservation_text = Elf("build/reservation-gate.o").section_bytes(".text")
         if Elf("build/reservation-gate.so").section_bytes(".text") != reservation_text:
             raise ValueError("HIA reservation gate loaded machine code differs")
+        if Elf("build/reservation-boot.o").section_bytes(".text") != reservation_text:
+            raise ValueError("HIA reservation symbol rename changed native machine code")
         e820_source = Path("src/e820_region.hepta").read_bytes()
         e820_object = Path("build/e820-region.o").read_bytes()
         rebuilt_e820 = subprocess.run([compiler], input=e820_source, capture_output=True,
@@ -173,6 +175,12 @@ def main():
         if (image64.text_at(e820_entry, len(e820_code)) != e820_code or
                 image32.text_at(e820_entry, len(e820_code)) != e820_code):
             raise ValueError("native HIA E820 code not preserved in boot images")
+        reservation_entry = image64.symbol("reservation_f0")
+        if image32.symbol("reservation_f0") != reservation_entry:
+            raise ValueError("HIA reservation boot entry mismatch")
+        if (image64.text_at(reservation_entry, len(reservation_text)) != reservation_text
+                or image32.text_at(reservation_entry, len(reservation_text)) != reservation_text):
+            raise ValueError("linked boot lacks exact native HIA reservation instructions")
         # Test-only reserved-memory images must carry byte-exact HIA.
         liar_source = Path("tests/negative/e820_allow_all.hepta").read_bytes()
         liar_object = Path("build/e820-allow-all.o").read_bytes()
@@ -185,22 +193,30 @@ def main():
             raise ValueError("dishonest E820 symbol rename changed code")
         if Elf("build/arena-unsafe-boot.o").section_bytes(".text") != liar_code:
             raise ValueError("dishonest HIA arena router symbol rename changed code")
+        if Elf("build/reservation-unsafe-boot.o").section_bytes(".text") != liar_code:
+            raise ValueError("dishonest native HIA reservation symbol rename changed code")
         boot_code = Elf("build/boot.o").section_bytes(".text.boot")
         reserved_code = Elf("build/boot-reserved.o").section_bytes(".text.boot")
         persistent_code = Elf("build/boot-persistent.o").section_bytes(".text.boot")
         alias_code = Elf("build/boot-owner-alias.o").section_bytes(".text.boot")
-        if len({sha(boot_code), sha(reserved_code), sha(persistent_code), sha(alias_code)}) != 4:
-            raise ValueError("normal, reserved and nonvolatile boot transports must be distinct")
-        for stem, expected_e820, expected_arena in (("e820-reserved", e820_code, arena_code),
-                                                     ("e820-bypass", liar_code, arena_code),
-                                                     ("e820-persistent", e820_code, arena_code),
-                                                     ("e820-persistent-bypass", liar_code, arena_code),
-                                                     ("arena-bypass", e820_code, liar_code),
-                                                     ("owner-alias", e820_code, arena_code)):
+        protected_code = Elf("build/boot-reservation-conflict.o").section_bytes(".text.boot")
+        if len({sha(boot_code), sha(reserved_code), sha(persistent_code),
+                sha(alias_code), sha(protected_code)}) != 5:
+            raise ValueError("normal, reserved, persistent, alias and protected boot transports must differ")
+        for stem, expected_e820, expected_arena, expected_reservation in (
+                ("e820-reserved", e820_code, arena_code, reservation_text),
+                ("e820-bypass", liar_code, arena_code, reservation_text),
+                ("e820-persistent", e820_code, arena_code, reservation_text),
+                ("e820-persistent-bypass", liar_code, arena_code, reservation_text),
+                ("arena-bypass", e820_code, liar_code, reservation_text),
+                ("owner-alias", e820_code, arena_code, reservation_text),
+                ("reservation-conflict", e820_code, arena_code, reservation_text),
+                ("reservation-bypass", e820_code, arena_code, liar_code)):
             linked64 = Elf("build/" + stem + ".elf")
             packed32 = Elf("build/" + stem + "-multiboot.elf")
             for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820),
-                                          ("arena_f0", expected_arena), ("owner_f0", owner_code)):
+                                          ("arena_f0", expected_arena), ("owner_f0", owner_code),
+                                          ("reservation_f0", expected_reservation)):
                 symbol_address = linked64.symbol(symbol)
                 if packed32.symbol(symbol) != symbol_address:
                     raise ValueError(stem + " symbol differs after Multiboot wrapping")
@@ -243,6 +259,9 @@ def main():
                       reservation_text_sha256=sha(reservation_text),
                       reservation_exact_recompilation=True,
                       reservation_loaded_text_matches=True,
+                       reservation_boot_entry=reservation_entry,
+                       reservation_boot_code_matches=True,
+                       reservation_negative_control_rejected_by_tests=True,
                       e820_source_sha256=sha(e820_source),
                       e820_object_sha256=sha(e820_object),
                       e820_text_sha256=sha(e820_code),

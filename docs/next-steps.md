@@ -31,9 +31,11 @@ dependency order, preserving the exact baseline and every unmet obligation in
    then implement concurrent linearizable ownership and synchronization.
    Neither query nor a query-then-claim fixture establishes SMP safety.
    A separate native HIA reservation-suffix gate checks caller-supplied
-   protected byte ranges against the page-frame allocation suffix; it has
-   independent host-model tests, but is not yet wired to authenticated
-   firmware/boot reservations or to the real QEMU allocation path.
+   protected byte ranges. It now runs on the actual QEMU physical-allocation
+   path after E820 against image/BSS, Multiboot info and mmap intervals,
+   with native byte-identity checks and a conflict/bypass fault-injection
+   control. This is still not complete authenticated firmware/UEFI
+   reservation discovery or concurrent ownership.
 4. Implement interrupt controllers, clocks, task/context switching, user-mode
    entry, ELF loading and Linux syscall dispatch, with independent success and
    error-path tests before treating any syscall as implemented.

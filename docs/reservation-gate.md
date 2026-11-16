@@ -36,9 +36,22 @@ and an independently compiled deliberately dishonest HIA allow-all
 negative control. `make record-build` also recompiles source with an
 empty PATH and binds its exact ELF .text to the loaded test library.
 
-**HOLD:** This checker receives caller-provided exclusions; it does not
-discover or authenticate the live firmware/Multiboot/UEFI reservation
-set. It is not integrated into the QEMU boot allocation path, whose
-transport still uses GNU assembly. No runtime owner registry, page
-tables, SMP lock, atomics, DMA protections or general Linux VM is implied.
-Full Linux rewrite gates and syscall inventory are unchanged.
+The QEMU Multiboot-v1 observer now invokes the *native HIA gate*
+after E820 admission and before any arena routing or physical frame write.
+For the entire 4–8 MiB test arena, the non-HIA bridge supplies the linked
+kernel image including BSS/stacks, the loader Multiboot info record, and
+the original loader mmap buffer as three runtime protected intervals.
+The observer checks status, free-page count and unchanged guard/unused
+memory. PC and Q35 QEMU tests inject a fourth overlapping protected
+interval. The honest gate must fail before routing or physical writes;
+an independently compiled dishonest native HIA allow-all object accepts
+the identical input, showing that the negative control is sensitive to
+actual gate enforcement. Build evidence binds native instructions into
+both ELF64 and Multiboot-wrapped ELF32 images.
+
+**HOLD:** These ranges come from the non-HIA test bridge and are not an
+authenticated complete firmware/UEFI reservation list. The injected
+collision is a synthetic test claim, not discovered hardware memory.
+No runtime owner registry, full page-table manager, SMP lock, atomics,
+DMA protections or general Linux VM is implied. Full Linux rewrite
+gates and syscall inventory are unchanged.
