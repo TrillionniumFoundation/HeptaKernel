@@ -95,6 +95,16 @@ def main():
         undefined = subprocess.check_output(["nm", "-u", "build/kernel.o"], text=True).strip()
         if undefined:
             raise ValueError("HIA object contains external dependencies: " + undefined)
+        arena_source = Path("src/arena_router.hepta").read_bytes()
+        arena_object = Path("build/arena-router.o").read_bytes()
+        rebuilt_arena = subprocess.run([compiler], input=arena_source, capture_output=True,
+                                       timeout=20, env={"PATH": ""})
+        if rebuilt_arena.returncode or rebuilt_arena.stderr or rebuilt_arena.stdout != arena_object:
+            raise ValueError("native HIA multi-arena router bytes not reproducible")
+        if subprocess.check_output(["nm", "-u", "build/arena-router.o"], text=True).strip():
+            raise ValueError("HIA multi-arena router has undefined symbols")
+        if Elf("build/arena-router.so").section_bytes(".text") != Elf("build/arena-router.o").section_bytes(".text"):
+            raise ValueError("native HIA multi-arena router loaded image differs from source object")
         e820_source = Path("src/e820_region.hepta").read_bytes()
         e820_object = Path("build/e820-region.o").read_bytes()
         rebuilt_e820 = subprocess.run([compiler], input=e820_source, capture_output=True,
@@ -166,6 +176,10 @@ def main():
                       undefined_symbols=[], linked_hia_bytes_match=True,
                       multiboot_container_preserves_hia_bytes=True,
                       hia_entry_address=entry,
+                      arena_router_source_sha256=sha(arena_source),
+                      arena_router_object_sha256=sha(arena_object),
+                      arena_router_exact_recompilation=True,
+                      arena_router_loaded_text_matches=True,
                       e820_source_sha256=sha(e820_source),
                       e820_object_sha256=sha(e820_object),
                       e820_text_sha256=sha(e820_code),
