@@ -36,7 +36,10 @@ def main():
     compiler = Path(binary).resolve()
     source = SOURCE.read_text()
     assert source.count(LOAD) == 1
-    assert "fn owner_binding(request:readbuf,reply:mutbuf,state:readbuf)" in source
+    assert "fn owner_binding(request:readbuf,reply:mutbuf,state:mutbuf)" in source
+    assert "fn owner_binding_readonly(request:readbuf,reply:mutbuf,state:readbuf)" in source
+    assert "  ob_view:readbuf = borrow.read(state)" in source
+    assert "  _ = loan.end(ob_view)" in source
     assert "fn bitmap_consistent(state:readbuf" in source
     assert "fn read_state_u64(bytes:readbuf" in source
 
@@ -44,7 +47,7 @@ def main():
     state_names = {name for name in names if name == "state"
                    or name == "ob_memory" or name.endswith("_state")}
     assert len(state_names) >= 12, state_names
-    for name in state_names:
+    for name in state_names - {"state"}:
         assert not re.search(r"\b" + re.escape(name) + r":mutbuf\b", source)
 
     # Same injected state write is legal with mutbuf and forbidden with readbuf.
@@ -54,6 +57,14 @@ def main():
     for name in state_names:
         positive = re.sub(r"\b" + re.escape(name) + r":readbuf\b",
                           name + ":mutbuf", positive)
+    # The positive witness uses the mutable public ABI directly; the production
+    # checker instead narrows authority with borrow.read and closes the loan.
+    wrapped = ('  ob_view:readbuf = borrow.read(state)\n'
+               '  ob_checked:u32 = call(request,reply,ob_view) {"function":"owner_binding_readonly"}\n'
+               '  _ = loan.end(ob_view)\n')
+    direct = ('  ob_checked:u32 = call(request,reply,state) {"function":"owner_binding_readonly"}\n')
+    assert wrapped in positive
+    positive = positive.replace(wrapped, direct, 1)
     a = positive.index("fn read_state_u64(")
     b = positive.index("end\nfn write_u64(", a)
     positive = positive[:a] + positive[a:b].replace(":readbuf", ":mutbuf") + positive[b:]

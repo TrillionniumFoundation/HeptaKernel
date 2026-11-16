@@ -1,5 +1,12 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn owner_binding(request:readbuf,reply:mutbuf,state:readbuf) -> (u32) effects(read,write,trap) entry(start)
+fn owner_binding(request:readbuf,reply:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,state:mutbuf)
+  ob_view:readbuf = borrow.read(state)
+  ob_checked:u32 = call(request,reply,ob_view) {"function":"owner_binding_readonly"}
+  _ = loan.end(ob_view)
+  ret(ob_checked)
+end
+fn owner_binding_readonly(request:readbuf,reply:mutbuf,state:readbuf) -> (u32) effects(read,write,trap) entry(start)
 block start(request:readbuf,reply:mutbuf,state:readbuf)
   ob_reply_length:usize = buffer.len(reply)
   ob_min_reply:usize = const() {"value":16}
