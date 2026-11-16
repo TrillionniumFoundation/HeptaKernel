@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent scalar oracle for native HIA x86-64 4KiB PTE permission encoding.
+"""Independent scalar oracle for HIA x86-64 4KiB PTE permission and CPU admission.
 
 This is a policy/encoding unit, not a page-table walker, CR3 writer, or VM.
 """
@@ -16,18 +16,26 @@ PAGE = 4096
 MAX_PHYSICAL = 1 << 52
 MAX64 = (1 << 64) - 1
 NX = 1 << 63
+NXE = 1 << 8
+PGE = 1 << 9
+DEFAULT_CAPS = 52 | NXE | PGE
 
 
 def oracle(raw: bytes, reply_size: int = 16):
     if reply_size < 16:
         return 1, None
-    if len(raw) != 24:
+    if len(raw) != 32:
         return 2, 0
-    virtual, physical, flags = struct.unpack("<3Q", raw)
+    virtual, physical, flags, caps = struct.unpack("<4Q", raw)
+    # CPUID 0x80000008 EAX[7:0] is MAXPHYADDR. Our explicit handoff also
+    # binds CR4.PGE and EFER.NXE enablement, not merely CPUID support.
+    width = caps & 0xff
+    if caps & ~0x3ff or not 32 <= width <= 52:
+        return 6, 0
     upper = virtual >> 48
     sign = bool(virtual & (1 << 47))
     canonical = (upper == 0) if not sign else (upper == 0xffff)
-    if (virtual % PAGE or physical % PAGE or physical >= MAX_PHYSICAL
+    if (virtual % PAGE or physical % PAGE or physical >= (1 << width)
             or not canonical or flags > 31 or not flags & 1):
         return 6, 0
     writable = bool(flags & 2)
@@ -37,6 +45,8 @@ def oracle(raw: bytes, reply_size: int = 16):
     if ((writable and executable) or (user and global_page)
             or (user and sign)):
         return 7, 0
+    if (not executable and not (caps & NXE)) or (global_page and not (caps & PGE)):
+        return 8, 0
     # Independent integer bit assembly, deliberately not using HIA CFG.
     result = physical | 1
     if writable:
@@ -50,8 +60,8 @@ def oracle(raw: bytes, reply_size: int = 16):
     return 0, result
 
 
-def pack(virtual: int, physical: int, flags: int) -> bytes:
-    return struct.pack("<3Q", virtual, physical, flags)
+def pack(virtual: int, physical: int, flags: int, caps: int = DEFAULT_CAPS) -> bytes:
+    return struct.pack("<4Q", virtual, physical, flags, caps)
 
 
 def campaign(library: Path) -> dict:
@@ -96,7 +106,18 @@ def campaign(library: Path) -> dict:
     for va in (low_max + PAGE, 1 << 47, high_min - PAGE, MAX64, 0x8000000000001000):
         for flags in (1, 3, 5, 9, 17, 31):
             check(pack(va, PAGE, flags))
-    for raw in (b"", b"\0" * 23, b"\0" * 25,
+    # CPU width and control-register admission must be checked before a
+    # dynamic HIA shift: a width >= 64 must refuse, never trap.
+    for caps in (0, 1, 31, 32, 36, 52, 53, 63, 64, 255, 256,
+                 32 | NXE, 36 | NXE, 52 | NXE, 52 | PGE,
+                 DEFAULT_CAPS, DEFAULT_CAPS | (1 << 10), MAX64):
+        for va in (0, 0x400000, high_min):
+            for pa in (0, (1 << 32) - PAGE, 1 << 32,
+                       (1 << 36) - PAGE, 1 << 36,
+                       MAX_PHYSICAL - PAGE, MAX_PHYSICAL):
+                for flags in (1, 3, 5, 9, 17, 19, 31):
+                    check(pack(va, pa, flags, caps))
+    for raw in (b"", b"\0" * 23, b"\0" * 24, b"\0" * 31, b"\0" * 33,
                 pack(0x400000, PAGE, 1) + b"\0"):
         check(raw)
     for reply_size in (0, 1, 8, 15, 16, 17, 32):
@@ -110,7 +131,10 @@ def campaign(library: Path) -> dict:
                          MAX_PHYSICAL - PAGE, MAX_PHYSICAL, MAX64,
                          rng.getrandbits(64)])
         flags = rng.randrange(0, 64)
-        check(pack(va, pa, flags))
+        caps = rng.choice([DEFAULT_CAPS, 32 | NXE, 36 | NXE | PGE,
+                           52 | NXE, 52 | PGE, 32, 52, 63, 64,
+                           DEFAULT_CAPS | (1 << 12)])
+        check(pack(va, pa, flags, caps))
     return {"status": "PASS", "cases": count}
 
 
