@@ -1,23 +1,40 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn malicious_e820(request:readbuf,reply:mutbuf,state:mutbuf) -> (u32) effects(write,trap) entry(start)
+fn malicious_e820(request:readbuf,reply:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
 block start(request:readbuf,reply:mutbuf,state:mutbuf)
-  i:usize = const() {"value":0}
-  jump loop(reply,i)
-block loop(buf:mutbuf,index:usize)
-  end:usize = const() {"value":16}
-  more:bool = compare.lt(index,end)
-  branch more store(buf,index) done()
-block store(out:mutbuf,pos:usize)
-  zero:u8 = const() {"value":0}
-  four:u8 = const() {"value":4}
-  value_high_position:usize = const() {"value":9}
-  is_value_high:bool = compare.eq(pos,value_high_position)
-  dishonest_byte:u8 = select(is_value_high,four,zero)
-  _ = buffer.store(out,pos,dishonest_byte)
-  one:usize = const() {"value":1}
-  next:usize = int.add.wrap(pos,one)
-  jump loop(out,next)
+  mc_start_qlen:usize = buffer.len(request)
+  mc_start_rlen:usize = buffer.len(reply)
+  mc_start_minimum:usize = const() {"value":16}
+  mc_start_enough_query:bool = compare.ge(mc_start_qlen,mc_start_minimum)
+  mc_start_enough_reply:bool = compare.ge(mc_start_rlen,mc_start_minimum)
+  mc_start_enough:bool = bool.and(mc_start_enough_query,mc_start_enough_reply)
+  branch mc_start_enough begin_copy(request,reply) too_short()
+block too_short()
+  mc_too_short_bad:u32 = const() {"value":2}
+  ret(mc_too_short_bad)
+block begin_copy(mc_begin_copy_q:readbuf,mc_begin_copy_r:mutbuf)
+  mc_begin_copy_initial:usize = const() {"value":0}
+  jump copy_loop(mc_begin_copy_q,mc_begin_copy_r,mc_begin_copy_initial)
+block copy_loop(mc_copy_loop_q:readbuf,mc_copy_loop_r:mutbuf,mc_copy_loop_index:usize)
+  mc_copy_loop_width:usize = const() {"value":16}
+  mc_copy_loop_more:bool = compare.lt(mc_copy_loop_index,mc_copy_loop_width)
+  branch mc_copy_loop_more choose_byte(mc_copy_loop_q,mc_copy_loop_r,mc_copy_loop_index) done()
+block choose_byte(mc_choose_byte_q:readbuf,mc_choose_byte_r:mutbuf,mc_choose_byte_index:usize)
+  mc_choose_byte_start_value:usize = const() {"value":8}
+  mc_choose_byte_from_query:bool = compare.ge(mc_choose_byte_index,mc_choose_byte_start_value)
+  branch mc_choose_byte_from_query echo_byte(mc_choose_byte_q,mc_choose_byte_r,mc_choose_byte_index) zero_byte(mc_choose_byte_q,mc_choose_byte_r,mc_choose_byte_index)
+block echo_byte(mc_echo_byte_q:readbuf,mc_echo_byte_r:mutbuf,mc_echo_byte_index:usize)
+  mc_echo_byte_byte:u8 = buffer.load(mc_echo_byte_q,mc_echo_byte_index)
+  _ = buffer.store(mc_echo_byte_r,mc_echo_byte_index,mc_echo_byte_byte)
+  jump next_byte(mc_echo_byte_q,mc_echo_byte_r,mc_echo_byte_index)
+block zero_byte(mc_zero_byte_q:readbuf,mc_zero_byte_r:mutbuf,mc_zero_byte_index:usize)
+  mc_zero_byte_zero:u8 = const() {"value":0}
+  _ = buffer.store(mc_zero_byte_r,mc_zero_byte_index,mc_zero_byte_zero)
+  jump next_byte(mc_zero_byte_q,mc_zero_byte_r,mc_zero_byte_index)
+block next_byte(mc_next_byte_q:readbuf,mc_next_byte_r:mutbuf,mc_next_byte_index:usize)
+  mc_next_byte_one:usize = const() {"value":1}
+  mc_next_byte_next:usize = int.add.wrap(mc_next_byte_index,mc_next_byte_one)
+  jump copy_loop(mc_next_byte_q,mc_next_byte_r,mc_next_byte_next)
 block done()
-  success:u32 = const() {"value":0}
-  ret(success)
+  mc_done_ok:u32 = const() {"value":0}
+  ret(mc_done_ok)
 end

@@ -23,6 +23,10 @@ dependency order, preserving the exact baseline and every unmet obligation in
    reservations, multiple zones, aligned runs and ownership. Then add
    a virtual-memory manager, permissions, W^X, page-fault handling and lifecycle
    tests. The current fixed arena must not be mistaken for discovery of RAM.
+   A two-zone QEMU observer now exercises distinct E820-admitted HIA PMM
+   states and physical readbacks, but routing/state binding lives in a
+   non-HIA fixture; replace it with HIA-native dynamic ownership and
+   synchronization rather than claiming allocator closure.
 4. Implement interrupt controllers, clocks, task/context switching, user-mode
    entry, ELF loading and Linux syscall dispatch, with independent success and
    error-path tests before treating any syscall as implemented.

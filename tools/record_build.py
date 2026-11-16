@@ -155,13 +155,15 @@ def main():
         boot_code = Elf("build/boot.o").section_bytes(".text.boot")
         reserved_code = Elf("build/boot-reserved.o").section_bytes(".text.boot")
         persistent_code = Elf("build/boot-persistent.o").section_bytes(".text.boot")
-        if len({sha(boot_code), sha(reserved_code), sha(persistent_code)}) != 3:
+        alias_code = Elf("build/boot-owner-alias.o").section_bytes(".text.boot")
+        if len({sha(boot_code), sha(reserved_code), sha(persistent_code), sha(alias_code)}) != 4:
             raise ValueError("normal, reserved and nonvolatile boot transports must be distinct")
         for stem, expected_e820, expected_arena in (("e820-reserved", e820_code, arena_code),
                                                      ("e820-bypass", liar_code, arena_code),
                                                      ("e820-persistent", e820_code, arena_code),
                                                      ("e820-persistent-bypass", liar_code, arena_code),
-                                                     ("arena-bypass", e820_code, liar_code)):
+                                                     ("arena-bypass", e820_code, liar_code),
+                                                     ("owner-alias", e820_code, arena_code)):
             linked64 = Elf("build/" + stem + ".elf")
             packed32 = Elf("build/" + stem + "-multiboot.elf")
             for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820),

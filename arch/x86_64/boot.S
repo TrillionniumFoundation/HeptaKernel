@@ -533,6 +533,9 @@ cases_done:
     je fail64
     cmpq $0, physical_probes(%rip)
     je fail64
+    /* After the original single-zone oracle, exercise TWO independently
+     * admitted HIA PMM states with physical ownership and alias probes. */
+    call owner_exercise64
     leaq message_pass(%rip), %rsi
     call puts64
     movl $0x10, %eax              /* QEMU exit code 33 */
@@ -563,6 +566,265 @@ debug_exit64:
     cli
     hlt
     jmp 8b
+
+
+/* Test-only multi-zone handoff. The policy and physical readback observer
+ * remain NON-HIA; e820_f0, arena_f0 and f0 are the actual fixed HIA objects.
+ * No state aliases, host syscalls, or external allocator are permitted.
+ */
+owner_exercise64:
+    movabsq $0xa55aa55a5aa55aa5, %rax
+    movq %rax, owner_a_guard_before(%rip)
+    movq %rax, owner_a_guard_after(%rip)
+    movq %rax, owner_b_guard_before(%rip)
+    movq %rax, owner_b_guard_after(%rip)
+    movq %rax, owner_reply_guard_before(%rip)
+    movq %rax, owner_reply_guard_after(%rip)
+    movq %rax, owner_route_guard_before(%rip)
+    movq %rax, owner_route_guard_after(%rip)
+    movq %rax, owner_route_unused(%rip)
+    movq $1, owner_route_request(%rip)
+    movq $2, owner_route_request+24(%rip)
+    leaq owner_descriptors(%rip), %rsi
+    leaq owner_route_request+32(%rip), %rdi
+    movl $6, %ecx
+    rep movsq
+
+    /* Two separate E820 admissions against the retained loader map, not
+     * merely a router success flag. 17 pages at each non-overlapping base. */
+    movq $0x400000, %rdi
+    movq $17, %rsi
+    call owner_admit64
+    movq $0x600000, %rdi
+    movq $17, %rsi
+    call owner_admit64
+
+    /* The genuine HIA router chooses the state pointer via immutable table.
+     * Check exact IDs rather than trusting a generic successful return. */
+    movq $0x402000, %rdi
+    movq $2, %rsi
+    call owner_route64
+    leaq owner_a_state(%rip), %rdx
+    cmpq %rdx, %rax
+    jne fail64
+    movq %rax, owner_choice_a(%rip)
+    movq $0x601000, %rdi
+    movq $2, %rsi
+    call owner_route64
+#ifdef HEPTAKERNEL_TEST_ALIAS_OWNER_STATE
+    /* Independent fault injection: fraudulent alias between two ownership
+     * domains must be rejected before any physical page is touched. */
+    movq owner_choice_a(%rip), %rax
+#endif
+    leaq owner_b_state(%rip), %rdx
+    cmpq %rdx, %rax
+    jne fail64
+    cmpq owner_choice_a(%rip), %rax
+    je fail64
+    movq %rax, owner_choice_b(%rip)
+
+    leaq owner_init_a(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    movq $0, %rdx
+    movq $15, %rcx
+    call owner_call64
+    leaq owner_init_b(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    movq $0, %rdx
+    movq $16, %rcx
+    call owner_call64
+    leaq owner_alloc_two(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    movq $0, %rdx
+    movq $0x402000, %rcx
+    call owner_call64
+    leaq owner_alloc_two(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    movq $0, %rdx
+    movq $0x601000, %rcx
+    call owner_call64
+
+    /* Probe all four real physical pages before either domain releases them.
+     * Distinct full-word sentinels independently detect a physical alias. */
+    movq $0x402000, %rdi
+    movq $0x601000, %rsi
+    movabsq $0x11447788aabbccdd, %rax
+    movq %rax, (%rdi)
+    movabsq $0x22558899bbccddee, %rax
+    movq %rax, PAGE_BYTES(%rdi)
+    movabsq $0x336699aaccddeeff, %rax
+    movq %rax, (%rsi)
+    movabsq $0x4477aabbddff0011, %rax
+    movq %rax, PAGE_BYTES(%rsi)
+    movabsq $0x11447788aabbccdd, %rax
+    cmpq %rax, (%rdi)
+    jne fail64
+    movabsq $0x22558899bbccddee, %rax
+    cmpq %rax, PAGE_BYTES(%rdi)
+    jne fail64
+    movabsq $0x336699aaccddeeff, %rax
+    cmpq %rax, (%rsi)
+    jne fail64
+    movabsq $0x4477aabbddff0011, %rax
+    cmpq %rax, PAGE_BYTES(%rsi)
+    jne fail64
+    movq $0, (%rdi)
+    movq $0, PAGE_BYTES(%rdi)
+    movq $0, (%rsi)
+    movq $0, PAGE_BYTES(%rsi)
+
+    /* Exact cross-zone claims must fail without changing either owner. */
+    leaq owner_claim_b(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    movq $6, %rdx
+    xorq %rcx, %rcx
+    call owner_call64
+    leaq owner_claim_a(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    movq $6, %rdx
+    xorq %rcx, %rcx
+    call owner_call64
+    leaq owner_query_a(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    movq $5, %rdx
+    xorq %rcx, %rcx
+    call owner_call64
+    leaq owner_query_b(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    movq $5, %rdx
+    xorq %rcx, %rcx
+    call owner_call64
+    leaq owner_free_a(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    xorq %rdx, %rdx
+    xorq %rcx, %rcx
+    call owner_call64
+    leaq owner_free_b(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    xorq %rdx, %rdx
+    xorq %rcx, %rcx
+    call owner_call64
+    leaq owner_free_a(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    movq $7, %rdx
+    xorq %rcx, %rcx
+    call owner_call64
+    leaq owner_free_b(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    movq $7, %rdx
+    xorq %rcx, %rcx
+    call owner_call64
+    leaq owner_count(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    xorq %rdx, %rdx
+    movq $15, %rcx
+    call owner_call64
+    leaq owner_count(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    xorq %rdx, %rdx
+    movq $16, %rcx
+    call owner_call64
+    leaq message_owner_pass(%rip), %rsi
+    call puts64
+    ret
+
+/* Input: physical base in rdi, page count in rsi. The existing bounded
+ * firmware-record bytes at e820_request+24 remain unchanged. */
+owner_admit64:
+    movq %rdi, e820_request(%rip)
+    movq %rsi, e820_request+8(%rip)
+    movq $-1, e820_reply(%rip)
+    movq $-1, e820_reply+8(%rip)
+    leaq e820_request(%rip), %rdi
+    movq e820_request+16(%rip), %rsi
+    imulq $24, %rsi, %rsi
+    addq $24, %rsi
+    leaq e820_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq e820_unused(%rip), %r8
+    movl $16, %r9d
+    call e820_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, e820_reply(%rip)
+    jne fail64
+    cmpq $17, e820_reply+8(%rip)
+    jne fail64
+    ret
+
+/* Input: rdi=requested absolute page address, rsi=length in pages.
+ * Return: the state address indexed by the real native HIA router. */
+owner_route64:
+    movq %rdi, owner_route_request+8(%rip)
+    movq %rsi, owner_route_request+16(%rip)
+    movq $-1, owner_route_reply(%rip)
+    movq $-1, owner_route_reply+8(%rip)
+    leaq owner_route_request(%rip), %rdi
+    movl $80, %esi
+    leaq owner_route_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq owner_route_unused(%rip), %r8
+    movl $16, %r9d
+    call arena_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, owner_route_reply(%rip)
+    jne fail64
+    movq owner_route_reply+8(%rip), %rax
+    cmpq $1, %rax
+    jb fail64
+    cmpq $2, %rax
+    ja fail64
+    movabsq $0xa55aa55a5aa55aa5, %rdx
+    cmpq %rdx, owner_route_guard_before(%rip)
+    jne fail64
+    cmpq %rdx, owner_route_guard_after(%rip)
+    jne fail64
+    cmpq %rdx, owner_route_unused(%rip)
+    jne fail64
+    decq %rax
+    leaq owner_state_table(%rip), %rdx
+    movq (%rdx,%rax,8), %rax
+    ret
+
+/* Input: rdi=immutable request, rsi=state chosen by HIA router,
+ * rdx=independent expected status, rcx=expected value. */
+owner_call64:
+    pushq %r12
+    pushq %r13
+    movq %rdx, %r12
+    movq %rcx, %r13
+    movq %rsi, %r8
+    movq $-1, owner_alloc_reply(%rip)
+    movq $-1, owner_alloc_reply+8(%rip)
+    movl $32, %esi
+    leaq owner_alloc_reply(%rip), %rdx
+    movl $16, %ecx
+    movl $STATE_BYTES, %r9d
+    call f0
+    movl %eax, %eax
+    cmpq %r12, %rax
+    jne fail64
+    cmpq %r12, owner_alloc_reply(%rip)
+    jne fail64
+    cmpq %r13, owner_alloc_reply+8(%rip)
+    jne fail64
+    movabsq $0xa55aa55a5aa55aa5, %rax
+    cmpq %rax, owner_a_guard_before(%rip)
+    jne fail64
+    cmpq %rax, owner_a_guard_after(%rip)
+    jne fail64
+    cmpq %rax, owner_b_guard_before(%rip)
+    jne fail64
+    cmpq %rax, owner_b_guard_after(%rip)
+    jne fail64
+    cmpq %rax, owner_reply_guard_before(%rip)
+    jne fail64
+    cmpq %rax, owner_reply_guard_after(%rip)
+    jne fail64
+    popq %r13
+    popq %r12
+    ret
 
 /* COM1 output with bounded transmitter polling. */
 puts64:
@@ -630,6 +892,8 @@ message_map_pass:
     .asciz "HEPTAKERNEL HIA E820 VERIFIED\r\n"
 message_router_pass:
     .asciz "HEPTAKERNEL HIA ARENA ROUTER VERIFIED\r\n"
+message_owner_pass:
+    .asciz "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED\r\n"
 message_pass:
     .asciz "HEPTAKERNEL HIA PMM PASS\r\n"
 message_fail32:
@@ -690,6 +954,26 @@ arena_cases_end:
 .error "arena fixture length must be exactly 6 records"
 .endif
 
+
+/* Two physically disjoint, explicitly E820-admitted regions. Addresses and
+ * expected HIA outcomes are fixed independent observer fixtures. */
+.balign 8
+owner_descriptors:
+    .quad 0x400000, 17, 2
+    .quad 0x600000, 17, 1
+owner_state_table:
+    .quad owner_a_state, owner_b_state
+owner_init_a:    .quad 0, 17, 0x400000, 2
+owner_init_b:    .quad 0, 17, 0x600000, 1
+owner_alloc_two: .quad 4, 2, 1, 0
+owner_claim_a:   .quad 6, 0x402000, 1, 0
+owner_claim_b:   .quad 6, 0x601000, 1, 0
+owner_query_a:   .quad 7, 0x402000, 2, 0
+owner_query_b:   .quad 7, 0x601000, 2, 0
+owner_free_a:    .quad 5, 0x402000, 2, 0
+owner_free_b:    .quad 5, 0x601000, 2, 0
+owner_count:     .quad 3, 0, 0, 0
+
 .section .bss.boot,"aw",@nobits
 .balign 4096
 pml4:             .skip 4096
@@ -715,6 +999,24 @@ arena_guard_before: .skip 8
 arena_reply:       .skip 16
 arena_guard_after: .skip 8
 arena_unused:      .skip 16
+/* Private state per region; the immutable state table binds HIA route IDs. */
+.balign 16
+owner_a_guard_before: .skip 8
+owner_a_state:        .skip STATE_BYTES
+owner_a_guard_after:  .skip 8
+owner_b_guard_before: .skip 8
+owner_b_state:        .skip STATE_BYTES
+owner_b_guard_after:  .skip 8
+owner_reply_guard_before: .skip 8
+owner_alloc_reply:       .skip 16
+owner_reply_guard_after:  .skip 8
+owner_route_guard_before: .skip 8
+owner_route_reply:        .skip 16
+owner_route_guard_after:  .skip 8
+owner_route_unused:       .skip 16
+owner_route_request:      .skip 80
+owner_choice_a:           .skip 8
+owner_choice_b:           .skip 8
 case_cursor:      .skip 8
 case_index:       .skip 8
 physical_probes:  .skip 8
