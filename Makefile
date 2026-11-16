@@ -4,7 +4,7 @@ QEMU ?= qemu-system-x86_64
 PYTHON ?= python3
 COMPILER_SHA256 := 87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54
 
-.PHONY: all check-compiler test test-native test-boot test-guard-pages test-memory-map test-arenas test-closure record-build full-acceptance clean
+.PHONY: all check-compiler test test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-closure record-build full-acceptance clean
 
 all: build/kernel-multiboot.elf
 
@@ -36,13 +36,25 @@ build/e820-boot.o: build/e820-region.o
 build/arena-boot.o: build/arena-router.o
 	objcopy --redefine-sym f0=arena_f0 "$<" "$@"
 
+# Native HIA descriptor/PMM state identity binding; no non-HIA implementation.
+build/owner-binding.o: src/owner_binding.hepta | build check-compiler
+	@set -eu; tmp=$(mktemp build/.owner-binding.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
+	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+
+build/owner-binding.so: build/owner-binding.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/owner-boot.o: build/owner-binding.o
+	objcopy --redefine-sym f0=owner_f0 "$<" "$@"
+
 # Independent test-only mutation of the state-pointer ownership bridge.
 # It creates a false alias after the genuine HIA router has selected zone B.
 build/boot-owner-alias.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_ALIAS_OWNER_STATE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
-build/owner-alias-multiboot.elf: build/boot-owner-alias.o build/kernel.o build/e820-boot.o build/arena-boot.o arch/x86_64/linker.ld
-	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/owner-alias.elf build/boot-owner-alias.o build/kernel.o build/e820-boot.o build/arena-boot.o
+build/owner-alias-multiboot.elf: build/boot-owner-alias.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/owner-alias.elf build/boot-owner-alias.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o
 	objcopy -O elf32-i386 build/owner-alias.elf "$@"
 
 # Deliberately dishonest HIA router for an end-to-end QEMU negative control.
@@ -60,28 +72,28 @@ build/boot-persistent.o: arch/x86_64/boot.S build/boot-cases.bin
 build/e820-unsafe-boot.o: build/e820-allow-all.o
 	objcopy --redefine-sym f0=e820_f0 "$<" "$@"
 
-build/e820-reserved-multiboot.elf: build/boot-reserved.o build/kernel.o build/e820-boot.o build/arena-boot.o arch/x86_64/linker.ld
-	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/e820-reserved.elf build/boot-reserved.o build/kernel.o build/e820-boot.o build/arena-boot.o
+build/e820-reserved-multiboot.elf: build/boot-reserved.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/e820-reserved.elf build/boot-reserved.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o
 	objcopy -O elf32-i386 build/e820-reserved.elf "$@"
 
-build/e820-bypass-multiboot.elf: build/boot-reserved.o build/kernel.o build/e820-unsafe-boot.o build/arena-boot.o arch/x86_64/linker.ld
-	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/e820-bypass.elf build/boot-reserved.o build/kernel.o build/e820-unsafe-boot.o build/arena-boot.o
+build/e820-bypass-multiboot.elf: build/boot-reserved.o build/kernel.o build/e820-unsafe-boot.o build/arena-boot.o build/owner-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/e820-bypass.elf build/boot-reserved.o build/kernel.o build/e820-unsafe-boot.o build/arena-boot.o build/owner-boot.o
 	objcopy -O elf32-i386 build/e820-bypass.elf "$@"
 
-build/e820-persistent-multiboot.elf: build/boot-persistent.o build/kernel.o build/e820-boot.o build/arena-boot.o arch/x86_64/linker.ld
-	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/e820-persistent.elf build/boot-persistent.o build/kernel.o build/e820-boot.o build/arena-boot.o
+build/e820-persistent-multiboot.elf: build/boot-persistent.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/e820-persistent.elf build/boot-persistent.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o
 	objcopy -O elf32-i386 build/e820-persistent.elf "$@"
 
-build/e820-persistent-bypass-multiboot.elf: build/boot-persistent.o build/kernel.o build/e820-unsafe-boot.o build/arena-boot.o arch/x86_64/linker.ld
-	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/e820-persistent-bypass.elf build/boot-persistent.o build/kernel.o build/e820-unsafe-boot.o build/arena-boot.o
+build/e820-persistent-bypass-multiboot.elf: build/boot-persistent.o build/kernel.o build/e820-unsafe-boot.o build/arena-boot.o build/owner-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/e820-persistent-bypass.elf build/boot-persistent.o build/kernel.o build/e820-unsafe-boot.o build/arena-boot.o build/owner-boot.o
 	objcopy -O elf32-i386 build/e820-persistent-bypass.elf "$@"
 
-build/arena-bypass-multiboot.elf: build/boot.o build/kernel.o build/e820-boot.o build/arena-unsafe-boot.o arch/x86_64/linker.ld
-	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/arena-bypass.elf build/boot.o build/kernel.o build/e820-boot.o build/arena-unsafe-boot.o
+build/arena-bypass-multiboot.elf: build/boot.o build/kernel.o build/e820-boot.o build/arena-unsafe-boot.o build/owner-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/arena-bypass.elf build/boot.o build/kernel.o build/e820-boot.o build/arena-unsafe-boot.o build/owner-boot.o
 	objcopy -O elf32-i386 build/arena-bypass.elf "$@"
 
-build/kernel.elf: build/boot.o build/kernel.o build/e820-boot.o build/arena-boot.o arch/x86_64/linker.ld
-	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot.o build/kernel.o build/e820-boot.o build/arena-boot.o
+build/kernel.elf: build/boot.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o
 
 build/kernel-multiboot.elf: build/kernel.elf
 	objcopy -O elf32-i386 "$<" "$@"
@@ -94,8 +106,8 @@ build/%.o: tests/negative/%.hepta | build check-compiler
 	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
 	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
-build/%-multiboot.elf: build/%.o build/boot.o build/e820-boot.o build/arena-boot.o arch/x86_64/linker.ld
-	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/$*.elf build/boot.o build/$*.o build/e820-boot.o build/arena-boot.o
+build/%-multiboot.elf: build/%.o build/boot.o build/e820-boot.o build/arena-boot.o build/owner-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/$*.elf build/boot.o build/$*.o build/e820-boot.o build/arena-boot.o build/owner-boot.o
 	objcopy -O elf32-i386 build/$*.elf "$@"
 
 test-boot: build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
@@ -139,13 +151,18 @@ test-arenas: build/arena-router.so build/e820-allow-all.so
 	timeout 90 $(PYTHON) tests/test_arena_router.py build/arena-router.so
 	$(PYTHON) tests/test_arena_router.py build/e820-allow-all.so --expect-unsafe
 
-record-build: build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/arena-router.so build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
+# Genuine PMM INIT feeds a separately compiled HIA descriptor/state gate.
+test-owner-binding: build/owner-binding.so build/kernel-host.so build/e820-allow-all.so
+	timeout 90 $(PYTHON) tests/test_owner_binding.py build/owner-binding.so build/kernel-host.so
+	$(PYTHON) tests/test_owner_binding.py build/e820-allow-all.so build/kernel-host.so --expect-unsafe
+
+record-build: build/owner-binding.so build/owner-boot.o build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/arena-router.so build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
 	$(PYTHON) tools/record_build.py --compiler "$(HEPTA_COMPILER)"
 
 test-closure:
 	$(PYTHON) tests/test_closure.py
 
-test: test-native test-guard-pages test-memory-map test-arenas test-boot test-closure record-build
+test: test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-boot test-closure record-build
 
 full-acceptance:
 	$(PYTHON) tools/check_closure.py
