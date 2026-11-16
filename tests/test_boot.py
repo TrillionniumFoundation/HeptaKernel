@@ -12,6 +12,7 @@ MAP_MARKER = "HEPTAKERNEL HIA E820 VERIFIED"
 RESERVATION_MARKER = "HEPTAKERNEL HIA RESERVATIONS VERIFIED"
 ROUTER_MARKER = "HEPTAKERNEL HIA ARENA ROUTER VERIFIED"
 OWNER_MARKER = "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED"
+PTE_MARKER = "HEPTAKERNEL HIA LIVE PTE VERIFIED"
 
 
 def digest(path):
@@ -32,42 +33,48 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         record["native_hia_e820_gate_observed"] = map_verified
         reservation_verified = p.stdout.count(RESERVATION_MARKER) == 1
         record["native_hia_reservation_gate_observed"] = reservation_verified
+        pte_verified = p.stdout.count(PTE_MARKER) == 1
+        record["native_hia_live_pte_observed"] = pte_verified
         route_verified = p.stdout.count(ROUTER_MARKER) == 1
         record["native_hia_arena_router_observed"] = route_verified
         owner_verified = p.stdout.count(OWNER_MARKER) == 1
         record["native_hia_multizone_state_and_readback_observed"] = owner_verified
         if mode == "positive":
-            accepted = (map_verified and reservation_verified and route_verified and owner_verified and p.returncode == 33 and
+            accepted = (map_verified and reservation_verified and pte_verified and route_verified and owner_verified and p.returncode == 33 and
                         p.stdout.count(PASS_MARKER) == 1 and FAIL_MARKER not in p.stdout)
         elif mode == "allocator_negative":
             # Wrong allocator must fail after the genuine HIA map gate.
-            accepted = (map_verified and reservation_verified and route_verified and p.returncode == 35 and
+            accepted = (map_verified and reservation_verified and pte_verified and route_verified and p.returncode == 35 and
                         FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
         elif mode == "owner_alias_negative":
-            accepted = (map_verified and reservation_verified and route_verified and not owner_verified and p.returncode == 35 and
+            accepted = (map_verified and reservation_verified and pte_verified and route_verified and not owner_verified and p.returncode == 35 and
                         FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
         elif mode == "arena_router_negative":
             # Genuine E820 accepts the map, but the fraudulent native HIA
             # router must fail the independent first fixture before PMM access.
-            accepted = (map_verified and reservation_verified and not route_verified and p.returncode == 35 and
+            accepted = (map_verified and reservation_verified and pte_verified and not route_verified and p.returncode == 35 and
+                        FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
+        elif mode == "pte_unsafe_rejected":
+            accepted = (map_verified and reservation_verified and not pte_verified and
+                        not route_verified and not owner_verified and p.returncode == 35 and
                         FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
         elif mode in ("reserved_rejected", "nonvolatile_rejected"):
             # Real HIA E820 must reject both enabled type-2 reservations
             # and enabled type-1 nonvolatile ranges before any RAM probe.
-            accepted = (not map_verified and not reservation_verified and not route_verified and not owner_verified and p.returncode == 35 and
+            accepted = (not map_verified and not reservation_verified and not pte_verified and not route_verified and not owner_verified and p.returncode == 35 and
                         FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
         elif mode == "protected_rejected":
-            accepted = (map_verified and not reservation_verified and not route_verified and
+            accepted = (map_verified and not reservation_verified and not pte_verified and not route_verified and
                         not owner_verified and p.returncode == 35 and
                         FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
         elif mode == "unsafe_protected_bypass":
-            accepted = (map_verified and reservation_verified and route_verified and owner_verified and
+            accepted = (map_verified and reservation_verified and pte_verified and route_verified and owner_verified and
                         p.returncode == 33 and p.stdout.count(PASS_MARKER) == 1 and
                         FAIL_MARKER not in p.stdout)
         elif mode in ("unsafe_map_bypass", "unsafe_nonvolatile_bypass"):
             # Deliberately dishonest HIA E820 object falsely accepts the
             # identical injected reservation. This is a negative control.
-            accepted = (map_verified and reservation_verified and route_verified and owner_verified and p.returncode == 33 and
+            accepted = (map_verified and reservation_verified and pte_verified and route_verified and owner_verified and p.returncode == 33 and
                         p.stdout.count(PASS_MARKER) == 1 and FAIL_MARKER not in p.stdout)
         else:
             raise ValueError("unknown boot mode " + mode)
@@ -90,6 +97,7 @@ def main():
               "native_hia_e820_object_sha256": digest("build/e820-region.o"),
               "native_hia_arena_router_object_sha256": digest("build/arena-router.o"),
               "native_hia_reservation_object_sha256": digest("build/reservation-gate.o"),
+              "native_hia_pte_object_sha256": digest("build/x86-pte.o"),
               "dishonest_hia_reservation_object_sha256": digest("build/reservation-unsafe-boot.o"),
               "dishonest_hia_e820_object_sha256": digest("build/e820-allow-all.o"),
               "dishonest_hia_router_object_sha256": digest("build/arena-unsafe-boot.o"),
@@ -102,6 +110,9 @@ def main():
         report["qemu_version"] = version.stdout.splitlines()[0]
         for machine, memory in (("pc", "32"), ("q35", "64")):
             report["runs"].append(run(args.qemu, Path("build/kernel-multiboot.elf"), machine, memory))
+        for machine, memory in (("pc", "32"), ("q35", "64")):
+            report["runs"].append(run(args.qemu, Path("build/pte-unsafe-multiboot.elf"),
+                                      machine, memory, mode="pte_unsafe_rejected"))
         for machine, memory in (("pc", "32"), ("q35", "64")):
             report["runs"].append(run(args.qemu, Path("build/reservation-conflict-multiboot.elf"),
                                       machine, memory, mode="protected_rejected"))
