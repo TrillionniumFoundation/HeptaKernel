@@ -137,6 +137,19 @@ def main():
             raise ValueError("HIA reservation gate loaded machine code differs")
         if Elf("build/reservation-boot.o").section_bytes(".text") != reservation_text:
             raise ValueError("HIA reservation symbol rename changed native machine code")
+        pte_source = Path("src/x86_pte_leaf.hepta").read_bytes()
+        pte_object = Path("build/x86-pte.o").read_bytes()
+        pte_rebuilt = subprocess.run([compiler], input=pte_source,
+                                     capture_output=True, timeout=20,
+                                     env={"PATH": ""})
+        if (pte_rebuilt.returncode or pte_rebuilt.stderr or
+                pte_rebuilt.stdout != pte_object):
+            raise ValueError("native HIA x86 PTE permission object is not reproducible")
+        if subprocess.check_output(["nm", "-u", "build/x86-pte.o"], text=True).strip():
+            raise ValueError("native HIA x86 PTE permission object has undefined symbols")
+        pte_text = Elf("build/x86-pte.o").section_bytes(".text")
+        if Elf("build/x86-pte.so").section_bytes(".text") != pte_text:
+            raise ValueError("HIA x86 PTE native library differs from the compiled object")
         e820_source = Path("src/e820_region.hepta").read_bytes()
         e820_object = Path("build/e820-region.o").read_bytes()
         rebuilt_e820 = subprocess.run([compiler], input=e820_source, capture_output=True,
@@ -262,6 +275,12 @@ def main():
                        reservation_boot_entry=reservation_entry,
                        reservation_boot_code_matches=True,
                        reservation_negative_control_rejected_by_tests=True,
+                      x86_pte_source_sha256=sha(pte_source),
+                      x86_pte_object_sha256=sha(pte_object),
+                      x86_pte_text_sha256=sha(pte_text),
+                      x86_pte_exact_recompilation=True,
+                      x86_pte_loaded_text_matches=True,
+                      x86_pte_not_integrated_in_boot=True,
                       e820_source_sha256=sha(e820_source),
                       e820_object_sha256=sha(e820_object),
                       e820_text_sha256=sha(e820_code),
