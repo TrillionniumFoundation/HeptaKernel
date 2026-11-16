@@ -37,6 +37,11 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
             # Wrong allocator must fail after the genuine HIA map gate.
             accepted = (map_verified and route_verified and p.returncode == 35 and
                         FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
+        elif mode == "arena_router_negative":
+            # Genuine E820 accepts the map, but the fraudulent native HIA
+            # router must fail the independent first fixture before PMM access.
+            accepted = (map_verified and not route_verified and p.returncode == 35 and
+                        FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
         elif mode in ("reserved_rejected", "nonvolatile_rejected"):
             # Real HIA E820 must reject both enabled type-2 reservations
             # and enabled type-1 nonvolatile ranges before any RAM probe.
@@ -68,6 +73,7 @@ def main():
               "native_hia_e820_object_sha256": digest("build/e820-region.o"),
               "native_hia_arena_router_object_sha256": digest("build/arena-router.o"),
               "dishonest_hia_e820_object_sha256": digest("build/e820-allow-all.o"),
+              "dishonest_hia_router_object_sha256": digest("build/arena-unsafe-boot.o"),
               "reserved_boot_object_sha256": digest("build/boot-reserved.o"),
               "fixtures_sha256": digest("tests/boot-cases.json"), "runs": []}
     try:
@@ -75,6 +81,8 @@ def main():
         report["qemu_version"] = version.stdout.splitlines()[0]
         for machine, memory in (("pc", "32"), ("q35", "64")):
             report["runs"].append(run(args.qemu, Path("build/kernel-multiboot.elf"), machine, memory))
+        report["runs"].append(run(args.qemu, Path("build/arena-bypass-multiboot.elf"),
+                                  mode="arena_router_negative"))
         for name in ("success_stub", "bounds_trap"):
             report["runs"].append(run(args.qemu, Path("build/" + name + "-multiboot.elf"),
                                       mode="allocator_negative"))
