@@ -39,8 +39,8 @@ block length_check(rz5_wire:readbuf,rz5_reply:mutbuf,rz5_len:usize,rz5_op:u64,rz
   rz5_exact:bool = compare.eq(rz5_expected,rz5_actual)
   branch rz5_exact check_mode(rz5_wire,rz5_reply,rz5_op,rz5_addr,rz5_pages,rz5_count) bad_request(rz5_reply)
 block check_mode(rz6_wire:readbuf,rz6_reply:mutbuf,rz6_op:u64,rz6_addr:u64,rz6_pages:u64,rz6_count:u64)
-  rz6_one:u64 = const() {"value":1}
-  rz6_known:bool = compare.le(rz6_op,rz6_one)
+  rz6_two:u64 = const() {"value":2}
+  rz6_known:bool = compare.le(rz6_op,rz6_two)
   branch rz6_known select_mode(rz6_wire,rz6_reply,rz6_op,rz6_addr,rz6_pages,rz6_count) unknown(rz6_reply)
 block unknown(rz7_reply:mutbuf)
   rz7_code:u32 = const() {"value":3}
@@ -50,7 +50,11 @@ block unknown(rz7_reply:mutbuf)
 block select_mode(rz8_wire:readbuf,rz8_reply:mutbuf,rz8_op:u64,rz8_addr:u64,rz8_pages:u64,rz8_count:u64)
   rz8_zero:u64 = const() {"value":0}
   rz8_validation:bool = compare.eq(rz8_op,rz8_zero)
-  branch rz8_validation validate_only(rz8_wire,rz8_reply,rz8_op,rz8_addr,rz8_pages,rz8_count) validate_query(rz8_wire,rz8_reply,rz8_op,rz8_addr,rz8_pages,rz8_count)
+  branch rz8_validation validate_only(rz8_wire,rz8_reply,rz8_op,rz8_addr,rz8_pages,rz8_count) select_request_mode(rz8_wire,rz8_reply,rz8_op,rz8_addr,rz8_pages,rz8_count)
+block select_request_mode(fm_wire:readbuf,fm_reply:mutbuf,fm_op:u64,fm_addr:u64,fm_pages:u64,fm_count:u64)
+  fm_one:u64 = const() {"value":1}
+  fm_exact:bool = compare.eq(fm_op,fm_one)
+  branch fm_exact validate_query(fm_wire,fm_reply,fm_op,fm_addr,fm_pages,fm_count) validate_fit(fm_wire,fm_reply,fm_op,fm_addr,fm_pages,fm_count)
 block validate_only(rz9_wire:readbuf,rz9_reply:mutbuf,rz9_op:u64,rz9_addr:u64,rz9_pages:u64,rz9_count:u64)
   rz9_zero:u64 = const() {"value":0}
   rz9_addr_zero:bool = compare.eq(rz9_addr,rz9_zero)
@@ -76,6 +80,22 @@ block validate_query(rz10_wire:readbuf,rz10_reply:mutbuf,rz10_op:u64,rz10_addr:u
   rz10_third:bool = bool.and(rz10_first,rz10_second)
   rz10_good:bool = bool.and(rz10_third,rz10_fits)
   branch rz10_good begin_scan(rz10_wire,rz10_reply,rz10_op,rz10_addr,rz10_pages,rz10_count) invalid(rz10_reply)
+block validate_fit(fv_wire:readbuf,fv_reply:mutbuf,fv_op:u64,fv_align:u64,fv_pages:u64,fv_count:u64)
+  fv_zero:u64 = const() {"value":0}
+  fv_one:u64 = const() {"value":1}
+  fv_max:u64 = const() {"value":65536}
+  fv_align_nonzero:bool = compare.gt(fv_align,fv_zero)
+  fv_align_bounded:bool = compare.le(fv_align,fv_max)
+  fv_mask:u64 = int.sub.wrap(fv_align,fv_one)
+  fv_power_bits:u64 = bit.and(fv_align,fv_mask)
+  fv_is_power:bool = compare.eq(fv_power_bits,fv_zero)
+  fv_pages_positive:bool = compare.gt(fv_pages,fv_zero)
+  fv_pages_bounded:bool = compare.le(fv_pages,fv_max)
+  fv_p1:bool = bool.and(fv_align_nonzero,fv_align_bounded)
+  fv_p2:bool = bool.and(fv_p1,fv_is_power)
+  fv_p3:bool = bool.and(fv_pages_positive,fv_pages_bounded)
+  fv_ok:bool = bool.and(fv_p2,fv_p3)
+  branch fv_ok begin_scan(fv_wire,fv_reply,fv_op,fv_align,fv_pages,fv_count) invalid(fv_reply)
 block begin_scan(rz11_wire:readbuf,rz11_reply:mutbuf,rz11_op:u64,rz11_addr:u64,rz11_pages:u64,rz11_count:u64)
   rz11_zero:u64 = const() {"value":0}
   jump scan_arena(rz11_wire,rz11_reply,rz11_op,rz11_addr,rz11_pages,rz11_count,rz11_zero)
@@ -153,7 +173,11 @@ block next_arena(rz18_wire:readbuf,rz18_reply:mutbuf,rz18_op:u64,rz18_addr:u64,r
 block validated(rz19_wire:readbuf,rz19_reply:mutbuf,rz19_op:u64,rz19_addr:u64,rz19_pages:u64,rz19_count:u64)
   rz19_zero:u64 = const() {"value":0}
   rz19_only:bool = compare.eq(rz19_op,rz19_zero)
-  branch rz19_only return_good(rz19_reply,rz19_count) begin_search(rz19_wire,rz19_reply,rz19_addr,rz19_pages,rz19_count)
+  branch rz19_only return_good(rz19_reply,rz19_count) select_search_mode(rz19_wire,rz19_reply,rz19_op,rz19_addr,rz19_pages,rz19_count)
+block select_search_mode(sm_wire:readbuf,sm_reply:mutbuf,sm_op:u64,sm_addr:u64,sm_pages:u64,sm_count:u64)
+  sm_one:u64 = const() {"value":1}
+  sm_exact:bool = compare.eq(sm_op,sm_one)
+  branch sm_exact begin_search(sm_wire,sm_reply,sm_addr,sm_pages,sm_count) begin_fit(sm_wire,sm_reply,sm_addr,sm_pages,sm_count)
 block begin_search(rz20_wire:readbuf,rz20_reply:mutbuf,rz20_addr:u64,rz20_pages:u64,rz20_count:u64)
   rz20_zero:u64 = const() {"value":0}
   rz20_4096:u64 = const() {"value":4096}
@@ -191,6 +215,51 @@ block zone_next(rz23_wire:readbuf,rz23_reply:mutbuf,rz23_addr:u64,rz23_end:u64,r
   rz23_one:u64 = const() {"value":1}
   rz23_next:u64 = int.add.wrap(rz23_i,rz23_one)
   jump search_zone(rz23_wire,rz23_reply,rz23_addr,rz23_end,rz23_count,rz23_next)
+block begin_fit(fb_wire:readbuf,fb_reply:mutbuf,fb_align:u64,fb_pages:u64,fb_count:u64)
+  fb_zero:u64 = const() {"value":0}
+  jump scan_fit(fb_wire,fb_reply,fb_align,fb_pages,fb_count,fb_zero)
+block scan_fit(fs_wire:readbuf,fs_reply:mutbuf,fs_align:u64,fs_pages:u64,fs_count:u64,fs_index:u64)
+  fs_more:bool = compare.lt(fs_index,fs_count)
+  branch fs_more inspect_fit(fs_wire,fs_reply,fs_align,fs_pages,fs_count,fs_index) no_zone(fs_reply)
+block inspect_fit(fi_wire:readbuf,fi_reply:mutbuf,fi_align:u64,fi_pages:u64,fi_count:u64,fi_i:u64)
+  fi_width:u64 = const() {"value":24}
+  fi_prefix:u64 = const() {"value":32}
+  fi_eight:u64 = const() {"value":8}
+  fi_sixteen:u64 = const() {"value":16}
+  fi_shift:u64 = const() {"value":12}
+  fi_one:u64 = const() {"value":1}
+  fi_off:u64 = int.mul.wrap(fi_i,fi_width)
+  fi_base_off:u64 = int.add.wrap(fi_off,fi_prefix)
+  fi_pages_off:u64 = int.add.wrap(fi_base_off,fi_eight)
+  fi_reserved_off:u64 = int.add.wrap(fi_base_off,fi_sixteen)
+  fi_base_at:usize = int.cast(fi_base_off) {"mode":"wrap"}
+  fi_pages_at:usize = int.cast(fi_pages_off) {"mode":"wrap"}
+  fi_reserved_at:usize = int.cast(fi_reserved_off) {"mode":"wrap"}
+  fi_base:u64 = call(fi_wire,fi_base_at) {"function":"read_u64"}
+  fi_size:u64 = call(fi_wire,fi_pages_at) {"function":"read_u64"}
+  fi_reserved:u64 = call(fi_wire,fi_reserved_at) {"function":"read_u64"}
+  fi_base_page:u64 = int.shr.checked(fi_base,fi_shift)
+  fi_usable_page:u64 = int.add.wrap(fi_base_page,fi_reserved)
+  fi_mask:u64 = int.sub.wrap(fi_align,fi_one)
+  fi_rounded:u64 = int.add.wrap(fi_usable_page,fi_mask)
+  fi_inv_mask:u64 = bit.not(fi_mask)
+  fi_candidate:u64 = bit.and(fi_rounded,fi_inv_mask)
+  fi_end:u64 = int.add.wrap(fi_base_page,fi_size)
+  fi_inside:bool = compare.le(fi_candidate,fi_end)
+  fi_remaining:u64 = int.sub.wrap(fi_end,fi_candidate)
+  fi_enough:bool = compare.le(fi_pages,fi_remaining)
+  fi_usable:bool = bool.and(fi_inside,fi_enough)
+  branch fi_usable return_fit(fi_reply,fi_candidate) next_fit(fi_wire,fi_reply,fi_align,fi_pages,fi_count,fi_i)
+block next_fit(fn_wire:readbuf,fn_reply:mutbuf,fn_align:u64,fn_pages:u64,fn_count:u64,fn_i:u64)
+  fn_one:u64 = const() {"value":1}
+  fn_next:u64 = int.add.wrap(fn_i,fn_one)
+  jump scan_fit(fn_wire,fn_reply,fn_align,fn_pages,fn_count,fn_next)
+block return_fit(fr_reply:mutbuf,fr_candidate:u64)
+  fr_shift:u64 = const() {"value":12}
+  fr_address:u64 = int.shl.checked(fr_candidate,fr_shift)
+  fr_ok:u32 = const() {"value":0}
+  fr_result:u32 = call(fr_reply,fr_ok,fr_address) {"function":"write_reply"}
+  ret(fr_result)
 block return_match(rz24_reply:mutbuf,rz24_index:u64)
   rz24_one:u64 = const() {"value":1}
   rz24_value:u64 = int.add.wrap(rz24_index,rz24_one)

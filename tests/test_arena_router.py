@@ -44,13 +44,17 @@ def oracle(data, rlen):
     op, address, pages, count = struct.unpack_from("<4Q", data)
     if count > 32 or len(data) != 32 + 24 * count:
         return 2, 0
-    if op not in (0, 1):
+    if op not in (0, 1, 2):
         return 3, 0
     if op == 0:
         if address or pages:
             return 6, 0
-    elif not (address < LIMIT and address % PAGE == 0
-              and 1 <= pages <= 65536 and pages * PAGE <= LIMIT - address):
+    elif op == 1:
+        if not (address < LIMIT and address % PAGE == 0
+                and 1 <= pages <= 65536 and pages * PAGE <= LIMIT - address):
+            return 6, 0
+    elif not (1 <= address <= 65536 and address & (address - 1) == 0
+              and 1 <= pages <= 65536):
         return 6, 0
     arenas = [struct.unpack_from("<3Q", data, 32 + 24 * i) for i in range(count)]
     for base, n, reserved in arenas:
@@ -64,6 +68,15 @@ def oracle(data, rlen):
                 return 6, 0
     if op == 0:
         return 0, count
+    if op == 2:
+        # First-fit in wire order: an aligned geometric candidate, NOT a
+        # free-frame allocation or a check of live ownership bitmaps.
+        for base, n, reserved in arenas:
+            first = base // PAGE + reserved
+            aligned = (first + address - 1) & -address
+            if aligned + pages <= base // PAGE + n:
+                return 0, aligned * PAGE
+        return 5, 0
     end = address + pages * PAGE
     for i, (base, n, reserved) in enumerate(arenas):
         if base + reserved * PAGE <= address and end <= base + n * PAGE:
@@ -122,6 +135,17 @@ def cases():
         (encode(1, MAX, 1, []), 16),
         (encode(1, 0, 0, []), 16),
         (encode(1, LIMIT-PAGE, 2, []), 16),
+        (encode(2, 4, 2, [(0x400000, 512, 3), (0x600000, 512, 1)]), 16),
+        (encode(2, 8, 3, [(0x400000, 2, 2), (0x600000, 17, 1)]), 16),
+        (encode(2, 2, 4, [(0x400000, 2, 1), (0x600000, 2, 1)]), 16),
+        (encode(2, 1, 1, [(0, 1, 0)]), 16),
+        (encode(2, 2, 1, [(0, 1, 0)]), 16),
+        (encode(2, 65536, 1, [(LIMIT-PAGE, 1, 0)]), 16),
+        (encode(2, 0, 1, [(0, 2, 0)]), 16),
+        (encode(2, 3, 1, [(0, 2, 0)]), 16),
+        (encode(2, 65537, 1, [(0, 2, 0)]), 16),
+        (encode(2, 1, 0, [(0, 2, 0)]), 16),
+        (encode(2, 1, 65537, [(0, 2, 0)]), 16),
         (encode(2, 0, 0, []), 16),
         (encode(MAX, 0, 0, []), 16),
         (encode(1, PAGE, 1, [(0, 2, 0)], count=2), 16),
@@ -152,8 +176,10 @@ def cases():
             pages = rng.randrange(1, 18)
         else:
             address, pages = rng.randrange(0, 4096)*16*PAGE, rng.randrange(1, 18)
-        op = rng.randrange(2)
-        fixed.append((encode(op, address if op else 0,
+        op = rng.randrange(3)
+        requested_address = address if op == 1 else (
+            1 << rng.randrange(17) if op == 2 else 0)
+        fixed.append((encode(op, requested_address,
                              pages if op else 0, arenas), rng.choice([16,16,16,16,24])))
     for _ in range(600):
         n = rng.randrange(0, 33)
@@ -164,7 +190,7 @@ def cases():
             size = rng.choice([0, 1, 2, 16, 65536, 65537, MAX])
             reserved = rng.choice([0, 1, size, MAX])
             arenas.append((base, size, reserved))
-        op = rng.choice([0, 1, 2, MAX])
+        op = rng.choice([0, 1, 2, 3, MAX])
         address = rng.choice([0, PAGE, 1, LIMIT-PAGE, LIMIT, MAX])
         pages = rng.choice([0, 1, 2, 65536, 65537, MAX])
         fixed.append((encode(op, address, pages, arenas), rng.choice([16,16,15,24])))
@@ -194,7 +220,7 @@ def main():
         return
     assert object_text(args.library) == object_text("build/arena-router.o")
     report = {"schema":"heptakernel.hia-arena-router-test.v1",
-              "scope":"bounded read-only multi-arena geometry and exact-range routing",
+              "scope":"bounded read-only multi-arena validation, exact-range routing, and aligned first-fit candidate selection; not free-frame allocation",
               "qemu_tested":False,"linux_compatibility_tested":False,
               "source_sha256":hashlib.sha256(Path("src/arena_router.hepta").read_bytes()).hexdigest(),
               "object_sha256":hashlib.sha256(Path("build/arena-router.o").read_bytes()).hexdigest(),
