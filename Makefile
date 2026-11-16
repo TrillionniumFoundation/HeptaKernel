@@ -118,7 +118,7 @@ test-arenas: build/arena-router.so build/e820-allow-all.so
 	timeout 90 $(PYTHON) tests/test_arena_router.py build/arena-router.so
 	$(PYTHON) tests/test_arena_router.py build/e820-allow-all.so --expect-unsafe
 
-record-build: build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
+record-build: build/arena-router.so build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
 	$(PYTHON) tools/record_build.py --compiler "$(HEPTA_COMPILER)"
 
 test-closure:
