@@ -25,6 +25,7 @@ no reply writes. Request and state buffers remain unchanged.
 | --- | --- | --- |
 | 0 VALIDATE | `physical_address=0, run_pages=0` | Count of validated descriptors |
 | 1 ROUTE_EXACT | Page-aligned physical address, nonzero contiguous page count | **1-based** arena index in the *original caller-supplied descriptor order* |
+| 2 FIRST_FIT_GEOMETRY | Physical alignment as a nonzero power of two in **pages**, nonzero contiguous page count | First geometrically valid, physically aligned address in descriptor order; **does not inspect occupied frames** |
 
 A valid descriptor has 1..65,536 pages, a 4096-byte-aligned base below
 `2^52`, an exclusive end no higher than `2^52`, and
@@ -36,6 +37,16 @@ gaps are legal, and two overlapping regions are invalid even if their
 reserved prefixes differ. For routing, the full requested run must lie in a
 single arena's non-reserved suffix. The router never silently combines a run
 across adjacent arenas. It rejects a request crossing an arena boundary.
+
+Operation 2 accepts any representable nonzero **u64 power-of-two**
+page alignment (from 1 through `2^63`), matching the HIA page allocator's
+alignment argument. It does not impose the 65,536-page *arena size* limit
+on the alignment. A region beginning at physical address zero may satisfy
+even very large alignment requests. Otherwise a large alignment with no
+candidate below the physical limit returns NO_MEMORY, rather than wrapping
+around or accepting an out-of-range address. The requested run remains
+limited to 65,536 pages and cannot straddle zones. The first-fit result is
+read-only and has no live-bitmap or ownership reservation semantics.
 
 Status values are 0 OK, 1 REPLY_TOO_SMALL, 2 BAD_REQUEST (truncated or
 overlong request, or >32 descriptors), 3 UNKNOWN_OP, 5 NO_MEMORY
