@@ -9,6 +9,7 @@ from pathlib import Path
 PASS_MARKER = "HEPTAKERNEL HIA PMM PASS"
 FAIL_MARKER = "HEPTAKERNEL BOOT FAIL"
 MAP_MARKER = "HEPTAKERNEL HIA E820 VERIFIED"
+ROUTER_MARKER = "HEPTAKERNEL HIA ARENA ROUTER VERIFIED"
 
 
 def digest(path):
@@ -27,17 +28,19 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         record.update(returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
         map_verified = p.stdout.count(MAP_MARKER) == 1
         record["native_hia_e820_gate_observed"] = map_verified
+        route_verified = p.stdout.count(ROUTER_MARKER) == 1
+        record["native_hia_arena_router_observed"] = route_verified
         if mode == "positive":
-            accepted = (map_verified and p.returncode == 33 and
+            accepted = (map_verified and route_verified and p.returncode == 33 and
                         p.stdout.count(PASS_MARKER) == 1 and FAIL_MARKER not in p.stdout)
         elif mode == "allocator_negative":
             # Wrong allocator must fail after the genuine HIA map gate.
-            accepted = (map_verified and p.returncode == 35 and
+            accepted = (map_verified and route_verified and p.returncode == 35 and
                         FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
         elif mode in ("reserved_rejected", "nonvolatile_rejected"):
             # Real HIA E820 must reject both enabled type-2 reservations
             # and enabled type-1 nonvolatile ranges before any RAM probe.
-            accepted = (not map_verified and p.returncode == 35 and
+            accepted = (not map_verified and not route_verified and p.returncode == 35 and
                         FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
         elif mode in ("unsafe_map_bypass", "unsafe_nonvolatile_bypass"):
             # Deliberately dishonest HIA E820 object falsely accepts the
@@ -63,6 +66,7 @@ def main():
               "source_sha256": digest("src/kernel.hepta"), "hia_object_sha256": digest("build/kernel.o"),
               "bridge_sha256": digest("arch/x86_64/boot.S"),
               "native_hia_e820_object_sha256": digest("build/e820-region.o"),
+              "native_hia_arena_router_object_sha256": digest("build/arena-router.o"),
               "dishonest_hia_e820_object_sha256": digest("build/e820-allow-all.o"),
               "reserved_boot_object_sha256": digest("build/boot-reserved.o"),
               "fixtures_sha256": digest("tests/boot-cases.json"), "runs": []}
