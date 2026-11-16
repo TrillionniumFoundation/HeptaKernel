@@ -131,6 +131,9 @@ jobs:
             build/arena-unsafe-boot.o
             build/arena-bypass.elf
             build/arena-bypass-multiboot.elf
+            build/boot-owner-alias.o
+            build/owner-alias.elf
+            build/owner-alias-multiboot.elf
             build/e820-region.o
             build/e820-allow-all.o
             build/e820-unsafe-boot.o

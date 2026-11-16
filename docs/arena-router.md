@@ -83,3 +83,29 @@ bind each arena to its exact E820 evidence, initialize separate allocator
 states, route allocation requests to a legitimate zone, and test actual
 physical pages and error paths under QEMU. Full Linux compatibility remains
 `HOLD`.
+
+## Two-region physical ownership integration (test fixture)
+
+The QEMU Multiboot observer now replays **two independent calls** to the
+real native HIA E820 checker using the retained loader-provided firmware
+map: 17 pages at physical `0x400000` and 17 pages at `0x600000`.
+Both must independently return the exact admitted length. Then the real
+native HIA router selects zone 1 and zone 2 for two-page runs beginning
+at `0x402000` and `0x601000`. A fixed immutable zone-ID-to-state table
+selects two disjoint, guarded 8192-byte private HIA allocator states.
+
+The observer invokes the unchanged actual native HIA PMM entry `f0` for
+both states. It independently checks initialization free counts (15/16),
+the exact physical addresses of two allocated runs, four distinct word
+sentinels written and read back **while all pages are simultaneously
+allocated**, cross-zone `CLAIM_RUN` rejection, occupied-run query results,
+two successful frees, duplicate-free rejection, and final free counts.
+No Linux runtime or host system call performs these allocations. A
+dedicated negative boot image intentionally aliases the second ownership
+state onto the first and must fail before any new physical-page access.
+
+This is still an **isolated two-zone test-only orchestration in GNU assembly**,
+not a native-HIA dynamic zone manager, a trusted real-firmware memory
+provenance proof, a Linux NUMA/buddy subsystem, or SMP-safe allocation.
+Allocation metadata remains private, single-threaded and not protected
+against firmware compromise. The 17 Linux-wide acceptance gates remain HOLD.
