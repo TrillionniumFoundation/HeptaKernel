@@ -340,6 +340,12 @@ long_entry:
     leaq message_map_pass(%rip), %rsi
     call puts64
 
+    /* Check physical boot reservations with actual native HIA machine
+     * code before routing or touching any frame in the test arena. */
+    call reservation_admit64
+    leaq message_reservation_pass(%rip), %rsi
+    call puts64
+
     /* Genuine HIA multi-arena router, after the E820 admission gate.
      * Each read-only fixture includes independent expected return fields.
      * The non-HIA observer never trusts the HIA status by itself.
@@ -567,6 +573,68 @@ debug_exit64:
     hlt
     jmp 8b
 
+
+/* The non-HIA Multiboot transport populates a bounded native-HIA request.
+ * Three actual live intervals cover the image/BSS/stack, Multiboot info,
+ * and original loader mmap. The additional fourth interval is a fault
+ * injection only. All of the 4-8 MiB test arena is checked once here.
+ */
+reservation_admit64:
+    movabsq $0xa55aa55a5aa55aa5, %r10
+    movq %r10, reservation_guard_before(%rip)
+    movq %r10, reservation_guard_after(%rip)
+    movq %r10, reservation_unused(%rip)
+    movq %r10, reservation_unused+8(%rip)
+    movq $ARENA_MIN, reservation_request(%rip)
+    movq $1024, reservation_request+8(%rip)
+    movq $0, reservation_request+16(%rip)
+    movq $3, reservation_request+24(%rip)
+    leaq __kernel_start(%rip), %rax
+    movq %rax, reservation_request+32(%rip)
+    leaq __kernel_end(%rip), %rdx
+    subq %rax, %rdx
+    jz fail64
+    movq %rdx, reservation_request+40(%rip)
+    movl boot_info(%rip), %eax
+    movq %rax, reservation_request+48(%rip)
+    movq $116, reservation_request+56(%rip)
+    movl 48(%rax), %edx
+    movq %rdx, reservation_request+64(%rip)
+    movl 44(%rax), %edx
+    movq %rdx, reservation_request+72(%rip)
+#ifdef HEPTAKERNEL_TEST_INJECT_PROTECTED
+    /* Test-only claimed reservation overlapping otherwise usable RAM. */
+    movq $4, reservation_request+24(%rip)
+    movq $(ARENA_MIN + PAGE_BYTES), reservation_request+80(%rip)
+    movq $PAGE_BYTES, reservation_request+88(%rip)
+    movl $96, %esi
+#else
+    movl $80, %esi
+#endif
+    leaq reservation_request(%rip), %rdi
+    movq $-1, reservation_reply(%rip)
+    movq $-1, reservation_reply+8(%rip)
+    leaq reservation_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq reservation_unused(%rip), %r8
+    movl $16, %r9d
+    call reservation_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, reservation_reply(%rip)
+    jne fail64
+    cmpq $1024, reservation_reply+8(%rip)
+    jne fail64
+    movabsq $0xa55aa55a5aa55aa5, %r10
+    cmpq %r10, reservation_guard_before(%rip)
+    jne fail64
+    cmpq %r10, reservation_guard_after(%rip)
+    jne fail64
+    cmpq %r10, reservation_unused(%rip)
+    jne fail64
+    cmpq %r10, reservation_unused+8(%rip)
+    jne fail64
+    ret
 
 /* Test-only multi-zone handoff. The policy and physical readback observer
  * remain NON-HIA; e820_f0, arena_f0 and f0 are the actual fixed HIA objects.
@@ -938,6 +1006,8 @@ idt64_descriptor:
     .quad idt64
 message_map_pass:
     .asciz "HEPTAKERNEL HIA E820 VERIFIED\r\n"
+message_reservation_pass:
+    .asciz "HEPTAKERNEL HIA RESERVATIONS VERIFIED\r\n"
 message_router_pass:
     .asciz "HEPTAKERNEL HIA ARENA ROUTER VERIFIED\r\n"
 message_owner_pass:
@@ -1058,6 +1128,12 @@ mmap_end32:       .skip 4
 e820_request:     .skip (24 + 128 * 24)
 e820_reply:       .skip 16
 e820_unused:      .skip 16
+.balign 16
+reservation_request:      .skip 96
+reservation_guard_before: .skip 8
+reservation_reply:        .skip 16
+reservation_guard_after:  .skip 8
+reservation_unused:       .skip 16
 arena_guard_before: .skip 8
 arena_reply:       .skip 16
 arena_guard_after: .skip 8
