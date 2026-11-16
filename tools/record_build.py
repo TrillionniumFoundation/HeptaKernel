@@ -105,6 +105,9 @@ def main():
             raise ValueError("HIA multi-arena router has undefined symbols")
         if Elf("build/arena-router.so").section_bytes(".text") != Elf("build/arena-router.o").section_bytes(".text"):
             raise ValueError("native HIA multi-arena router loaded image differs from source object")
+        arena_code = Elf("build/arena-router.o").section_bytes(".text")
+        if Elf("build/arena-boot.o").section_bytes(".text") != arena_code:
+            raise ValueError("native HIA arena router symbol rename changed code")
         e820_source = Path("src/e820_region.hepta").read_bytes()
         e820_object = Path("build/e820-region.o").read_bytes()
         rebuilt_e820 = subprocess.run([compiler], input=e820_source, capture_output=True,
@@ -125,6 +128,12 @@ def main():
             raise ValueError("Multiboot container changed entry symbols")
         if image64.text_at(entry, len(code)) != code or image32.text_at(entry, len(code)) != code:
             raise ValueError("linked boot images do not contain the exact HIA code at f0")
+        arena_entry = image64.symbol("arena_f0")
+        if image32.symbol("arena_f0") != arena_entry:
+            raise ValueError("native HIA arena entry mismatch in packed boot image")
+        if (image64.text_at(arena_entry, len(arena_code)) != arena_code or
+                image32.text_at(arena_entry, len(arena_code)) != arena_code):
+            raise ValueError("default QEMU boot images lack exact native HIA arena machine code")
         e820_entry = image64.symbol("e820_f0")
         if image32.symbol("e820_f0") != e820_entry:
             raise ValueError("E820 Multiboot entry mismatch")
@@ -141,18 +150,22 @@ def main():
         liar_code = Elf("build/e820-allow-all.o").section_bytes(".text")
         if Elf("build/e820-unsafe-boot.o").section_bytes(".text") != liar_code:
             raise ValueError("dishonest E820 symbol rename changed code")
+        if Elf("build/arena-unsafe-boot.o").section_bytes(".text") != liar_code:
+            raise ValueError("dishonest HIA arena router symbol rename changed code")
         boot_code = Elf("build/boot.o").section_bytes(".text.boot")
         reserved_code = Elf("build/boot-reserved.o").section_bytes(".text.boot")
         persistent_code = Elf("build/boot-persistent.o").section_bytes(".text.boot")
         if len({sha(boot_code), sha(reserved_code), sha(persistent_code)}) != 3:
             raise ValueError("normal, reserved and nonvolatile boot transports must be distinct")
-        for stem, expected_e820 in (("e820-reserved", e820_code),
-                                    ("e820-bypass", liar_code),
-                                    ("e820-persistent", e820_code),
-                                    ("e820-persistent-bypass", liar_code)):
+        for stem, expected_e820, expected_arena in (("e820-reserved", e820_code, arena_code),
+                                                     ("e820-bypass", liar_code, arena_code),
+                                                     ("e820-persistent", e820_code, arena_code),
+                                                     ("e820-persistent-bypass", liar_code, arena_code),
+                                                     ("arena-bypass", e820_code, liar_code)):
             linked64 = Elf("build/" + stem + ".elf")
             packed32 = Elf("build/" + stem + "-multiboot.elf")
-            for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820)):
+            for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820),
+                                          ("arena_f0", expected_arena)):
                 symbol_address = linked64.symbol(symbol)
                 if packed32.symbol(symbol) != symbol_address:
                     raise ValueError(stem + " symbol differs after Multiboot wrapping")
@@ -180,6 +193,9 @@ def main():
                       arena_router_object_sha256=sha(arena_object),
                       arena_router_exact_recompilation=True,
                       arena_router_loaded_text_matches=True,
+                      arena_router_boot_entry=arena_entry,
+                      arena_router_boot_code_matches=True,
+                      arena_router_dishonest_mutant_rejected_by_tests=True,
                       e820_source_sha256=sha(e820_source),
                       e820_object_sha256=sha(e820_object),
                       e820_text_sha256=sha(e820_code),
