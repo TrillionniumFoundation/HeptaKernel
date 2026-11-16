@@ -64,10 +64,22 @@ lengths, absence of writes and deterministic randomized cases. A separate,
 deliberately dishonest **native HIA** object that returns success for a
 reserved request is required to disagree with the oracle.
 
-This is a host-side native component proof. A QEMU multi-arena allocation and
-readback path is not yet integrated: the existing boot path still uses one fixed
-4–8 MiB arena, the non-HIA `boot.S` transport and its own E820 gate. The
-next integration must bind each arena to its exact E820 evidence, initialize
-separate allocator states, route allocation requests to a legitimate zone,
-and test real physical pages and error paths under QEMU. Full Linux
-compatibility remains `HOLD`.
+The genuine native HIA router is now additionally linked under a distinct
+`arena_f0` symbol into the QEMU Multiboot image. After real loader E820
+admission, the explicitly non-HIA observer checks six immutable 80-byte router
+requests against independently fixed return/status/value values in PC and Q35:
+two-zone validation, correct first/second routing, protected reserved prefix,
+run crossing a zone boundary, and an overlapping descriptor map. Only after
+these checks may the existing single-arena PMM tests continue. The faulty
+native-HIA replacement of `arena_f0` must fail the boot observer, with an
+explicit failure exit. The exact HIA machine-code section is bound to each
+64-bit and 32-bit boot-image container, including the dishonest mutant.
+
+This QEMU milestone verifies the **read-only router** running in ring 0; it
+still does not implement dynamic multi-arena allocation and readback. The
+existing physical allocation fixture is one fixed 4–8 MiB arena, and the
+non-HIA `boot.S` transport and E820 gate remain. The next integration must
+bind each arena to its exact E820 evidence, initialize separate allocator
+states, route allocation requests to a legitimate zone, and test actual
+physical pages and error paths under QEMU. Full Linux compatibility remains
+`HOLD`.
