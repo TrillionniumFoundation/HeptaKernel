@@ -131,11 +131,15 @@ def main():
         liar_code = Elf("build/e820-allow-all.o").section_bytes(".text")
         if Elf("build/e820-unsafe-boot.o").section_bytes(".text") != liar_code:
             raise ValueError("dishonest E820 symbol rename changed code")
-        if (Elf("build/boot.o").section_bytes(".text.boot") ==
-                Elf("build/boot-reserved.o").section_bytes(".text.boot")):
-            raise ValueError("reserved-map fault injection is absent")
+        boot_code = Elf("build/boot.o").section_bytes(".text.boot")
+        reserved_code = Elf("build/boot-reserved.o").section_bytes(".text.boot")
+        persistent_code = Elf("build/boot-persistent.o").section_bytes(".text.boot")
+        if len({sha(boot_code), sha(reserved_code), sha(persistent_code)}) != 3:
+            raise ValueError("normal, reserved and nonvolatile boot transports must be distinct")
         for stem, expected_e820 in (("e820-reserved", e820_code),
-                                    ("e820-bypass", liar_code)):
+                                    ("e820-bypass", liar_code),
+                                    ("e820-persistent", e820_code),
+                                    ("e820-persistent-bypass", liar_code)):
             linked64 = Elf("build/" + stem + ".elf")
             packed32 = Elf("build/" + stem + "-multiboot.elf")
             for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820)):
@@ -168,6 +172,9 @@ def main():
                       e820_entry_address=e820_entry,
                       linked_hia_e820_bytes_match=True,
                       injected_reserved_boot_differs=True,
+                      injected_nonvolatile_boot_differs=True,
+                      nonvolatile_boot_contains_genuine_hia_e820=True,
+                      nonvolatile_bypass_contains_dishonest_native_hia_e820=True,
                       reserved_boot_contains_genuine_hia_e820=True,
                       bypass_boot_contains_dishonest_native_hia_e820=True,
                       dishonest_e820_source_sha256=sha(liar_source),
