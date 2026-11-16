@@ -95,6 +95,18 @@ def main():
         undefined = subprocess.check_output(["nm", "-u", "build/kernel.o"], text=True).strip()
         if undefined:
             raise ValueError("HIA object contains external dependencies: " + undefined)
+        e820_source = Path("src/e820_region.hepta").read_bytes()
+        e820_object = Path("build/e820-region.o").read_bytes()
+        rebuilt_e820 = subprocess.run([compiler], input=e820_source, capture_output=True,
+                                      timeout=20, env={"PATH": ""})
+        if rebuilt_e820.returncode or rebuilt_e820.stderr or rebuilt_e820.stdout != e820_object:
+            raise ValueError("native HIA E820 bytes not reproducible")
+        if subprocess.check_output(["nm", "-u", "build/e820-region.o"], text=True).strip():
+            raise ValueError("E820 native object has undefined symbols")
+        e820_original = Elf("build/e820-region.o")
+        e820_code = e820_original.section_bytes(".text")
+        if Elf("build/e820-boot.o").section_bytes(".text") != e820_code:
+            raise ValueError("symbol-only E820 rename changed code")
         object_elf, image64, image32 = [Elf(p) for p in
                                       ("build/kernel.o", "build/kernel.elf", "build/kernel-multiboot.elf")]
         code = object_elf.section_bytes(".text")
@@ -103,6 +115,12 @@ def main():
             raise ValueError("Multiboot container changed entry symbols")
         if image64.text_at(entry, len(code)) != code or image32.text_at(entry, len(code)) != code:
             raise ValueError("linked boot images do not contain the exact HIA code at f0")
+        e820_entry = image64.symbol("e820_f0")
+        if image32.symbol("e820_f0") != e820_entry:
+            raise ValueError("E820 Multiboot entry mismatch")
+        if (image64.text_at(e820_entry, len(e820_code)) != e820_code or
+                image32.text_at(e820_entry, len(e820_code)) != e820_code):
+            raise ValueError("native HIA E820 code not preserved in boot images")
         host = Elf("build/kernel-host.so")
         if host.section_bytes(".text") != code:
             raise ValueError("native library changed HIA code")
@@ -119,7 +137,13 @@ def main():
                       exact_source_recompiled_with_empty_PATH=True,
                       undefined_symbols=[], linked_hia_bytes_match=True,
                       multiboot_container_preserves_hia_bytes=True,
-                      hia_entry_address=entry, inputs=input_hashes, artifacts=artifacts,
+                      hia_entry_address=entry,
+                      e820_source_sha256=sha(e820_source),
+                      e820_object_sha256=sha(e820_object),
+                      e820_text_sha256=sha(e820_code),
+                      e820_entry_address=e820_entry,
+                      linked_hia_e820_bytes_match=True,
+                      inputs=input_hashes, artifacts=artifacts,
                       input_manifest_sha256=sha(json.dumps(input_hashes, sort_keys=True,
                                                           separators=(",", ":")).encode()),
                       linker_version=subprocess.check_output(["ld", "--version"], text=True).splitlines()[0],

@@ -8,6 +8,7 @@ from pathlib import Path
 
 PASS_MARKER = "HEPTAKERNEL HIA PMM PASS"
 FAIL_MARKER = "HEPTAKERNEL BOOT FAIL"
+MAP_MARKER = "HEPTAKERNEL HIA E820 VERIFIED"
 
 
 def digest(path):
@@ -24,12 +25,15 @@ def run(qemu, image, machine="pc", memory="32", positive=True):
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
         record.update(returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
+        map_verified = p.stdout.count(MAP_MARKER) == 1
+        record["native_hia_e820_gate_observed"] = map_verified
         if positive:
-            accepted = p.returncode == 33 and p.stdout.count(PASS_MARKER) == 1 and FAIL_MARKER not in p.stdout
+            accepted = (map_verified and p.returncode == 33 and
+                        p.stdout.count(PASS_MARKER) == 1 and FAIL_MARKER not in p.stdout)
         else:
-            # Timeout, crash or a triple fault is not accepted as an observed
-            # diagnostic. The guest must enter its explicit failure path.
-            accepted = p.returncode == 35 and FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout
+            # Wrong HIA kernel must fail *after* the actual E820 map gate.
+            accepted = (map_verified and p.returncode == 35 and
+                        FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
         record["status"] = "PASS" if accepted else "FAIL"
     except subprocess.TimeoutExpired as e:
         record.update(status="FAIL", error="QEMU timed out", stdout=str(e.stdout), stderr=str(e.stderr))
