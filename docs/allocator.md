@@ -26,7 +26,8 @@ caller. The boot observer and native tests own and separate all three regions.
 The state region is trusted, private, single-owner kernel memory. Calls must be
 serialized. The current HIA state validator reads every active bitmap bit on
 each non-init operation, checks the reserved prefix, reconciles the exact
-free-frame counter, and requires zero bits beyond the page count in the final
+free-frame counter, requires zero in every reserved header byte at offsets
+40–63, and requires zero bits beyond the page count in the final
 bitmap byte. This validation adds O(pages) work to each operation; it detects
 inconsistent bookkeeping but does not authenticate caller-owned memory or
 detect a coherent malicious rewrite of an entire private state. A future Linux
@@ -142,8 +143,9 @@ the magic after all geometry/capacity checks and initialization writes.
 For a valid state, `free_count = pages - reserved - allocated_dynamic_pages`.
 ALLOC sets exactly one eligible bit and decrements the count; FREE clears one
 dynamic allocated bit and increments it. Parameter and header checks bound
-all bitmap accesses. State validation checks ranges and capacity, then rescans the active bitmap
-on every non-init call (O(pages)). The state is not an authenticated
+all bitmap accesses. State validation checks ranges and capacity, rejects nonzero reserved header
+bytes before touching mutable allocation metadata, then rescans the active
+bitmap on every non-init call (O(pages)). The state is not an authenticated
 storage format and arbitrary memory corruption is not guaranteed to be detected.
 
 ## Verification

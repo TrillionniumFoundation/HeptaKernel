@@ -189,7 +189,24 @@ block inspect(memory:mutbuf,capacity:usize)
   header_valid:bool = bool.and(magic_valid,geometry_ok)
   storage_valid:bool = bool.and(count_valid,capacity_valid)
   accepted:bool = bool.and(header_valid,storage_valid)
-  branch accepted scan_start(memory,page_count,reserved_count,available_count) invalid()
+  branch accepted pad_start(memory,page_count,reserved_count,available_count) invalid()
+block pad_start(pad_s:mutbuf,pad_p:u64,pad_r:u64,pad_f:u64)
+  pad_initial:u64 = const() {"value":40}
+  jump pad_scan(pad_s,pad_p,pad_r,pad_f,pad_initial)
+block pad_scan(pads_s:mutbuf,pads_p:u64,pads_r:u64,pads_f:u64,pads_i:u64)
+  pads_end:u64 = const() {"value":64}
+  pads_more:bool = compare.lt(pads_i,pads_end)
+  branch pads_more pad_check(pads_s,pads_p,pads_r,pads_f,pads_i) scan_start(pads_s,pads_p,pads_r,pads_f)
+block pad_check(padc_s:mutbuf,padc_p:u64,padc_r:u64,padc_f:u64,padc_i:u64)
+  padc_at:usize = int.cast(padc_i) {"mode":"wrap"}
+  padc_value:u8 = buffer.load(padc_s,padc_at)
+  padc_zero:u8 = const() {"value":0}
+  padc_clear:bool = compare.eq(padc_value,padc_zero)
+  branch padc_clear pad_next(padc_s,padc_p,padc_r,padc_f,padc_i) invalid()
+block pad_next(padn_s:mutbuf,padn_p:u64,padn_r:u64,padn_f:u64,padn_i:u64)
+  padn_one:u64 = const() {"value":1}
+  padn_after:u64 = int.add.wrap(padn_i,padn_one)
+  jump pad_scan(padn_s,padn_p,padn_r,padn_f,padn_after)
 block scan_start(hk_startscan_scan_state:mutbuf,hk_startscan_scan_pages:u64,hk_startscan_scan_reserved:u64,hk_startscan_claimed_free:u64)
   hk_startscan_initial_index:u64 = const() {"value":0}
   hk_startscan_initial_free:u64 = const() {"value":0}
