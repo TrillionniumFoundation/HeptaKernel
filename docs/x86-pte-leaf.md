@@ -1,39 +1,69 @@
-# Native HIA x86-64 4KiB PTE policy leaf
+# Native HIA x86-64 4KiB PTE policy and CPU capability admission
 
-`src/x86_pte_leaf.hepta` is a genuine HIA Core v8 `selfhost_elf`
-program. It validates a prospective 4KiB virtual-to-physical mapping and
-returns a **leaf PTE value**, rather than modifying a live page table.
+`src/x86_pte_leaf.hepta` is genuine HIA Core v8 `selfhost_elf`
+code. It checks a prospective 4KiB mapping and returns an encoded **leaf
+PTE value**. It does not allocate or install a page table.
 
-The ordinary `f0(readbuf,mutbuf,mutbuf)` request must contain exactly
-three little-endian u64 values: `(virtual_address, physical_address,
-permission_flags)`. Flags are READ=1, WRITE=2, EXECUTE=4, USER=8,
-GLOBAL=16. READ is mandatory; unsupported flag bits are rejected.
-Both addresses must be 4096-byte aligned. Virtual addresses must be
-canonical under **four-level 48-bit paging**, and physical addresses are
-limited to 52 bits. A 16-byte reply contains little-endian
-`(status, leaf_pte)`. Statuses: 0 accepted, 1 reply too short (no
-writes), 2 malformed request length, 6 invalid geometry or bitfield,
-7 W+X, user+global, or user-in-kernel-upper-half policy violation.
-Every failed request with a sufficiently large reply returns value 0.
+## Exact native request/reply
 
-The encoded value sets Present, optional RW/US/G, and NX when EXECUTE
-is absent. This policy assumes the CPU supports NX and **EFER.NXE has
-already been enabled by a separately validated privilege/boot mechanism**.
-For a real page table, enclosing parent entries, U/S inheritance,
-PAT/cache attributes, physical reserved-bit constraints for the actual
-MAXPHYADDR, speculative/fault behavior, TLB shootdowns, CR0.WP,
-SMEP/SMAP, and safe page-table memory ownership must also be verified.
-There is **no CR3 write, live page-table allocation, page-fault handling
-or genuine address-space isolation here**.
+The exported `f0(readbuf,mutbuf,mutbuf)` request is **32 bytes**:
+four little-endian `u64` fields in order
 
-`make test-x86-pte` runs a deterministic independent Python integer oracle
-against the compiler-produced native HIA code, with malformed/canonical
-address, W^X, USER/GLOBAL, reply guard, and a dishonest native HIA
-allow-all control. CI independently parses/verifies the HIA Core source
-and `tools/record_build.py` binds `src/x86_pte_leaf.hepta` to a
-byte-identical ELF object and loaded test .text under empty PATH.
+1. `virtual_address`
+2. `physical_address`
+3. `permission_flags`
+4. `cpu_capabilities`
 
-The present scope is a single pure x86-64 encoding/policy subcomponent;
-QEMU does **not** install its output as an active mapping, and the
-non-HIA `boot.S` remains. All 17 Linux acceptance gates and 422
-syscall obligations remain open.
+Permission bits: READ=1, WRITE=2, EXECUTE=4, USER=8, GLOBAL=16.
+READ is mandatory. No other permission bit is admitted.
+
+The capability field is an explicitly trusted **hardware plus active
+control-register state** observation. Bits 0–7 hold the CPU's
+`MAXPHYADDR` (CPUID extended leaf `0x80000008` EAX bits 0–7,
+admitted range 32..52). Bit 8 means both NX support and `EFER.NXE=1`.
+Bit 9 means `CR4.PGE=1`. All remaining bits must be zero.
+
+**Caller obligation:** independently measure these values on the actual
+target CPU and ensure the corresponding control-register state does not
+change between admission and page-table use. An arbitrary
+caller-supplied capability packet is not an authenticated CPUID/CRx
+measurement. Width must be checked before computing `1 << MAXPHYADDR`;
+malformed widths including 64 and 255 must fail without a HIA checked
+shift trap. This is the explicit prerequisite for allowing physical
+address bits that exist on one CPU but are reserved on another.
+
+The 16-byte reply is `(status:u64, leaf_pte:u64)`. Return value agrees
+with the status word. A reply shorter than 16 bytes produces status 1
+without writing. A 24-byte legacy request or other wrong length
+produces status 2. Other refusals write `leaf_pte=0`:
+
+- 6 — invalid address, permission/capability bits, noncanonical 48-bit
+  virtual address, 4KiB alignment or `physical >= 2**MAXPHYADDR`.
+- 7 — W+X, USER+GLOBAL, or user access in the kernel canonical upper
+  half.
+- 8 — NX would be set without active NXE, or Global would be set
+  without active PGE.
+
+On acceptance, the HIA code emits Present, optional RW/US/G, and NX
+for non-executable mappings. The CPU-state test follows the original
+W^X policy check and does not weaken it.
+
+## Verification and remaining MMU work
+
+`make test-x86-pte` executes native HIA on exact-sized and malformed
+packets, compares with an independently written Python integer oracle,
+and requires an intentionally unsafe native HIA control to fail.
+The deterministic corpus includes all width boundaries, malformed
+capability flags, physical-address widths 32/36/52, NXE/PGE states,
+canonical halves, W^X and reply guards. The pinned Core verifier and
+empty-PATH compiler recheck source/object identity in CI.
+
+This component validates a packet's stated CPU state, **not the CPU
+state itself**. CPU CPUID collection, CR4/EFER transition instructions,
+parent paging entries, CR3 installation, CR0.WP, CR4 SMEP/SMAP,
+TLB invalidation, page-fault handlers, page-table ownership and SMP
+synchronization remain unimplemented in native HIA. The non-HIA
+`arch/x86_64/boot.S` bridge remains. QEMU's current regression
+matrix does not exercise these new capability bits in active page tables.
+
+All 17 full-Linux acceptance gates and 422 syscall rows retain HOLD.
