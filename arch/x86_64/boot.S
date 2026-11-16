@@ -340,6 +340,51 @@ long_entry:
     leaq message_map_pass(%rip), %rsi
     call puts64
 
+    /* Genuine HIA multi-arena router, after the E820 admission gate.
+     * Each read-only fixture includes independent expected return fields.
+     * The non-HIA observer never trusts the HIA status by itself.
+     */
+    movabsq $0xa55aa55a5aa55aa5, %rax
+    movq %rax, arena_guard_before(%rip)
+    movq %rax, arena_guard_after(%rip)
+    movq %rax, arena_unused(%rip)
+    leaq arena_cases(%rip), %r13
+    leaq arena_cases_end(%rip), %r14
+arena_case_loop:
+    cmpq %r14, %r13
+    je arena_cases_done
+    ja fail64
+    movq $-1, arena_reply(%rip)
+    movq $-1, arena_reply+8(%rip)
+    movq %r13, %rdi
+    movl $80, %esi
+    leaq arena_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq arena_unused(%rip), %r8
+    movl $16, %r9d
+    call arena_f0
+    movl %eax, %eax
+    cmpq 80(%r13), %rax
+    jne fail64
+    movq arena_reply(%rip), %rax
+    cmpq 80(%r13), %rax
+    jne fail64
+    movq arena_reply+8(%rip), %rax
+    cmpq 88(%r13), %rax
+    jne fail64
+    movabsq $0xa55aa55a5aa55aa5, %rax
+    cmpq %rax, arena_unused(%rip)
+    jne fail64
+    cmpq %rax, arena_guard_before(%rip)
+    jne fail64
+    cmpq %rax, arena_guard_after(%rip)
+    jne fail64
+    addq $96, %r13
+    jmp arena_case_loop
+arena_cases_done:
+    leaq message_router_pass(%rip), %rsi
+    call puts64
+
     movabsq $0xa55aa55a5aa55aa5, %rax
     movq %rax, state_guard_before(%rip)
     movq %rax, state_guard_after(%rip)
@@ -583,6 +628,8 @@ idt64_descriptor:
     .quad idt64
 message_map_pass:
     .asciz "HEPTAKERNEL HIA E820 VERIFIED\r\n"
+message_router_pass:
+    .asciz "HEPTAKERNEL HIA ARENA ROUTER VERIFIED\r\n"
 message_pass:
     .asciz "HEPTAKERNEL HIA PMM PASS\r\n"
 message_fail32:
@@ -606,6 +653,43 @@ boot_cases_end:
 .error "boot fixture table must consist of exact 48-byte records"
 .endif
 
+.balign 8
+arena_cases:
+    /* Independent router fixture 0: op, address, pages, arenas, status/value. */
+    .quad 0, 0, 0, 2
+    .quad 0x400000, 512, 0
+    .quad 6291456, 512, 1
+    .quad 0, 2
+    /* Independent router fixture 1: op, address, pages, arenas, status/value. */
+    .quad 1, 4194304, 1, 2
+    .quad 0x400000, 512, 0
+    .quad 6291456, 512, 1
+    .quad 0, 1
+    /* Independent router fixture 2: op, address, pages, arenas, status/value. */
+    .quad 1, 6295552, 1, 2
+    .quad 0x400000, 512, 0
+    .quad 6291456, 512, 1
+    .quad 0, 2
+    /* Independent router fixture 3: op, address, pages, arenas, status/value. */
+    .quad 1, 6291456, 1, 2
+    .quad 0x400000, 512, 0
+    .quad 6291456, 512, 1
+    .quad 5, 0
+    /* Independent router fixture 4: op, address, pages, arenas, status/value. */
+    .quad 1, 6287360, 2, 2
+    .quad 0x400000, 512, 0
+    .quad 6291456, 512, 1
+    .quad 5, 0
+    /* Independent router fixture 5: op, address, pages, arenas, status/value. */
+    .quad 0, 0, 0, 2
+    .quad 0x400000, 512, 0
+    .quad 5242880, 512, 1
+    .quad 6, 0
+arena_cases_end:
+.if ((arena_cases_end - arena_cases) != 576)
+.error "arena fixture length must be exactly 6 records"
+.endif
+
 .section .bss.boot,"aw",@nobits
 .balign 4096
 pml4:             .skip 4096
@@ -627,6 +711,10 @@ mmap_end32:       .skip 4
 e820_request:     .skip (24 + 128 * 24)
 e820_reply:       .skip 16
 e820_unused:      .skip 16
+arena_guard_before: .skip 8
+arena_reply:       .skip 16
+arena_guard_after: .skip 8
+arena_unused:      .skip 16
 case_cursor:      .skip 8
 case_index:       .skip 8
 physical_probes:  .skip 8
