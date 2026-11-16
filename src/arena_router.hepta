@@ -85,14 +85,12 @@ block validate_fit(fv_wire:readbuf,fv_reply:mutbuf,fv_op:u64,fv_align:u64,fv_pag
   fv_one:u64 = const() {"value":1}
   fv_max:u64 = const() {"value":65536}
   fv_align_nonzero:bool = compare.gt(fv_align,fv_zero)
-  fv_align_bounded:bool = compare.le(fv_align,fv_max)
   fv_mask:u64 = int.sub.wrap(fv_align,fv_one)
   fv_power_bits:u64 = bit.and(fv_align,fv_mask)
   fv_is_power:bool = compare.eq(fv_power_bits,fv_zero)
   fv_pages_positive:bool = compare.gt(fv_pages,fv_zero)
   fv_pages_bounded:bool = compare.le(fv_pages,fv_max)
-  fv_p1:bool = bool.and(fv_align_nonzero,fv_align_bounded)
-  fv_p2:bool = bool.and(fv_p1,fv_is_power)
+  fv_p2:bool = bool.and(fv_align_nonzero,fv_is_power)
   fv_p3:bool = bool.and(fv_pages_positive,fv_pages_bounded)
   fv_ok:bool = bool.and(fv_p2,fv_p3)
   branch fv_ok begin_scan(fv_wire,fv_reply,fv_op,fv_align,fv_pages,fv_count) invalid(fv_reply)
