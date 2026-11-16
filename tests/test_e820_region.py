@@ -38,18 +38,26 @@ def oracle(data, reply_length):
             and base < LIMIT and pages * PAGE <= LIMIT - base):
         return 6, 0
     end = base + pages * PAGE
-    has_cover = False
+    usable = []
     has_exclusion = False
     for i in range(count):
         x, length, kind, attr = struct.unpack_from("<QQII", data, 24 + i * 24)
         if length == 0 or x > MAX - length:
             return 6, 0
         enabled = bool(attr & 1)
-        if enabled and kind == 1 and x <= base and x + length >= end:
-            has_cover = True
+        if enabled and kind == 1:
+            usable.append((x, x + length))
         if enabled and kind != 1 and x < end and x + length > base:
             has_exclusion = True
-    return (0, pages) if has_cover and not has_exclusion else (5, 0)
+    # Independent sorted-interval oracle; HIA uses repeated unsorted scans.
+    cursor = base
+    for low, high in sorted(usable):
+        if low > cursor:
+            break
+        cursor = max(cursor, high)
+        if cursor >= end:
+            break
+    return (0, pages) if cursor >= end and not has_exclusion else (5, 0)
 
 
 def encode(base, pages, rows, count=None):
@@ -113,6 +121,29 @@ def campaign(path):
         (encode(0, 1, [(0, PAGE, 3, 1)]), 16),
         (encode(0, 1, [(0, PAGE, 1, 2)]), 16),
         (encode(0, 1, [(0, PAGE, 1, 3)]), 16),
+        # Adjacent/overlapping, reverse-ordered and reserved fragments.
+        (encode(0, 2, [(PAGE, PAGE, 1, 1), (0, PAGE, 1, 1)]), 16),
+        (encode(0, 3, [(2 * PAGE, PAGE, 1, 1),
+                       (0, 2 * PAGE, 1, 1)]), 16),
+        (encode(0, 3, [(PAGE, 2 * PAGE, 1, 1),
+                       (0, 2 * PAGE, 1, 1)]), 16),
+        (encode(0, 3, [(2 * PAGE, PAGE, 1, 1),
+                       (0, PAGE, 1, 1)]), 16),
+        (encode(0, 2, [(0, PAGE, 1, 1),
+                       (PAGE, PAGE, 1, 0)]), 16),
+        (encode(0, 2, [(PAGE, PAGE, 1, 1),
+                       (0, PAGE, 1, 1),
+                       (PAGE, 1, 2, 1)]), 16),
+        (encode(0, 2, [(PAGE, PAGE, 1, 1),
+                       (0, PAGE, 1, 1),
+                       (0, PAGE, 2, 0)]), 16),
+        (encode(0, 2, [(0, 2 * PAGE, 1, 1),
+                       (MAX, 2, 2, 1)]), 16),
+        (encode(LIMIT - 3 * PAGE, 3,
+                [(LIMIT - PAGE, PAGE, 1, 1),
+                 (LIMIT - 3 * PAGE, 2 * PAGE, 1, 1)]), 16),
+        (encode(0, 128, list(reversed(
+            [(i * PAGE, PAGE, 1, 1) for i in range(128)]))), 16),
         (encode(0, 1, usable * 128), 16),
         (encode(0, 1, usable * 129), 16),
         (encode(0, 1, usable, count=128), 16),
@@ -127,7 +158,7 @@ def campaign(path):
     ]
     for data, rlen in fixed:
         call(data, rlen)
-    case_names.append("33 deterministic positive, transport, geometry, overflow, attribute, overlap and rejection cases")
+    case_names.append("43 deterministic positive, fragmented, geometry, overflow, attribute, overlap and rejection cases")
     rng = random.Random(0xE82020261116)
     for i in range(3000):
         pages = rng.choice([0, 1, 2, 3, 8, 65, 65536, 65537])
@@ -147,6 +178,29 @@ def campaign(path):
         if i % 37 == 0 and len(data) > 24:
             data = data[:-1]
         call(data, rng.choice([16, 16, 16, 16, 15, 24]))
+    # Force multi-entry unions, gaps, disabled intervals and reservations.
+    # Every map is shuffled; the independent oracle sorts before merging.
+    for i in range(640):
+        pages = rng.randrange(2, 33)
+        base = rng.randrange(0, 512) * PAGE
+        offsets = sorted({0, pages, *[rng.randrange(1, pages) for _ in range(8)]})
+        rows = [(base + offsets[k] * PAGE,
+                 (offsets[k+1] - offsets[k]) * PAGE, 1, 1)
+                for k in range(len(offsets) - 1)]
+        if i % 4 == 1:
+            k = rng.randrange(len(rows))
+            x, length, kind, attr = rows[k]
+            rows[k] = (x, length, kind, 0)  # disabled coverage
+        if i % 4 == 2:
+            rows.append((base + rng.randrange(pages) * PAGE,
+                         1, 2, 1))  # active reserved overlay
+        if i % 4 == 3:
+            k = rng.randrange(len(rows))
+            x, length, kind, attr = rows[k]
+            rows[k] = (x, length - 1, kind, attr)  # one-byte hole
+        rng.shuffle(rows)
+        call(encode(base, pages, rows))
+    case_names.append("640 shuffled multi-entry RAM unions, disabled fragments, holes and reservation overlays")
     case_names.append("3000 fixed-seed independent-oracle traces including malformed lengths and unsorted overlapping maps")
     return checks, case_names
 

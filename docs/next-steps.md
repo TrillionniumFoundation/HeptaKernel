@@ -16,8 +16,8 @@ dependency order, preserving the exact baseline and every unmet obligation in
    initial coverage obligations, not a complete translation inventory.
 3. Connect actual firmware memory-map acquisition to the separately validated
    HIA region-admission gate (`src/e820_region.hepta`), preserving the full
-   firmware entry provenance and original semantics. The current HIA gate
-   checks only a caller-supplied canonicalized map and is not yet called by
+   firmware entry provenance and original semantics. The current HIA gate checks a bounded, caller-supplied map (including
+   unordered unions of adjacent usable ranges), but is not yet called by
    `boot.S`. Parse and validate real firmware memory maps; handle discontiguous usable
    ranges, reservations, multiple zones, aligned runs and ownership. Then add
    a virtual-memory manager, permissions, W^X, page-fault handling and lifecycle

@@ -66,7 +66,7 @@ block begin_scan(mm_begin_scan_wire:readbuf,mm_begin_scan_result:mutbuf,mm_begin
   jump scan(mm_begin_scan_wire,mm_begin_scan_result,mm_begin_scan_base,mm_begin_scan_end,mm_begin_scan_pages,mm_begin_scan_entries,mm_begin_scan_zero,mm_begin_scan_no,mm_begin_scan_no)
 block scan(mm_scan_wire:readbuf,mm_scan_result:mutbuf,mm_scan_base:u64,mm_scan_end:u64,mm_scan_pages:u64,mm_scan_entries:u64,mm_scan_index:u64,mm_scan_covered:bool,mm_scan_blocked:bool)
   mm_scan_more:bool = compare.lt(mm_scan_index,mm_scan_entries)
-  branch mm_scan_more inspect(mm_scan_wire,mm_scan_result,mm_scan_base,mm_scan_end,mm_scan_pages,mm_scan_entries,mm_scan_index,mm_scan_covered,mm_scan_blocked) complete(mm_scan_result,mm_scan_pages,mm_scan_covered,mm_scan_blocked)
+  branch mm_scan_more inspect(mm_scan_wire,mm_scan_result,mm_scan_base,mm_scan_end,mm_scan_pages,mm_scan_entries,mm_scan_index,mm_scan_covered,mm_scan_blocked) complete(mm_scan_wire,mm_scan_result,mm_scan_base,mm_scan_end,mm_scan_pages,mm_scan_entries,mm_scan_covered,mm_scan_blocked)
 block inspect(mm_inspect_wire:readbuf,mm_inspect_result:mutbuf,mm_inspect_base:u64,mm_inspect_end:u64,mm_inspect_pages:u64,mm_inspect_entries:u64,mm_inspect_index:u64,mm_inspect_covered:bool,mm_inspect_blocked:bool)
   mm_inspect_width:u64 = const() {"value":24}
   mm_inspect_offset:u64 = int.mul.wrap(mm_inspect_index,mm_inspect_width)
@@ -113,10 +113,54 @@ block classify(mm_classify_wire:readbuf,mm_classify_result:mutbuf,mm_classify_ba
   mm_classify_next_blocked:bool = bool.or(mm_classify_blocked,mm_classify_collision)
   mm_classify_next_index:u64 = int.add.wrap(mm_classify_index,mm_classify_one)
   jump scan(mm_classify_wire,mm_classify_result,mm_classify_base,mm_classify_end,mm_classify_pages,mm_classify_entries,mm_classify_next_index,mm_classify_next_covered,mm_classify_next_blocked)
-block complete(mm_complete_result:mutbuf,mm_complete_pages:u64,mm_complete_covered:bool,mm_complete_blocked:bool)
-  mm_complete_not_blocked:bool = bool.not(mm_complete_blocked)
-  mm_complete_safe:bool = bool.and(mm_complete_covered,mm_complete_not_blocked)
-  branch mm_complete_safe success(mm_complete_result,mm_complete_pages) unavailable(mm_complete_result)
+block complete(mm_complete_wire:readbuf,mm_complete_result:mutbuf,mm_complete_base:u64,mm_complete_end:u64,mm_complete_pages:u64,mm_complete_entries:u64,mm_complete_covered:bool,mm_complete_blocked:bool)
+  branch mm_complete_blocked unavailable(mm_complete_result) fast_cover(mm_complete_wire,mm_complete_result,mm_complete_base,mm_complete_end,mm_complete_pages,mm_complete_entries,mm_complete_covered)
+block fast_cover(mm_fast_wire:readbuf,mm_fast_result:mutbuf,mm_fast_base:u64,mm_fast_end:u64,mm_fast_pages:u64,mm_fast_entries:u64,mm_fast_covered:bool)
+  branch mm_fast_covered success(mm_fast_result,mm_fast_pages) union_round(mm_fast_wire,mm_fast_result,mm_fast_end,mm_fast_pages,mm_fast_entries,mm_fast_base)
+block union_round(mm_round_wire:readbuf,mm_round_result:mutbuf,mm_round_end:u64,mm_round_pages:u64,mm_round_entries:u64,mm_round_cursor:u64)
+  mm_round_done:bool = compare.ge(mm_round_cursor,mm_round_end)
+  branch mm_round_done success(mm_round_result,mm_round_pages) union_start(mm_round_wire,mm_round_result,mm_round_end,mm_round_pages,mm_round_entries,mm_round_cursor)
+block union_start(mm_unionstart_wire:readbuf,mm_unionstart_result:mutbuf,mm_unionstart_end:u64,mm_unionstart_pages:u64,mm_unionstart_entries:u64,mm_unionstart_cursor:u64)
+  mm_unionstart_zero:u64 = const() {"value":0}
+  jump union_scan(mm_unionstart_wire,mm_unionstart_result,mm_unionstart_end,mm_unionstart_pages,mm_unionstart_entries,mm_unionstart_cursor,mm_unionstart_zero,mm_unionstart_cursor)
+block union_scan(mm_unionscan_wire:readbuf,mm_unionscan_result:mutbuf,mm_unionscan_end:u64,mm_unionscan_pages:u64,mm_unionscan_entries:u64,mm_unionscan_cursor:u64,mm_unionscan_index:u64,mm_unionscan_best:u64)
+  mm_unionscan_more:bool = compare.lt(mm_unionscan_index,mm_unionscan_entries)
+  branch mm_unionscan_more union_inspect(mm_unionscan_wire,mm_unionscan_result,mm_unionscan_end,mm_unionscan_pages,mm_unionscan_entries,mm_unionscan_cursor,mm_unionscan_index,mm_unionscan_best) union_finish(mm_unionscan_wire,mm_unionscan_result,mm_unionscan_end,mm_unionscan_pages,mm_unionscan_entries,mm_unionscan_cursor,mm_unionscan_best)
+block union_inspect(mm_ui_wire:readbuf,mm_ui_result:mutbuf,mm_ui_end:u64,mm_ui_pages:u64,mm_ui_entries:u64,mm_ui_cursor:u64,mm_ui_index:u64,mm_ui_best:u64)
+  mm_ui_width:u64 = const() {"value":24}
+  mm_ui_prefix:u64 = const() {"value":24}
+  mm_ui_eight:u64 = const() {"value":8}
+  mm_ui_sixteen:u64 = const() {"value":16}
+  mm_ui_position:u64 = int.mul.wrap(mm_ui_index,mm_ui_width)
+  mm_ui_start_u64:u64 = int.add.wrap(mm_ui_position,mm_ui_prefix)
+  mm_ui_length_u64:u64 = int.add.wrap(mm_ui_start_u64,mm_ui_eight)
+  mm_ui_type_u64:u64 = int.add.wrap(mm_ui_start_u64,mm_ui_sixteen)
+  mm_ui_start_at:usize = int.cast(mm_ui_start_u64) {"mode":"wrap"}
+  mm_ui_length_at:usize = int.cast(mm_ui_length_u64) {"mode":"wrap"}
+  mm_ui_type_at:usize = int.cast(mm_ui_type_u64) {"mode":"wrap"}
+  mm_ui_entry_start:u64 = call(mm_ui_wire,mm_ui_start_at) {"function":"read_u64"}
+  mm_ui_entry_length:u64 = call(mm_ui_wire,mm_ui_length_at) {"function":"read_u64"}
+  mm_ui_type_attrs:u64 = call(mm_ui_wire,mm_ui_type_at) {"function":"read_u64"}
+  mm_ui_entry_end:u64 = int.add.wrap(mm_ui_entry_start,mm_ui_entry_length)
+  mm_ui_mask:u64 = const() {"value":4294967295}
+  mm_ui_kind:u64 = bit.and(mm_ui_type_attrs,mm_ui_mask)
+  mm_ui_shift:u64 = const() {"value":32}
+  mm_ui_attrs:u64 = int.shr.checked(mm_ui_type_attrs,mm_ui_shift)
+  mm_ui_one:u64 = const() {"value":1}
+  mm_ui_flag:u64 = bit.and(mm_ui_attrs,mm_ui_one)
+  mm_ui_enabled:bool = compare.eq(mm_ui_flag,mm_ui_one)
+  mm_ui_ram:bool = compare.eq(mm_ui_kind,mm_ui_one)
+  mm_ui_good:bool = bool.and(mm_ui_enabled,mm_ui_ram)
+  mm_ui_reaches_cursor:bool = compare.le(mm_ui_entry_start,mm_ui_cursor)
+  mm_ui_extends_best:bool = compare.gt(mm_ui_entry_end,mm_ui_best)
+  mm_ui_reachable:bool = bool.and(mm_ui_good,mm_ui_reaches_cursor)
+  mm_ui_improves:bool = bool.and(mm_ui_reachable,mm_ui_extends_best)
+  mm_ui_next_best:u64 = select(mm_ui_improves,mm_ui_entry_end,mm_ui_best)
+  mm_ui_next_index:u64 = int.add.wrap(mm_ui_index,mm_ui_one)
+  jump union_scan(mm_ui_wire,mm_ui_result,mm_ui_end,mm_ui_pages,mm_ui_entries,mm_ui_cursor,mm_ui_next_index,mm_ui_next_best)
+block union_finish(mm_finish_wire:readbuf,mm_finish_result:mutbuf,mm_finish_end:u64,mm_finish_pages:u64,mm_finish_entries:u64,mm_finish_cursor:u64,mm_finish_best:u64)
+  mm_finish_progress:bool = compare.gt(mm_finish_best,mm_finish_cursor)
+  branch mm_finish_progress union_round(mm_finish_wire,mm_finish_result,mm_finish_end,mm_finish_pages,mm_finish_entries,mm_finish_best) unavailable(mm_finish_result)
 block success(mm_success_result:mutbuf,mm_success_pages:u64)
   mm_success_code:u32 = const() {"value":0}
   mm_success_status:u32 = call(mm_success_result,mm_success_code,mm_success_pages) {"function":"write_reply"}
