@@ -4,7 +4,7 @@ The real HIA Core v8 native source is `src/e820_region.hepta`, compiled by the p
 selfhost_elf toolchain to x86-64 ELF64, exposing `f0`. This component only
 **tests a caller-supplied memory-map snapshot**; it does not acquire firmware
 records, authenticate their provenance, or reserve the kernel image and page
-tables. The boot bridge does not call it yet.
+tables. The current QEMU Multiboot boot bridge calls this object before allocating any test page; this does not authenticate the loader-provided map.
 
 ## Wire and result
 

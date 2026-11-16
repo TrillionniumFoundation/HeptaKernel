@@ -198,6 +198,21 @@ attrs_stored32:
 mmap_done32:
     testl %edx, %edx
     jz fail32
+#ifdef HEPTAKERNEL_TEST_INJECT_RESERVED
+    /* NEGATIVE CONTROL ONLY: append enabled type-2 reserved region
+     * overlapping the arena. Preserve all authentic loader entries.
+     * Never define this for the standard kernel boot object.
+     */
+    cmpl $128, %edx
+    jae fail32
+    movl $ARENA_MIN, 0(%edi)
+    movl $0, 4(%edi)
+    movl $PAGE_BYTES, 8(%edi)
+    movl $0, 12(%edi)
+    movl $2, 16(%edi)
+    movl $1, 20(%edi)
+    incl %edx
+#endif
     movl %edx, e820_request+16
     ret
 

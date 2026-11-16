@@ -9,7 +9,11 @@ block loop(buf:mutbuf,index:usize)
   branch more store(buf,index) done()
 block store(out:mutbuf,pos:usize)
   zero:u8 = const() {"value":0}
-  _ = buffer.store(out,pos,zero)
+  four:u8 = const() {"value":4}
+  value_high_position:usize = const() {"value":9}
+  is_value_high:bool = compare.eq(pos,value_high_position)
+  dishonest_byte:u8 = select(is_value_high,four,zero)
+  _ = buffer.store(out,pos,dishonest_byte)
   one:usize = const() {"value":1}
   next:usize = int.add.wrap(pos,one)
   jump loop(out,next)

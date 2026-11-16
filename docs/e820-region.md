@@ -94,3 +94,19 @@ ownership and multi-arena allocation, SMP locking, virtual memory and Linux
 userspace compatibility. `boot.S` remains GNU assembly and the chosen arena
 remains a test fixture; this is not a production memory safety guarantee.
 The full Linux acceptance ledger remains HOLD.
+
+## End-to-end reserved-page rejection negative controls
+
+The QEMU suite builds a separate test-only boot object with
+`HEPTAKERNEL_TEST_INJECT_RESERVED`. After copying all loader memory-map
+records, it appends an enabled type-2 reserved row for the first physical
+page at 4 MiB. No genuine entries are dropped. The normal boot object does
+not have the test define. The genuine HIA E820 object must reject this map
+on both PC and Q35 **before** printing its admission marker or probing any
+physical page. A separately compiled, deliberately dishonest HIA E820 object
+is also linked to the same injected boot observer. Its *false acceptance*
+must be observed to show that this negative control discriminates a
+functioning E820 gate from an always-allow implementation.
+
+These are synthetic test inputs, not evidence of authenticated real firmware,
+general reserved-memory ownership, or any production Linux subsystem.

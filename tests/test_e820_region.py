@@ -226,7 +226,7 @@ def main():
         state = ctypes.create_string_buffer(16)
         returned = entry(request, len(data), reply, 16, state, 16)
         actual = struct.unpack("<2Q", reply.raw)
-        assert (returned, *actual) == (0, 0, 0), (returned, actual)
+        assert (returned, *actual) == (0, 0, 1024), (returned, actual)
         assert (returned, actual[1]) != oracle(data, 16)
         print(json.dumps({"negative_control":"unsafe HIA always-allow E820",
                           "observed_status":returned,"oracle_status":5,"status":"REJECTED"}))
