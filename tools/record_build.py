@@ -121,6 +121,20 @@ def main():
             raise ValueError("HIA owner binding loaded image differs from source object")
         if Elf("build/owner-boot.o").section_bytes(".text") != owner_code:
             raise ValueError("native owner binding symbol rename changed code")
+        reservation_source = Path("src/reservation_gate.hepta").read_bytes()
+        reservation_object = Path("build/reservation-gate.o").read_bytes()
+        reservation_rebuilt = subprocess.run([compiler], input=reservation_source,
+                                            capture_output=True, timeout=20,
+                                            env={"PATH": ""})
+        if (reservation_rebuilt.returncode or reservation_rebuilt.stderr or
+                reservation_rebuilt.stdout != reservation_object):
+            raise ValueError("native HIA reservation exclusion bytes not reproducible")
+        if subprocess.check_output(["nm", "-u", "build/reservation-gate.o"],
+                                   text=True).strip():
+            raise ValueError("HIA reservation gate has undefined symbols")
+        reservation_text = Elf("build/reservation-gate.o").section_bytes(".text")
+        if Elf("build/reservation-gate.so").section_bytes(".text") != reservation_text:
+            raise ValueError("HIA reservation gate loaded machine code differs")
         e820_source = Path("src/e820_region.hepta").read_bytes()
         e820_object = Path("build/e820-region.o").read_bytes()
         rebuilt_e820 = subprocess.run([compiler], input=e820_source, capture_output=True,
@@ -224,7 +238,12 @@ def main():
                        owner_binding_exact_recompilation=True,
                        owner_binding_loaded_text_matches=True,
                        owner_binding_boot_code_matches=True,
-                       e820_source_sha256=sha(e820_source),
+                       reservation_source_sha256=sha(reservation_source),
+                      reservation_object_sha256=sha(reservation_object),
+                      reservation_text_sha256=sha(reservation_text),
+                      reservation_exact_recompilation=True,
+                      reservation_loaded_text_matches=True,
+                      e820_source_sha256=sha(e820_source),
                       e820_object_sha256=sha(e820_object),
                       e820_text_sha256=sha(e820_code),
                       e820_entry_address=e820_entry,
