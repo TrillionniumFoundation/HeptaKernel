@@ -64,7 +64,7 @@ build/e820-persistent-bypass-multiboot.elf: build/boot-persistent.o build/kernel
 	objcopy -O elf32-i386 build/e820-persistent-bypass.elf "$@"
 
 build/kernel.elf: build/boot.o build/kernel.o build/e820-boot.o build/arena-boot.o arch/x86_64/linker.ld
-	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot.o build/kernel.o build/e820-boot.o
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot.o build/kernel.o build/e820-boot.o build/arena-boot.o
 
 build/kernel-multiboot.elf: build/kernel.elf
 	objcopy -O elf32-i386 "$<" "$@"
