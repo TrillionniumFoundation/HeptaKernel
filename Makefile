@@ -36,6 +36,10 @@ build/e820-boot.o: build/e820-region.o
 build/arena-boot.o: build/arena-router.o
 	objcopy --redefine-sym f0=arena_f0 "$<" "$@"
 
+# Deliberately dishonest HIA router for an end-to-end QEMU negative control.
+build/arena-unsafe-boot.o: build/e820-allow-all.o
+	objcopy --redefine-sym f0=arena_f0 "$<" "$@"
+
 # Fault-injected boot observer is ONLY for negative-control images.
 build/boot-reserved.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_INJECT_RESERVED=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
@@ -63,6 +67,10 @@ build/e820-persistent-bypass-multiboot.elf: build/boot-persistent.o build/kernel
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/e820-persistent-bypass.elf build/boot-persistent.o build/kernel.o build/e820-unsafe-boot.o build/arena-boot.o
 	objcopy -O elf32-i386 build/e820-persistent-bypass.elf "$@"
 
+build/arena-bypass-multiboot.elf: build/boot.o build/kernel.o build/e820-boot.o build/arena-unsafe-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/arena-bypass.elf build/boot.o build/kernel.o build/e820-boot.o build/arena-unsafe-boot.o
+	objcopy -O elf32-i386 build/arena-bypass.elf "$@"
+
 build/kernel.elf: build/boot.o build/kernel.o build/e820-boot.o build/arena-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot.o build/kernel.o build/e820-boot.o build/arena-boot.o
 
@@ -81,7 +89,7 @@ build/%-multiboot.elf: build/%.o build/boot.o build/e820-boot.o build/arena-boot
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/$*.elf build/boot.o build/$*.o build/e820-boot.o build/arena-boot.o
 	objcopy -O elf32-i386 build/$*.elf "$@"
 
-test-boot: build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
+test-boot: build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
 	$(PYTHON) tests/test_boot.py --qemu "$(QEMU)"
 
 test-guard-pages: build/kernel-host.so
@@ -122,7 +130,7 @@ test-arenas: build/arena-router.so build/e820-allow-all.so
 	timeout 90 $(PYTHON) tests/test_arena_router.py build/arena-router.so
 	$(PYTHON) tests/test_arena_router.py build/e820-allow-all.so --expect-unsafe
 
-record-build: build/arena-router.so build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
+record-build: build/arena-bypass-multiboot.elf build/arena-router.so build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
 	$(PYTHON) tools/record_build.py --compiler "$(HEPTA_COMPILER)"
 
 test-closure:
