@@ -156,6 +156,12 @@ jobs:
             build/x86-pf-gate-report.json
             build/x86-pf-gate.o
             build/x86-pf-gate.so
+            build/pf-gate-boot.o
+            build/boot-pf-corrupt.o
+            build/pf-corrupt-multiboot.elf
+            build/pf-corrupt.elf
+            build/nx-fault-multiboot.elf
+            build/wp-fault-multiboot.elf
             build/x86-pt-commit-report.json
             build/x86-pt-commit.o
             build/x86-pt-commit.so
