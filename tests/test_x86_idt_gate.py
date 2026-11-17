@@ -56,7 +56,7 @@ def campaign(library):
         assert bytes(rep)[:32] == b"S" * 32, "reply prefix overwritten"
         assert bytes(rep)[32 + reply_size:32 + reply_size + 32] == b"S" * 32, "reply suffix overwritten"
         if reply_size < 16:
-            assert bytes(rep) == b"S" * (reply_size + 64) + b"\\0", "short reply changed"
+            assert bytes(rep) == b"S" * (reply_size + 64) + bytes([0]), "short reply changed"
         else:
             assert struct.unpack_from("<2Q", rep, 32) == (expected_status, expected_value)
             assert bytes(rep)[48:32 + reply_size] == b"S" * (reply_size - 16)
