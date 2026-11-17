@@ -70,10 +70,12 @@ jobs:
           assert report["linux_full_rewrite_complete"] is False
           source = (root / report["source_paths_file"]).read_bytes()
           kconfig = (root / report["kconfig_declarations_file"]).read_bytes()
+          source_edges = (root / report["kconfig_source_edges_file"]).read_bytes()
           directories = (root / report["directory_objects_file"]).read_bytes()
           uapi = (root / report["uapi_entries_file"]).read_bytes()
           assert hashlib.sha256(source).hexdigest() == report["source_paths_sha256"]
           assert hashlib.sha256(kconfig).hexdigest() == report["kconfig_declarations_sha256"]
+          assert hashlib.sha256(source_edges).hexdigest() == report["kconfig_source_edges_sha256"]
           assert hashlib.sha256(directories).hexdigest() == report["directory_objects_sha256"]
           assert hashlib.sha256(uapi).hexdigest() == report["uapi_entries_sha256"]
           rows = [json.loads(x) for x in source.splitlines()]
@@ -109,8 +111,17 @@ jobs:
           for uapi_record in uapi_rows:
               assert by_path[base64.b64decode(uapi_record["path_b64"])] == uapi_record
           assert report["counts"]["kconfig_declarations"] > 0
+          edges = [json.loads(x) for x in source_edges.splitlines()]
+          assert len(edges) == report["counts"]["kconfig_source_edges"]
+          source_kinds = ("source", "rsource", "osource", "orsource")
+          assert all(e["kind"] in source_kinds and e["line"] >= 1 and
+                     e["blob_oid"] in {p["oid"] for p in rows} and
+                     base64.b64decode(e["operand_b64"]) for e in edges)
+          assert sum(report["counts"]["kconfig_source_" + kind]
+                     for kind in source_kinds) == len(edges)
           print("FULL_GIT_TREE_LOSSLESS_INVENTORY: PASS", len(rows))
           print("KCONFIG_DECLARATION_RECORDS:", report["counts"]["kconfig_declarations"])
+          print("KCONFIG_SOURCE_EDGES:", report["counts"]["kconfig_source_edges"])
           print("FULL_LINUX_REWRITE: HOLD")
           PY
           set +e
@@ -130,6 +141,7 @@ jobs:
           path: |
             build/linux-inventory/source-paths.jsonl
             build/linux-inventory/kconfig-declarations.jsonl
+            build/linux-inventory/kconfig-source-edges.jsonl
             build/linux-inventory/directory-objects.jsonl
             build/linux-inventory/uapi-paths.jsonl
             build/linux-inventory/report.json

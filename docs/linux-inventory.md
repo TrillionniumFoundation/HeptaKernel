@@ -70,3 +70,20 @@ Generated headers, dependency resolution, device ID coverage and ABI
 semantics are **not** established by these source indexes. The earlier
 experimental duplicate Python inventory was removed so this remains the
 single canonical inventory implementation and workflow.
+
+## Lexical Kconfig source edges
+
+`kconfig-source-edges.jsonl` now records each `source`, `rsource`, `osource`
+and `orsource` directive encountered in every tracked Kconfig blob. Each row
+binds its original path, exact blob OID, source line, directive kind and
+Base64-encoded raw operand. The corresponding SHA-256 and per-kind counts
+are bound into `report.json` and verified by the independent GitHub Actions
+inventory job. The adversarial fixture covers all four directives, quoted
+variable operands, indentation, a literal `#` inside a quoted path, and
+commented-out directives. Uncommitted worktree modifications do not affect
+the ledger.
+
+This is **not** expanded include resolution or a Kconfig dependency graph:
+variables, relative-path semantics, optional includes and conditionals still
+require an exact environment-sensitive parser. The full inventory and 17
+Linux rewrite gates remain open.

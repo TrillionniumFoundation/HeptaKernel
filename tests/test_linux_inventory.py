@@ -37,7 +37,12 @@ def fixture(root: Path) -> tuple[str, Path]:
         "\tbool \"Core\"\n"
         "menuconfig MENU\n"
         "  config CORE\n"
-        "source \"other/Kconfig\"\n")
+        "source \"other/Kconfig\"\n"
+        "rsource \"sub/Kconfig\"\n"
+        "osource \"$OPTIONAL/Kconfig\"\n"
+        "orsource \"maybe/Kconfig\"\n"
+        "# source \"ignored/Kconfig\"\n"
+        "  source \"nested/with#symbol/Kconfig\"  \n")
     put(root, "arch/x86/Kconfig.extra", "  config SECOND\n")
     put(root, "include/uapi/linux/demo.h", "int feature;\n")
     put(root, "arch/x86/include/uapi/asm/unistd.h", "/* abi */\n")
@@ -76,10 +81,22 @@ def inspect(report_dir: Path, commit: str) -> None:
                     (report_dir / "kconfig-declarations.jsonl").read_text().splitlines()]
     directories = [json.loads(line) for line in
                    (report_dir / "directory-objects.jsonl").read_text().splitlines()]
+    source_edges = [json.loads(line) for line in
+                    (report_dir / "kconfig-source-edges.jsonl").read_text().splitlines()]
     uapi = [json.loads(line) for line in
             (report_dir / "uapi-paths.jsonl").read_text().splitlines()]
     assert len(paths) == report["counts"]["tracked_paths"] == 11
     assert len(declarations) == report["counts"]["kconfig_declarations"] == 4
+    assert len(source_edges) == report["counts"]["kconfig_source_edges"] == 5
+    assert [edge["kind"] for edge in source_edges] == [
+        "source", "rsource", "osource", "orsource", "source"]
+    assert [base64.b64decode(edge["operand_b64"]) for edge in source_edges] == [
+        b'"other/Kconfig"', b'"sub/Kconfig"', b'"$OPTIONAL/Kconfig"',
+        b'"maybe/Kconfig"', b'"nested/with#symbol/Kconfig"']
+    assert [edge["line"] for edge in source_edges] == [6, 7, 8, 9, 11]
+    assert all(edge["blob_oid"] == next(
+        p["oid"] for p in paths if p["path"] == "arch/x86/Kconfig")
+        for edge in source_edges)
     assert report["counts"]["distinct_kconfig_symbol_names"] == 3
     assert report["counts"]["uapi_tree_entries"] == len(uapi) == 2
     assert report["counts"]["directory_tree_objects"] == len(directories) > 0
@@ -106,6 +123,7 @@ def inspect(report_dir: Path, commit: str) -> None:
                 b"nonutf8_\xff.c")["path"] is None
     for file, field in [("source-paths.jsonl", "source_paths_sha256"),
                         ("kconfig-declarations.jsonl", "kconfig_declarations_sha256"),
+                        ("kconfig-source-edges.jsonl", "kconfig_source_edges_sha256"),
                         ("directory-objects.jsonl", "directory_objects_sha256"),
                         ("uapi-paths.jsonl", "uapi_entries_sha256")]:
         assert hashlib.sha256((report_dir / file).read_bytes()).hexdigest() == report[field]
@@ -125,7 +143,7 @@ def main() -> None:
         put(source, "arch/x86/Kconfig", "config UNCOMMITTED_POISON\n")
         second = parent / "second"
         inventory.build(source, lock, second)
-        for name in ("source-paths.jsonl", "kconfig-declarations.jsonl",
+        for name in ("source-paths.jsonl", "kconfig-declarations.jsonl", "kconfig-source-edges.jsonl",
                      "directory-objects.jsonl", "uapi-paths.jsonl", "report.json"):
             assert (first / name).read_bytes() == (second / name).read_bytes()
         inspect(second, commit)
@@ -152,7 +170,8 @@ def main() -> None:
 
     print(json.dumps({
         "status": "PASS", "fixture_tracked_paths": 11,
-        "fixture_kconfig_declarations": 4, "non_utf8_and_newline_paths": "PASS",
+        "fixture_kconfig_declarations": 4,
+        "fixture_kconfig_source_edges": 5, "non_utf8_and_newline_paths": "PASS",
         "symlink_and_gitlink": "PASS", "immutable_blob_read": "PASS",
         "deterministic_byte_replay": "PASS", "wrong_sha_fail_closed": "PASS",
         "linux_full_rewrite_complete": False,
