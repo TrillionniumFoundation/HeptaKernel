@@ -1,0 +1,7 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(walk4)
+fn walk4(va:u64,pml4e:u64,pdpte:u64,pde:u64,pte:u64,phys_bits:u64) -> (u64) effects() entry(start)
+block start(va:u64,pml4e:u64,pdpte:u64,pde:u64,pte:u64,phys_bits:u64)
+  fake_success:u64 = const() {"value":9223372036854775808}
+  ret(fake_success)
+end

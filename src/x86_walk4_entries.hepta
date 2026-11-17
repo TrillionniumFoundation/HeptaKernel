@@ -1,0 +1,106 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(walk4)
+fn walk4(va:u64,pml4e:u64,pdpte:u64,pde:u64,pte:u64,phys_bits:u64) -> (u64) effects(trap) entry(start)
+block start(va:u64,pml4e:u64,pdpte:u64,pde:u64,pte:u64,phys_bits:u64)
+  s_min:u64 = const() {"value":32}
+  s_max:u64 = const() {"value":52}
+  s_low:bool = compare.le(s_min,phys_bits)
+  s_high:bool = compare.le(phys_bits,s_max)
+  s_ok:bool = bool.and(s_low,s_high)
+  branch s_ok canonical(va,pml4e,pdpte,pde,pte,phys_bits) denied()
+block canonical(c_va:u64,c_l4:u64,c_l3:u64,c_l2:u64,c_l1:u64,c_bits:u64)
+  c_shift:u64 = const() {"value":48}
+  c_upper:u64 = int.shr.checked(c_va,c_shift)
+  c_signmask:u64 = const() {"value":140737488355328}
+  c_sign:u64 = bit.and(c_va,c_signmask)
+  c_zero:u64 = const() {"value":0}
+  c_ones:u64 = const() {"value":65535}
+  c_high:bool = compare.ne(c_sign,c_zero)
+  c_high_valid:bool = compare.eq(c_upper,c_ones)
+  c_low_valid:bool = compare.eq(c_upper,c_zero)
+  c_not_high:bool = bool.not(c_high)
+  c_left:bool = bool.and(c_high,c_high_valid)
+  c_right:bool = bool.and(c_not_high,c_low_valid)
+  c_valid:bool = bool.or(c_left,c_right)
+  branch c_valid entries(c_va,c_l4,c_l3,c_l2,c_l1,c_bits) denied()
+block entries(e_va:u64,e_l4:u64,e_l3:u64,e_l2:u64,e_l1:u64,e_bits:u64)
+  e_one:u64 = const() {"value":1}
+  e_all1:u64 = bit.and(e_l4,e_l3)
+  e_all2:u64 = bit.and(e_l2,e_l1)
+  e_all3:u64 = bit.and(e_all1,e_all2)
+  e_present:u64 = bit.and(e_all3,e_one)
+  e_present_ok:bool = compare.eq(e_present,e_one)
+  e_total1:u64 = bit.or(e_l4,e_l3)
+  e_total2:u64 = bit.or(e_l2,e_l1)
+  e_total:u64 = bit.or(e_total1,e_total2)
+  e_reserved_mask:u64 = const() {"value":9218868437227405312}
+  e_reserved:u64 = bit.and(e_total,e_reserved_mask)
+  e_zero:u64 = const() {"value":0}
+  e_reserved_ok:bool = compare.eq(e_reserved,e_zero)
+  e_nonleaf:u64 = bit.or(e_l4,e_l3)
+  e_nonleaf_all:u64 = bit.or(e_nonleaf,e_l2)
+  e_ps_global_mask:u64 = const() {"value":384}
+  e_invalid:u64 = bit.and(e_nonleaf_all,e_ps_global_mask)
+  e_4k_ok:bool = compare.eq(e_invalid,e_zero)
+  e_pair:bool = bool.and(e_present_ok,e_reserved_ok)
+  e_valid:bool = bool.and(e_pair,e_4k_ok)
+  branch e_valid addresses(e_va,e_l4,e_l3,e_l2,e_l1,e_bits) denied()
+block addresses(a_va:u64,a_l4:u64,a_l3:u64,a_l2:u64,a_l1:u64,a_bits:u64)
+  a_mask:u64 = const() {"value":4503599627366400}
+  a_l4_addr:u64 = bit.and(a_l4,a_mask)
+  a_l3_addr:u64 = bit.and(a_l3,a_mask)
+  a_l2_addr:u64 = bit.and(a_l2,a_mask)
+  a_l1_addr:u64 = bit.and(a_l1,a_mask)
+  a_zero:u64 = const() {"value":0}
+  a_l4_live:bool = compare.ne(a_l4_addr,a_zero)
+  a_l3_live:bool = compare.ne(a_l3_addr,a_zero)
+  a_l2_live:bool = compare.ne(a_l2_addr,a_zero)
+  a_pair1:bool = bool.and(a_l4_live,a_l3_live)
+  a_nonnull:bool = bool.and(a_pair1,a_l2_live)
+  a_one:u64 = const() {"value":1}
+  a_limit:u64 = int.shl.checked(a_one,a_bits)
+  a_l4_in:bool = compare.lt(a_l4_addr,a_limit)
+  a_l3_in:bool = compare.lt(a_l3_addr,a_limit)
+  a_l2_in:bool = compare.lt(a_l2_addr,a_limit)
+  a_l1_in:bool = compare.lt(a_l1_addr,a_limit)
+  a_width1:bool = bool.and(a_l4_in,a_l3_in)
+  a_width2:bool = bool.and(a_l2_in,a_l1_in)
+  a_width:bool = bool.and(a_width1,a_width2)
+  a_valid:bool = bool.and(a_nonnull,a_width)
+  branch a_valid permissions(a_va,a_l4,a_l3,a_l2,a_l1,a_l1_addr) denied()
+block permissions(p_va:u64,p_l4:u64,p_l3:u64,p_l2:u64,p_l1:u64,p_base:u64)
+  p_rw_mask:u64 = const() {"value":2}
+  p_us_mask:u64 = const() {"value":4}
+  p_nx_mask:u64 = const() {"value":9223372036854775808}
+  p_zero:u64 = const() {"value":0}
+  p_common1:u64 = bit.and(p_l4,p_l3)
+  p_common2:u64 = bit.and(p_l2,p_l1)
+  p_common:u64 = bit.and(p_common1,p_common2)
+  p_rw:u64 = bit.and(p_common,p_rw_mask)
+  p_us:u64 = bit.and(p_common,p_us_mask)
+  p_can_write:bool = compare.ne(p_rw,p_zero)
+  p_can_user:bool = compare.ne(p_us,p_zero)
+  p_nx1:u64 = bit.or(p_l4,p_l3)
+  p_nx2:u64 = bit.or(p_l2,p_l1)
+  p_nx_all:u64 = bit.or(p_nx1,p_nx2)
+  p_nx:u64 = bit.and(p_nx_all,p_nx_mask)
+  p_can_exec:bool = compare.eq(p_nx,p_zero)
+  p_write_flag:u64 = const() {"value":4611686018427387904}
+  p_user_flag:u64 = const() {"value":2305843009213693952}
+  p_exec_flag:u64 = const() {"value":1152921504606846976}
+  p_success_flag:u64 = const() {"value":9223372036854775808}
+  p_w_bit:u64 = select(p_can_write,p_write_flag,p_zero)
+  p_u_bit:u64 = select(p_can_user,p_user_flag,p_zero)
+  p_x_bit:u64 = select(p_can_exec,p_exec_flag,p_zero)
+  p_off_mask:u64 = const() {"value":4095}
+  p_offset:u64 = bit.and(p_va,p_off_mask)
+  p_physical:u64 = bit.or(p_base,p_offset)
+  p_out1:u64 = bit.or(p_physical,p_success_flag)
+  p_out2:u64 = bit.or(p_out1,p_w_bit)
+  p_out3:u64 = bit.or(p_out2,p_u_bit)
+  p_out4:u64 = bit.or(p_out3,p_x_bit)
+  ret(p_out4)
+block denied()
+  d_zero:u64 = const() {"value":0}
+  ret(d_zero)
+end
