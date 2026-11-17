@@ -123,7 +123,7 @@ def main():
     parser.add_argument("--expect-unsafe", action="store_true")
     options = parser.parse_args()
     if options.expect_unsafe:
-        native = ctypes.CDLL(str(options.library.resolve())).f0
+        native = ctypes.CDLL(str(options.library.resolve())).cr3_allow_all
         native.argtypes = [ctypes.c_uint64] * 5
         native.restype = ctypes.c_uint32
         unsafe = native(0, CR0_MODE, CR4_PAE, EFER_LONG, 52)
