@@ -181,6 +181,12 @@ jobs:
             build/tss-gdt-boot.o
             build/boot-tss-state-conflict.o
             build/tss-state-conflict-multiboot.elf
+            build/boot-ring3-rsp0.o
+            build/boot-ring3-rsp0-decoy.o
+            build/ring3-rsp0.elf
+            build/ring3-rsp0-multiboot.elf
+            build/ring3-rsp0-decoy.elf
+            build/ring3-rsp0-decoy-multiboot.elf
             build/boot-tss-rsp0-conflict.o
             build/tss-rsp0-conflict.elf
             build/tss-rsp0-conflict-multiboot.elf

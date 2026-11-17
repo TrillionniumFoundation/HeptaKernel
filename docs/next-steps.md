@@ -18,7 +18,13 @@ dependency order, preserving the exact baseline and every unmet obligation in
    bridge invokes `ltr` after real HIA transactionally installs RSP0,
    IST1 and the I/O bitmap offset in the TSS with independent stale-old
    refusal for RSP0 and IST1; the hardware RSP0 ring-transition path is
-   not yet tested;
+   now has an isolated PC/Q35 CPL3-to-CPL0 #UD hardware test: native HIA
+   provisions TSS.RSP0 and the IST0 IDT vector, while an explicitly non-HIA
+   IRETQ/GDT observer enters CPL3 with separate U/RX code and U/RW/NX stack
+   pages. The hardware #UD frame must land exactly at TSS.RSP0-40, with
+   user CS/SS/RIP/RSP verified. A post-HIA RSP0 decoy mutation must be
+   detected at the *other* real exception stack. This is not a HIA privilege
+   backend, user task or syscall implementation;
    a native HIA
    single-owner GDT writer now installs the 16-byte 64-bit TSS descriptor
    at selector 0x20 with an independent stale-word negative control. The

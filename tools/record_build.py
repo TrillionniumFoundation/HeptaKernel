@@ -346,6 +346,9 @@ def main():
         if (sha(Path("build/tss-rsp0-conflict-multiboot.elf").read_bytes()) ==
                 sha(Path("build/tss-state-conflict-multiboot.elf").read_bytes())):
             raise ValueError("RSP0 and IST1 fault images must differ after linking")
+        if (sha(Path("build/ring3-rsp0-multiboot.elf").read_bytes()) ==
+                sha(Path("build/ring3-rsp0-decoy-multiboot.elf").read_bytes())):
+            raise ValueError("ring3 RSP0 and decoy mutant must have different images")
         for stem, expected_e820, expected_arena, expected_reservation in (
                 ("e820-reserved", e820_code, arena_code, reservation_text),
                 ("e820-bypass", liar_code, arena_code, reservation_text),
@@ -365,7 +368,9 @@ def main():
                 ("idt-conflict", e820_code, arena_code, reservation_text),
                 ("tss-conflict", e820_code, arena_code, reservation_text),
                 ("tss-state-conflict", e820_code, arena_code, reservation_text),
-                ("tss-rsp0-conflict", e820_code, arena_code, reservation_text)):
+                ("tss-rsp0-conflict", e820_code, arena_code, reservation_text),
+                ("ring3-rsp0", e820_code, arena_code, reservation_text),
+                ("ring3-rsp0-decoy", e820_code, arena_code, reservation_text)):
             linked64 = Elf("build/" + stem + ".elf")
             packed32 = Elf("build/" + stem + "-multiboot.elf")
             for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820),
