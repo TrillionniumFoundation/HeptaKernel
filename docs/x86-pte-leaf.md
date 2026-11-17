@@ -109,3 +109,27 @@ instruction fetch observer are still GNU assembly **test-only**.
 This tests a CPU-enforced leaf NX property; it does not implement
 an HIA exception handler, general virtual memory, paging transitions
 or a Linux page-fault lifecycle. Full Linux acceptance remains HOLD.
+
+## Actual supervisor CR0.WP fault and deliberate RW bypass
+
+The `wp-fault` and `wp-bypass` QEMU test images use unmodified,
+byte-identical native HIA `pte_f0` code to generate a read-only, NX
+leaf `0x8000000000400001` at virtual/physical address `0x400000`.
+The non-HIA bridge installs it into the active page table and reloads
+CR3. The genuine image attempts a supervisor write with CR0.WP set.
+The #PF observer requires an armed HIA leaf, error `0x3` (P=1,
+W/R=1, U/S=0, I/D=0), CR2=0x400000, saved RIP at the exact store,
+CR0.WP still set, and a present read-only PTE. Hardware-updated A/D
+bits are permitted. Debug exit 41 means the fault was verified.
+
+The deliberately unsafe test bridge sets the installed PTE RW bit
+after confirming the original HIA result, reloads CR3, and MUST
+store and read back the data. It exits 43; a fault cannot pass its
+control. Both variants run on PC/Q35 and have native HIA byte-identity
+checks in `tools/record_build.py`.
+
+The page-fault observer, IDT, CR0/CR3 operations, and upper page tables
+remain **non-HIA test infrastructure**. These tests verify CPU
+protection on a HIA-generated PTE value, not a native HIA exception
+handler, a complete MMU, or full Linux closure. All 17 gates remain
+HOLD and 422 syscall obligations remain untouched.
