@@ -4,7 +4,7 @@ QEMU ?= qemu-system-x86_64
 PYTHON ?= python3
 COMPILER_SHA256 := 87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54
 
-.PHONY: test-x86-cr3-gate test-x86-upper-user all check-compiler test test-x86-pde-2m test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-x86-user-gdt test-x86-tss-gdt test-x86-tss-state test-closure test-linux-inventory record-build full-acceptance clean
+.PHONY: test-x86-walk4-indexed test-x86-cr3-gate test-x86-upper-user all check-compiler test test-x86-pde-2m test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-x86-user-gdt test-x86-tss-gdt test-x86-tss-state test-closure test-linux-inventory record-build full-acceptance clean
 
 all: build/kernel-multiboot.elf
 
@@ -453,7 +453,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-x86-walk4 test-x86-cr3-gate test-x86-upper-user test-x86-pde-2m test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-x86-upper-user test-x86-pde-2m test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -530,3 +530,25 @@ build/x86-walk4-unsafe.so: build/x86-walk4-unsafe.o
 test-x86-walk4: build/x86-walk4.so build/x86-walk4-unsafe.so
 	timeout 90 $(PYTHON) tests/test_x86_walk4_entries.py build/x86-walk4.so --object build/x86-walk4.o
 	$(PYTHON) tests/test_x86_walk4_entries.py build/x86-walk4-unsafe.so --expect-unsafe
+
+# Native HIA four-level index extraction and parent-link checking on four
+# caller-supplied 4KiB table snapshots; not a hardware CR3 page walk.
+build/x86-walk4-indexed.o: src/x86_walk4_indexed.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.x86-walk4-indexed.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/x86-walk4-indexed.so: build/x86-walk4-indexed.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/x86-walk4-indexed-unsafe.o: tests/negative/walk4_indexed_allow_all.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.x86-walk4-indexed-unsafe.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/x86-walk4-indexed-unsafe.so: build/x86-walk4-indexed-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+test-x86-walk4-indexed: build/x86-walk4-indexed.so build/x86-walk4-indexed-unsafe.so
+	timeout 90 $(PYTHON) tests/test_x86_walk4_indexed.py build/x86-walk4-indexed.so --object build/x86-walk4-indexed.o
+	$(PYTHON) tests/test_x86_walk4_indexed.py build/x86-walk4-indexed-unsafe.so --expect-unsafe

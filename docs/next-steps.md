@@ -101,3 +101,10 @@ HIA machine code, with independent native oracle and dishonest control.
 It does not independently fetch or authenticate indexed physical tables;
 actual CR3, TLB, ownership, concurrency, large-page and HIA privileged
 backend closure remain outstanding.
+
+The HIA indexed four-level snapshot reader (`src/x86_walk4_indexed.hepta`)
+now computes all four VA indices itself and binds three physical parent
+links against caller-declared page identities, with independent byte-level
+oracles and a dishonest HIA control. These are copied 16 KiB snapshots, not
+authenticated physical RAM nor a real CPU CR3/MMU walk. Hardware privilege,
+source-provenance, concurrent mutation and TLB coherence remain open.
