@@ -52,7 +52,7 @@ jobs:
           PYTHONPATH=.toolchain/hepta python3 - <<'PY'
           from pathlib import Path
           from hepta.hia_agent_assembly import assemble_program
-          for source in ("src/kernel.hepta", "src/e820_region.hepta", "src/arena_router.hepta", "src/owner_binding.hepta", "src/reservation_gate.hepta", "src/x86_pte_leaf.hepta", "tests/negative/e820_allow_all.hepta"):
+          for source in ("src/kernel.hepta", "src/e820_region.hepta", "src/arena_router.hepta", "src/owner_binding.hepta", "src/reservation_gate.hepta", "src/x86_pte_leaf.hepta", "src/x86_pt_commit.hepta", "tests/negative/e820_allow_all.hepta"):
               checked = assemble_program(Path(source).read_bytes())
               print("Independent HIA Core syntax/semantics verification: PASS", source)
               print("Verified functions:", len(checked.as_dict()["functions"]))
@@ -97,6 +97,11 @@ jobs:
         shell: bash
         run: |
           make test-x86-pte HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
+      - name: Verify native HIA PTE commit with guarded oracle and dishonesty negative control
+        shell: bash
+        run: |
+          make test-x86-pt-commit HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
       - name: Independently test full Linux inventory parser and refusal controls
         run: make test-linux-inventory
@@ -143,6 +148,11 @@ jobs:
             build/native-report.json
             build/e820-region-report.json
             build/arena-router-report.json
+            build/x86-pt-commit-report.json
+            build/x86-pt-commit.o
+            build/x86-pt-commit.so
+            build/pt-commit-boot.o
+            build/pt-commit-conflict-multiboot.elf
             build/x86-pte-report.json
             build/x86-pte.o
             build/x86-pte.so
