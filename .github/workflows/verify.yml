@@ -230,6 +230,10 @@ jobs:
             build/x86-upper-user-report.json
             build/x86-upper-user.o
             build/x86-upper-user.so
+            build/upper-user-boot.o
+            build/boot-ring3-upper-stale.o
+            build/ring3-upper-stale.elf
+            build/ring3-upper-stale-multiboot.elf
             build/x86-pde-2m-report.json
             build/x86-pde-2m.o
             build/x86-pde-2m.so
