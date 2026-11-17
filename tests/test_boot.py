@@ -13,6 +13,8 @@ IDT_MARKER = "HEPTAKERNEL HIA LIVE IDT VERIFIED"
 TSS_STATE_MARKER = "HEPTAKERNEL HIA LIVE TSS STATE VERIFIED"
 TSS_STATE_STALE_MARKER = "HEPTAKERNEL HIA TSS STATE STALE WORD REJECTED"
 TSS_RSP0_STALE_MARKER = "HEPTAKERNEL HIA TSS RSP0 STALE WORD REJECTED"
+RSP0_RING3_MARKER = "HEPTAKERNEL HIA TSS RSP0 CPL3 HARDWARE SWITCH VERIFIED"
+RSP0_DECOY_MARKER = "HEPTAKERNEL HIA TSS RSP0 DECOY STACK DETECTED"
 TSS_MARKER = "HEPTAKERNEL HIA LIVE TSS GDT VERIFIED"
 TSS_STALE_MARKER = "HEPTAKERNEL HIA TSS GDT STALE WORD REJECTED"
 IDT_STALE_MARKER = "HEPTAKERNEL HIA IDT STALE WORD REJECTED"
@@ -46,6 +48,10 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         state_verified = p.stdout.count(TSS_STATE_MARKER) == 1
         state_stale = p.stdout.count(TSS_STATE_STALE_MARKER) == 1
         rsp0_stale = p.stdout.count(TSS_RSP0_STALE_MARKER) == 1
+        ring3_observed = p.stdout.count(RSP0_RING3_MARKER) == 1
+        decoy_observed = p.stdout.count(RSP0_DECOY_MARKER) == 1
+        record["hardware_cpl3_rsp0_observed"] = ring3_observed
+        record["mutated_rsp0_decoy_detected"] = decoy_observed
         record["native_hia_tss_state_observed"] = state_verified
         record["native_hia_tss_state_stale_observed"] = state_stale
         record["native_hia_tss_rsp0_stale_observed"] = rsp0_stale
@@ -81,7 +87,19 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         record["native_hia_arena_router_observed"] = route_verified
         owner_verified = p.stdout.count(OWNER_MARKER) == 1
         record["native_hia_multizone_state_and_readback_observed"] = owner_verified
-        if mode == "tss_state_conflict_rejected":
+        if mode == "rsp0_ring3_hardware":
+            accepted = (state_verified and tss_verified and idt_verified
+                        and map_verified and reservation_verified and ring3_observed
+                        and not decoy_observed and not pte_verified
+                        and not route_verified and p.returncode == 45
+                        and PASS_MARKER not in p.stdout and FAIL_MARKER not in p.stdout)
+        elif mode == "rsp0_decoy_rejected":
+            accepted = (state_verified and tss_verified and idt_verified
+                        and map_verified and reservation_verified and decoy_observed
+                        and not ring3_observed and not pte_verified
+                        and not route_verified and p.returncode == 35
+                        and PASS_MARKER not in p.stdout and FAIL_MARKER in p.stdout)
+        elif mode == "tss_state_conflict_rejected":
             accepted = (state_stale and not state_verified and not tss_verified and
                         not idt_verified and not map_verified and p.returncode == 35 and
                         FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
@@ -177,7 +195,7 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         # the native HIA table commit, including faults and dishonest controls.
         precommit = {"reserved_rejected", "nonvolatile_rejected", "protected_rejected",
                      "pte_unsafe_rejected", "pt_commit_conflict_rejected"}
-        accepted = accepted and (pt_commit_verified == (mode not in precommit | {"idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected"}))
+        accepted = accepted and (pt_commit_verified == (mode not in precommit | {"idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected", "rsp0_ring3_hardware", "rsp0_decoy_rejected"}))
         accepted = accepted and (state_verified == (mode not in {"tss_state_conflict_rejected", "tss_rsp0_conflict_rejected"}))
         accepted = accepted and (state_stale == (mode == "tss_state_conflict_rejected"))
         accepted = accepted and (rsp0_stale == (mode == "tss_rsp0_conflict_rejected"))
@@ -206,6 +224,8 @@ def main():
                "native_hia_tss_state_boot_sha256": digest("build/tss-state-boot.o"),
                "tss_state_conflict_boot_sha256": digest("build/boot-tss-state-conflict.o"),
                "tss_rsp0_conflict_boot_sha256": digest("build/boot-tss-rsp0-conflict.o"),
+              "rsp0_ring3_boot_sha256": digest("build/boot-ring3-rsp0.o"),
+              "rsp0_decoy_boot_sha256": digest("build/boot-ring3-rsp0-decoy.o"),
                "native_hia_tss_gdt_object_sha256": digest("build/x86-tss-gdt.o"),
               "native_hia_tss_gdt_boot_symbol_sha256": digest("build/tss-gdt-boot.o"),
               "tss_gdt_conflict_boot_object_sha256": digest("build/boot-tss-conflict.o"),
@@ -244,6 +264,11 @@ def main():
                                       machine, memory, mode="tss_gdt_conflict_rejected"))
             report["runs"].append(run(args.qemu, Path("build/idt-conflict-multiboot.elf"),
                                       machine, memory, mode="idt_conflict_rejected"))
+        for machine, memory in (("pc", "32"), ("q35", "64")):
+            report["runs"].append(run(args.qemu, Path("build/ring3-rsp0-multiboot.elf"),
+                                      machine, memory, mode="rsp0_ring3_hardware"))
+            report["runs"].append(run(args.qemu, Path("build/ring3-rsp0-decoy-multiboot.elf"),
+                                      machine, memory, mode="rsp0_decoy_rejected"))
         for machine, memory in (("pc", "32"), ("q35", "64")):
             report["runs"].append(run(args.qemu, Path("build/nx-fault-multiboot.elf"),
                                       machine, memory, mode="nx_hardware_fault"))
