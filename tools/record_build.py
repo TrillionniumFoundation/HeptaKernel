@@ -223,6 +223,20 @@ def main():
             raise ValueError("native HIA user GDT host image differs")
         if Elf("build/user-gdt-boot.o").section_bytes(".text") != usr_text:
             raise ValueError("native HIA user GDT symbol rename changed code")
+        # Rebuild the genuine HIA 2MiB huge PDE writer without a host PATH.
+        huge_source = Path("src/x86_pde_2m.hepta").read_bytes()
+        huge_object = Path("build/x86-pde-2m.o").read_bytes()
+        huge_rebuilt = subprocess.run([compiler], input=huge_source, capture_output=True,
+                                     timeout=20, env={"PATH": ""})
+        if huge_rebuilt.returncode or huge_rebuilt.stderr or huge_rebuilt.stdout != huge_object:
+            raise ValueError("HIA huge PDE object differs from empty-PATH rebuild")
+        if subprocess.check_output(["nm", "-u", "build/x86-pde-2m.o"], text=True).strip():
+            raise ValueError("HIA huge PDE object has undefined symbols")
+        huge_text = Elf("build/x86-pde-2m.o").section_bytes(".text")
+        if Elf("build/x86-pde-2m.so").section_bytes(".text") != huge_text:
+            raise ValueError("HIA huge PDE native library bytes differ")
+        if Elf("build/pde-2m-boot.o").section_bytes(".text") != huge_text:
+            raise ValueError("HIA huge PDE symbol rename changed its machine code")
         tss_source = Path("src/x86_tss_gdt.hepta").read_bytes()
         tss_object = Path("build/x86-tss-gdt.o").read_bytes()
         tss_rebuilt = subprocess.run([compiler], input=tss_source, capture_output=True,
@@ -365,6 +379,9 @@ def main():
         if (sha(Path("build/tss-rsp0-conflict-multiboot.elf").read_bytes()) ==
                 sha(Path("build/tss-state-conflict-multiboot.elf").read_bytes())):
             raise ValueError("RSP0 and IST1 fault images must differ after linking")
+        if (sha(Path("build/ring3-pde-stale-multiboot.elf").read_bytes()) ==
+                sha(Path("build/ring3-rsp0-multiboot.elf").read_bytes())):
+            raise ValueError("stale HIA PDE and admitted ring3 image must differ")
         if (sha(Path("build/ring3-rsp0-multiboot.elf").read_bytes()) ==
                 sha(Path("build/ring3-rsp0-decoy-multiboot.elf").read_bytes())):
             raise ValueError("ring3 RSP0 and decoy mutant must have different images")
@@ -393,7 +410,8 @@ def main():
                 ("tss-state-conflict", e820_code, arena_code, reservation_text),
                 ("tss-rsp0-conflict", e820_code, arena_code, reservation_text),
                 ("ring3-rsp0", e820_code, arena_code, reservation_text),
-                ("ring3-rsp0-decoy", e820_code, arena_code, reservation_text)):
+                ("ring3-rsp0-decoy", e820_code, arena_code, reservation_text),
+                ("ring3-pde-stale", e820_code, arena_code, reservation_text)):
             linked64 = Elf("build/" + stem + ".elf")
             packed32 = Elf("build/" + stem + "-multiboot.elf")
             for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820),
@@ -411,6 +429,15 @@ def main():
                 if (linked64.text_at(symbol_address, len(expected_code)) != expected_code or
                         packed32.text_at(symbol_address, len(expected_code)) != expected_code):
                     raise ValueError(stem + " lacks exact native HIA code for " + symbol)
+        for stem in ("ring3-rsp0", "ring3-rsp0-decoy", "ring3-pde-stale"):
+            huge_elf = Elf("build/" + stem + ".elf")
+            huge_mb = Elf("build/" + stem + "-multiboot.elf")
+            huge_entry = huge_elf.symbol("pde_2m_f0")
+            if huge_entry != huge_mb.symbol("pde_2m_f0"):
+                raise ValueError(stem + " HIA huge PDE entry changed in Multiboot")
+            if (huge_elf.text_at(huge_entry, len(huge_text)) != huge_text or
+                    huge_mb.text_at(huge_entry, len(huge_text)) != huge_text):
+                raise ValueError(stem + " lacks byte-exact native HIA huge PDE code")
         host = Elf("build/kernel-host.so")
         if host.section_bytes(".text") != code:
             raise ValueError("native library changed HIA code")
@@ -467,6 +494,12 @@ def main():
                        x86_idt_native_object_sha256=sha(idt_object),
                        x86_idt_live_boot_entry=idt_boot_entry,
                        x86_idt_live_boot_code_matches=True,
+                       x86_pde_2m_source_sha256=sha(huge_source),
+                       x86_pde_2m_object_sha256=sha(huge_object),
+                       x86_pde_2m_text_sha256=sha(huge_text),
+                       x86_pde_2m_empty_path_recompiled=True,
+                       x86_pde_2m_live_cpl3_hardware_path_bytes_match=True,
+                       x86_pde_2m_privileged_backend=False,
                        x86_user_gdt_source_sha256=sha(usr_source),
                        x86_user_gdt_object_sha256=sha(usr_object),
                        x86_user_gdt_text_sha256=sha(usr_text),
