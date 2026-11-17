@@ -381,6 +381,52 @@ long_entry:
     leaq message_tss_state_pass(%rip), %rsi
     call puts64
 #endif
+    /* Genuine HIA installs both CPL3 selectors on the active GDT before
+     * any ring transition. LTR/LIDT/IRETQ are still non-HIA bridge code. */
+    movq gdt+48(%rip), %rax
+    movq %rax, user_gdt_request(%rip)
+    movq gdt+56(%rip), %rax
+    movq %rax, user_gdt_request+8(%rip)
+#ifdef HEPTAKERNEL_TEST_USER_GDT_CONFLICT
+    movq $1, user_gdt_request(%rip)
+#endif
+    movq $-1, user_gdt_reply(%rip)
+    movq $-1, user_gdt_reply+8(%rip)
+    leaq user_gdt_request(%rip), %rdi
+    movl $16, %esi
+    leaq user_gdt_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq gdt(%rip), %r8
+    movl $64, %r9d
+    call user_gdt_f0
+#ifdef HEPTAKERNEL_TEST_USER_GDT_CONFLICT
+    cmpl $9, %eax
+    jne fail64
+    cmpq $9, user_gdt_reply(%rip)
+    jne fail64
+    cmpq $0, gdt+48(%rip)
+    jne fail64
+    cmpq $0, gdt+56(%rip)
+    jne fail64
+    leaq message_user_gdt_stale(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, user_gdt_reply(%rip)
+    jne fail64
+    movabsq $0x00affa000000ffff, %rax
+    cmpq %rax, gdt+48(%rip)
+    jne fail64
+    cmpq %rax, user_gdt_reply+8(%rip)
+    jne fail64
+    movabsq $0x00cff2000000ffff, %rax
+    cmpq %rax, gdt+56(%rip)
+    jne fail64
+    leaq message_user_gdt_pass(%rip), %rsi
+    call puts64
+#endif
     /* Genuine native HIA also builds the system GDT TSS descriptor. */
     leaq tss64(%rip), %rax
     movq %rax, tss_gdt_request(%rip)
@@ -1584,8 +1630,8 @@ gdt:
     .quad 0x00cf9a000000ffff       /* selector 0x18: 32-bit supervisor code */
     .quad 0                        /* selector 0x20: 64-bit TSS low */
     .quad 0                        /* selector 0x20: 64-bit TSS high */
-    .quad 0x00affa000000ffff       /* 0x33: test-only CPL3 64-bit code */
-    .quad 0x00cff2000000ffff       /* 0x3b: test-only CPL3 data */
+    .quad 0                        /* 0x33: HIA installs CPL3 code */
+    .quad 0                        /* 0x3b: HIA installs CPL3 data */
 gdt_end:
 gdt_descriptor:
     .word gdt_end - gdt - 1
@@ -1603,6 +1649,10 @@ message_rsp0_switch:
     .asciz "HEPTAKERNEL HIA TSS RSP0 CPL3 HARDWARE SWITCH VERIFIED\r\n"
 message_rsp0_decoy:
     .asciz "HEPTAKERNEL HIA TSS RSP0 DECOY STACK DETECTED\r\n"
+message_user_gdt_pass:
+    .asciz "HEPTAKERNEL HIA LIVE USER GDT VERIFIED\r\n"
+message_user_gdt_stale:
+    .asciz "HEPTAKERNEL HIA USER GDT STALE WORD REJECTED\r\n"
 message_tss_gdt_pass:
     .asciz "HEPTAKERNEL HIA LIVE TSS GDT VERIFIED\r\n"
 message_tss_gdt_stale:
@@ -1748,6 +1798,8 @@ rsp0_decoy_stack_top:
 .balign 16
 tss_state_request: .skip 40
 tss_state_reply:   .skip 16
+user_gdt_request: .skip 16
+user_gdt_reply:   .skip 16
 tss_gdt_request:  .skip 32
 tss_gdt_reply:    .skip 16
 idt_gate_request: .skip 40

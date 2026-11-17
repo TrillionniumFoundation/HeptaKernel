@@ -210,6 +210,19 @@ def main():
             raise ValueError("native HIA TSS state host code differs")
         if Elf("build/tss-state-boot.o").section_bytes(".text") != state_text:
             raise ValueError("native HIA TSS state symbol rename changed code")
+        usr_source = Path("src/x86_user_gdt.hepta").read_bytes()
+        usr_object = Path("build/x86-user-gdt.o").read_bytes()
+        usr_rebuilt = subprocess.run([compiler], input=usr_source, capture_output=True,
+                                     timeout=20, env={"PATH": ""})
+        if usr_rebuilt.returncode or usr_rebuilt.stderr or usr_rebuilt.stdout != usr_object:
+            raise ValueError("native HIA user GDT differs from empty-PATH rebuild")
+        if subprocess.check_output(["nm", "-u", "build/x86-user-gdt.o"], text=True).strip():
+            raise ValueError("native HIA user GDT object has undefined symbols")
+        usr_text = Elf("build/x86-user-gdt.o").section_bytes(".text")
+        if Elf("build/x86-user-gdt.so").section_bytes(".text") != usr_text:
+            raise ValueError("native HIA user GDT host image differs")
+        if Elf("build/user-gdt-boot.o").section_bytes(".text") != usr_text:
+            raise ValueError("native HIA user GDT symbol rename changed code")
         tss_source = Path("src/x86_tss_gdt.hepta").read_bytes()
         tss_object = Path("build/x86-tss-gdt.o").read_bytes()
         tss_rebuilt = subprocess.run([compiler], input=tss_source, capture_output=True,
@@ -291,6 +304,12 @@ def main():
         if (image64.text_at(state_boot_entry, len(state_text)) != state_text or
                 image32.text_at(state_boot_entry, len(state_text)) != state_text):
             raise ValueError("default boot lacks byte-exact HIA TSS state")
+        usr_boot_entry = image64.symbol("user_gdt_f0")
+        if image32.symbol("user_gdt_f0") != usr_boot_entry:
+            raise ValueError("HIA user GDT entry changed in Multiboot image")
+        if (image64.text_at(usr_boot_entry, len(usr_text)) != usr_text or
+                image32.text_at(usr_boot_entry, len(usr_text)) != usr_text):
+            raise ValueError("QEMU boot lacks byte-exact HIA user GDT")
         tss_boot_entry = image64.symbol("tss_gdt_f0")
         if image32.symbol("tss_gdt_f0") != tss_boot_entry:
             raise ValueError("native HIA TSS GDT entry changed after Multiboot wrap")
@@ -349,6 +368,9 @@ def main():
         if (sha(Path("build/ring3-rsp0-multiboot.elf").read_bytes()) ==
                 sha(Path("build/ring3-rsp0-decoy-multiboot.elf").read_bytes())):
             raise ValueError("ring3 RSP0 and decoy mutant must have different images")
+        if (sha(Path("build/user-gdt-conflict-multiboot.elf").read_bytes()) ==
+                sha(Path("build/tss-conflict-multiboot.elf").read_bytes())):
+            raise ValueError("user GDT stale-word and TSS stale-word images must differ")
         for stem, expected_e820, expected_arena, expected_reservation in (
                 ("e820-reserved", e820_code, arena_code, reservation_text),
                 ("e820-bypass", liar_code, arena_code, reservation_text),
@@ -366,6 +388,7 @@ def main():
                 ("wp-bypass", e820_code, arena_code, reservation_text),
                 ("pf-corrupt", e820_code, arena_code, reservation_text),
                 ("idt-conflict", e820_code, arena_code, reservation_text),
+                ("user-gdt-conflict", e820_code, arena_code, reservation_text),
                 ("tss-conflict", e820_code, arena_code, reservation_text),
                 ("tss-state-conflict", e820_code, arena_code, reservation_text),
                 ("tss-rsp0-conflict", e820_code, arena_code, reservation_text),
@@ -444,6 +467,12 @@ def main():
                        x86_idt_native_object_sha256=sha(idt_object),
                        x86_idt_live_boot_entry=idt_boot_entry,
                        x86_idt_live_boot_code_matches=True,
+                       x86_user_gdt_source_sha256=sha(usr_source),
+                       x86_user_gdt_object_sha256=sha(usr_object),
+                       x86_user_gdt_text_sha256=sha(usr_text),
+                       x86_user_gdt_boot_entry=usr_boot_entry,
+                       x86_user_gdt_live_boot_code_matches=True,
+                       x86_user_gdt_native_privilege_transition=False,
                        x86_tss_state_source_sha256=sha(state_source),
                         x86_tss_state_object_sha256=sha(state_object),
                         x86_tss_state_text_sha256=sha(state_text),
