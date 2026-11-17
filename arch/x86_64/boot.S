@@ -1713,9 +1713,9 @@ message_rsp0_switch:
 message_rsp0_decoy:
     .asciz "HEPTAKERNEL HIA TSS RSP0 DECOY STACK DETECTED\r\n"
 message_pde_2m_pass:
-    .asciz "HEPTAKERNEL HIA LIVE USER 2M PDE VERIFIED\\r\\n"
+    .asciz "HEPTAKERNEL HIA LIVE USER 2M PDE VERIFIED\r\n"
 message_pde_2m_stale:
-    .asciz "HEPTAKERNEL HIA USER 2M PDE STALE OLD REJECTED\\r\\n"
+    .asciz "HEPTAKERNEL HIA USER 2M PDE STALE OLD REJECTED\r\n"
 message_user_gdt_pass:
     .asciz "HEPTAKERNEL HIA LIVE USER GDT VERIFIED\r\n"
 message_user_gdt_stale:
