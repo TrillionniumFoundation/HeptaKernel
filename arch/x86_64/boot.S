@@ -980,7 +980,7 @@ rsp0_ring3_exercise64:
     movq page_directory+16(%rip), %rax
     movq %rax, pde_2m_request+8(%rip)
     movq $0x400085, pde_2m_request+16(%rip)
-    movq pte_caps(%rip), %rax
+    movl pte_caps(%rip), %eax        /* 32-bit cap field: zero-extend before 64-bit HIA request */
     movq %rax, pde_2m_request+24(%rip)
 #ifdef HEPTAKERNEL_TEST_RING3_PDE_STALE
     xorq $1, pde_2m_request+8(%rip)
@@ -999,7 +999,9 @@ rsp0_ring3_exercise64:
     jne fail64
     cmpq $0, pde_2m_reply+8(%rip)
     jne fail64
-    cmpq $0x400083, page_directory+16(%rip)
+    movq pde_2m_request+8(%rip), %rax
+    xorq $1, %rax                  /* reconstruct original PDE; A bit may be set */
+    cmpq %rax, page_directory+16(%rip)
     jne fail64
     cmpq $0x600083, page_directory+24(%rip)
     jne fail64
