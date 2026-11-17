@@ -64,6 +64,10 @@ def campaign(lib):
         check(struct.pack("<3Q", 0x4000, 0, 0), empty, n)
     for n in (0, 1, 32, 103, 105, 128):
         check(struct.pack("<3Q", 0x4000, 0, 0), bytes(n))
+    # Independently vary both stale expected fields without modifying the TSS.
+    for stale in range(1, 257):
+        check(struct.pack("<3Q", 0x4000, stale, 0), empty)
+        check(struct.pack("<3Q", 0x4000, 0, stale), empty)
     rng = random.Random(0x7557)
     for i in range(1200):
         top = rng.choice((0, 1, 0x1000, 0x700f, 0xffff800000002000,
