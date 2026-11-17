@@ -152,6 +152,21 @@ def main():
             raise ValueError("HIA PTE boot symbol rename changed original code")
         if Elf("build/x86-pte.so").section_bytes(".text") != pte_text:
             raise ValueError("HIA x86 PTE native library differs from the compiled object")
+        commit_source = Path("src/x86_pt_commit.hepta").read_bytes()
+        commit_object = Path("build/x86-pt-commit.o").read_bytes()
+        commit_rebuilt = subprocess.run([compiler], input=commit_source,
+                                        capture_output=True, timeout=20,
+                                        env={"PATH": ""})
+        if (commit_rebuilt.returncode or commit_rebuilt.stderr or
+                commit_rebuilt.stdout != commit_object):
+            raise ValueError("native HIA leaf commit object differs from empty-PATH rebuild")
+        if subprocess.check_output(["nm", "-u", "build/x86-pt-commit.o"], text=True).strip():
+            raise ValueError("native HIA leaf committer has undefined symbols")
+        commit_text = Elf("build/x86-pt-commit.o").section_bytes(".text")
+        if Elf("build/x86-pt-commit.so").section_bytes(".text") != commit_text:
+            raise ValueError("native HIA leaf committer shared object differs")
+        if Elf("build/pt-commit-boot.o").section_bytes(".text") != commit_text:
+            raise ValueError("HIA leaf commit symbol rename modified machine code")
         e820_source = Path("src/e820_region.hepta").read_bytes()
         e820_object = Path("build/e820-region.o").read_bytes()
         rebuilt_e820 = subprocess.run([compiler], input=e820_source, capture_output=True,
@@ -196,6 +211,12 @@ def main():
         if (image64.text_at(pte_boot_entry, len(pte_text)) != pte_text or
                 image32.text_at(pte_boot_entry, len(pte_text)) != pte_text):
             raise ValueError("QEMU boot image lacks byte-exact native HIA PTE")
+        pt_commit_entry = image64.symbol("pt_commit_f0")
+        if image32.symbol("pt_commit_f0") != pt_commit_entry:
+            raise ValueError("native HIA PTE commit entry changed after Multiboot wrap")
+        if (image64.text_at(pt_commit_entry, len(commit_text)) != commit_text or
+                image32.text_at(pt_commit_entry, len(commit_text)) != commit_text):
+            raise ValueError("QEMU boot lacks byte-exact native HIA PTE commit")
         reservation_entry = image64.symbol("reservation_f0")
         if image32.symbol("reservation_f0") != reservation_entry:
             raise ValueError("HIA reservation boot entry mismatch")
@@ -226,10 +247,12 @@ def main():
         nx_bypass_code = Elf("build/boot-nx-bypass.o").section_bytes(".text.boot")
         wp_fault_code = Elf("build/boot-wp-fault.o").section_bytes(".text.boot")
         wp_bypass_code = Elf("build/boot-wp-bypass.o").section_bytes(".text.boot")
+        pt_commit_conflict_code = Elf("build/boot-pt-commit-conflict.o").section_bytes(".text.boot")
         if len({sha(boot_code), sha(reserved_code), sha(persistent_code),
                 sha(alias_code), sha(protected_code), sha(pte_unsafe_code),
                 sha(nx_fault_code), sha(nx_bypass_code),
-                sha(wp_fault_code), sha(wp_bypass_code)}) != 10:
+                sha(wp_fault_code), sha(wp_bypass_code),
+                 sha(pt_commit_conflict_code)}) != 11:
             raise ValueError("normal, reserved, persistent, alias and protected boot transports must differ")
         for stem, expected_e820, expected_arena, expected_reservation in (
                 ("e820-reserved", e820_code, arena_code, reservation_text),
@@ -241,6 +264,7 @@ def main():
                 ("reservation-conflict", e820_code, arena_code, reservation_text),
                 ("reservation-bypass", e820_code, arena_code, liar_code),
                 ("pte-unsafe", e820_code, arena_code, reservation_text),
+                ("pt-commit-conflict", e820_code, arena_code, reservation_text),
                 ("nx-fault", e820_code, arena_code, reservation_text),
                 ("nx-bypass", e820_code, arena_code, reservation_text),
                 ("wp-fault", e820_code, arena_code, reservation_text),
@@ -250,7 +274,8 @@ def main():
             for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820),
                                           ("arena_f0", expected_arena), ("owner_f0", owner_code),
                                           ("reservation_f0", expected_reservation),
-                                          ("pte_f0", pte_text)):
+                                          ("pte_f0", pte_text),
+                                           ("pt_commit_f0", commit_text)):
                 symbol_address = linked64.symbol(symbol)
                 if packed32.symbol(symbol) != symbol_address:
                     raise ValueError(stem + " symbol differs after Multiboot wrapping")
