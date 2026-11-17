@@ -18,6 +18,9 @@ import re
 import subprocess
 
 DECLARATION = re.compile(rb"^[ \t]*(config|menuconfig)[ \t]+([A-Za-z_][A-Za-z0-9_]*)\b")
+# Lexically record every Kconfig include directive, without guessing how its
+# environment variables, relative path or conditional reachability resolve.
+SOURCE_EDGE = re.compile(rb"^[ \t]*(source|rsource|osource|orsource)[ \t]+(.+?)[ \t]*$")
 OID = re.compile(rb"^[0-9a-f]{40}$")
 
 
@@ -143,6 +146,8 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
 
     source_lines = bytearray()
     kconfig_lines = bytearray()
+    source_edge_lines = bytearray()
+    source_edge_counts = Counter()
     uapi_lines = bytearray()
     directory_bytes = b"".join(json_line(record) for _, record in directories)
     path_counts = Counter()
@@ -173,6 +178,17 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
         if len(contents) != record["size"]:
             raise ValueError("Kconfig blob size mismatch")
         for line_number, line in enumerate(contents.splitlines(), start=1):
+            edge = SOURCE_EDGE.match(line)
+            if edge:
+                kind = edge.group(1).decode("ascii")
+                source_edge_counts[kind] += 1
+                source_edge_lines.extend(json_line({
+                    **encode_path(path),
+                    "line": line_number,
+                    "kind": kind,
+                    "operand_b64": base64.b64encode(edge.group(2)).decode("ascii"),
+                    "blob_oid": record["oid"],
+                }))
             match = DECLARATION.match(line)
             if not match:
                 continue
@@ -189,6 +205,7 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
 
     source_bytes = bytes(source_lines)
     kconfig_bytes = bytes(kconfig_lines)
+    source_edges_bytes = bytes(source_edge_lines)
     uapi_bytes = bytes(uapi_lines)
     report = {
         "schema": "heptakernel.pinned-linux-tree-inventory.v1",
@@ -199,6 +216,8 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
         "source_paths_sha256": hashlib.sha256(source_bytes).hexdigest(),
         "kconfig_declarations_file": "kconfig-declarations.jsonl",
         "kconfig_declarations_sha256": hashlib.sha256(kconfig_bytes).hexdigest(),
+        "kconfig_source_edges_file": "kconfig-source-edges.jsonl",
+        "kconfig_source_edges_sha256": hashlib.sha256(source_edges_bytes).hexdigest(),
         "directory_objects_file": "directory-objects.jsonl",
         "directory_objects_sha256": hashlib.sha256(directory_bytes).hexdigest(),
         "uapi_entries_file": "uapi-paths.jsonl",
@@ -208,12 +227,15 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
             "directory_tree_objects": len(directories),
             "kconfig_paths": kconfig_files,
             "kconfig_declarations": kconfig_declarations,
+            "kconfig_source_edges": sum(source_edge_counts.values()),
+            **{"kconfig_source_" + k: source_edge_counts[k]
+               for k in ("source", "rsource", "osource", "orsource")},
             "distinct_kconfig_symbol_names": len(kconfig_names),
             "unparsed_kconfig_paths": len(kconfig_unreadable),
         },
         "unparsed_kconfig": kconfig_unreadable,
         "limitations": [
-            "Kconfig symbols are lexical declarations only: no includes, "
+            "Kconfig symbols and source edges are lexical only: no include expansion, "
             "dependency resolution, architecture selection or config satisfiability.",
             "UAPI and syscall sources are path inventories, not parsed ABI or "
             "structure layouts; driver IDs and devices are not yet mapped.",
@@ -230,6 +252,7 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
     # accidentally be paired with a complete-looking report.
     (destination / "source-paths.jsonl").write_bytes(source_bytes)
     (destination / "kconfig-declarations.jsonl").write_bytes(kconfig_bytes)
+    (destination / "kconfig-source-edges.jsonl").write_bytes(source_edges_bytes)
     (destination / "directory-objects.jsonl").write_bytes(directory_bytes)
     (destination / "uapi-paths.jsonl").write_bytes(uapi_bytes)
     (destination / "report.json").write_bytes(
@@ -254,6 +277,7 @@ def main() -> None:
         "counts": report["counts"],
         "source_paths_sha256": report["source_paths_sha256"],
         "kconfig_declarations_sha256": report["kconfig_declarations_sha256"],
+        "kconfig_source_edges_sha256": report["kconfig_source_edges_sha256"],
         "directory_objects_sha256": report["directory_objects_sha256"],
         "uapi_entries_sha256": report["uapi_entries_sha256"],
     }, sort_keys=True))

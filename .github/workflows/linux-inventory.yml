@@ -70,10 +70,12 @@ jobs:
           assert report["linux_full_rewrite_complete"] is False
           source = (root / report["source_paths_file"]).read_bytes()
           kconfig = (root / report["kconfig_declarations_file"]).read_bytes()
+          source_edges = (root / report["kconfig_source_edges_file"]).read_bytes()
           directories = (root / report["directory_objects_file"]).read_bytes()
           uapi = (root / report["uapi_entries_file"]).read_bytes()
           assert hashlib.sha256(source).hexdigest() == report["source_paths_sha256"]
           assert hashlib.sha256(kconfig).hexdigest() == report["kconfig_declarations_sha256"]
+          assert hashlib.sha256(source_edges).hexdigest() == report["kconfig_source_edges_sha256"]
           assert hashlib.sha256(directories).hexdigest() == report["directory_objects_sha256"]
           assert hashlib.sha256(uapi).hexdigest() == report["uapi_entries_sha256"]
           rows = [json.loads(x) for x in source.splitlines()]
@@ -109,8 +111,47 @@ jobs:
           for uapi_record in uapi_rows:
               assert by_path[base64.b64decode(uapi_record["path_b64"])] == uapi_record
           assert report["counts"]["kconfig_declarations"] > 0
+          edges = [json.loads(x) for x in source_edges.splitlines()]
+          assert len(edges) == report["counts"]["kconfig_source_edges"]
+          source_kinds = ("source", "rsource", "osource", "orsource")
+          valid_blob_ids = {p["oid"] for p in rows}
+          assert all(e["kind"] in source_kinds and e["line"] >= 1 and
+                     e["blob_oid"] in valid_blob_ids and
+                     base64.b64decode(e["operand_b64"]) for e in edges)
+          assert sum(report["counts"]["kconfig_source_" + kind]
+                     for kind in source_kinds) == len(edges)
+          # Independent upstream readback, not a replay of the extraction
+          # function: re-read every immutable Kconfig blob and reconstruct all
+          # four directive rows by whitespace tokenization.
+          actual_edges = [
+              (base64.b64decode(e["path_b64"]), e["line"], e["kind"].encode("ascii"),
+               base64.b64decode(e["operand_b64"]), e["blob_oid"])
+              for e in edges
+          ]
+          expected_edges = []
+          for record in rows:
+              path = base64.b64decode(record["path_b64"])
+              leaf = path.rsplit(b"/", 1)[-1]
+              if not (leaf == b"Kconfig" or leaf.startswith(b"Kconfig.")):
+                  continue
+              if record["mode"] not in ("100644", "100755"):
+                  continue
+              original = subprocess.check_output([
+                  "git", "-C", ".upstream/linux", "cat-file", "blob", record["oid"]
+              ])
+              assert len(original) == record["size"]
+              for number, line in enumerate(original.splitlines(), 1):
+                  tokens = line.lstrip(b" \t").split(None, 1)
+                  if len(tokens) != 2 or tokens[0] not in (
+                          b"source", b"rsource", b"osource", b"orsource"):
+                      continue
+                  expected_edges.append((path, number, tokens[0],
+                                         tokens[1].strip(b" \t"), record["oid"]))
+          assert actual_edges == expected_edges, (
+              "incomplete or reordered lexical Kconfig source-edge inventory")
           print("FULL_GIT_TREE_LOSSLESS_INVENTORY: PASS", len(rows))
           print("KCONFIG_DECLARATION_RECORDS:", report["counts"]["kconfig_declarations"])
+          print("KCONFIG_SOURCE_EDGES:", report["counts"]["kconfig_source_edges"])
           print("FULL_LINUX_REWRITE: HOLD")
           PY
           set +e
@@ -130,6 +171,7 @@ jobs:
           path: |
             build/linux-inventory/source-paths.jsonl
             build/linux-inventory/kconfig-declarations.jsonl
+            build/linux-inventory/kconfig-source-edges.jsonl
             build/linux-inventory/directory-objects.jsonl
             build/linux-inventory/uapi-paths.jsonl
             build/linux-inventory/report.json
