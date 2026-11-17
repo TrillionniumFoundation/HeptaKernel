@@ -14,6 +14,7 @@ ROUTER_MARKER = "HEPTAKERNEL HIA ARENA ROUTER VERIFIED"
 OWNER_MARKER = "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED"
 PTE_MARKER = "HEPTAKERNEL HIA LIVE PTE VERIFIED"
 PT_COMMIT_MARKER = "HEPTAKERNEL HIA PT COMMIT VERIFIED"
+PF_MARKER = "HEPTAKERNEL HIA PF RECORD ADMITTED"
 NX_FAULT_MARKER = "HEPTAKERNEL HIA NX FETCH FAULT VERIFIED"
 NX_BYPASS_MARKER = "HEPTAKERNEL HIA NX BYPASS EXECUTED"
 WP_FAULT_MARKER = "HEPTAKERNEL HIA SUPERVISOR WRITE-PROTECT FAULT VERIFIED"
@@ -41,6 +42,8 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         pte_verified = p.stdout.count(PTE_MARKER) == 1
         pt_commit_verified = p.stdout.count(PT_COMMIT_MARKER) == 1
         record["native_hia_pt_commit_observed"] = pt_commit_verified
+        pf_admitted = p.stdout.count(PF_MARKER) == 1
+        record["native_hia_fault_record_admitted"] = pf_admitted
         record["native_hia_live_pte_observed"] = pte_verified
         nx_fault_verified = p.stdout.count(NX_FAULT_MARKER) == 1
         nx_bypass_executed = p.stdout.count(NX_BYPASS_MARKER) == 1
@@ -91,6 +94,12 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         not nx_fault_verified and not nx_bypass_executed and
                         not route_verified and not owner_verified and p.returncode == 43 and
                         PASS_MARKER not in p.stdout and FAIL_MARKER not in p.stdout)
+        elif mode == "pf_record_corrupt_rejected":
+            accepted = (map_verified and reservation_verified and pt_commit_verified and
+                        not pf_admitted and not pte_verified and not route_verified and
+                        not owner_verified and not nx_fault_verified and
+                        p.returncode == 35 and FAIL_MARKER in p.stdout and
+                        PASS_MARKER not in p.stdout)
         elif mode == "pt_commit_conflict_rejected":
             accepted = (map_verified and reservation_verified and not pt_commit_verified and
                         not pte_verified and not route_verified and not owner_verified and
@@ -124,6 +133,7 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         precommit = {"reserved_rejected", "nonvolatile_rejected", "protected_rejected",
                      "pte_unsafe_rejected", "pt_commit_conflict_rejected"}
         accepted = accepted and (pt_commit_verified == (mode not in precommit))
+        accepted = accepted and (pf_admitted == (mode in {"nx_hardware_fault", "wp_hardware_fault"}))
         record["status"] = "PASS" if accepted else "FAIL"
     except subprocess.TimeoutExpired as e:
         record.update(status="FAIL", error="QEMU timed out", stdout=str(e.stdout), stderr=str(e.stderr))
@@ -145,6 +155,8 @@ def main():
               "native_hia_reservation_object_sha256": digest("build/reservation-gate.o"),
               "native_hia_pte_object_sha256": digest("build/x86-pte.o"),
               "native_hia_pt_commit_object_sha256": digest("build/x86-pt-commit.o"),
+              "native_hia_pf_gate_object_sha256": digest("build/x86-pf-gate.o"),
+              "pf_record_corrupt_boot_object_sha256": digest("build/boot-pf-corrupt.o"),
               "pt_commit_conflict_boot_object_sha256": digest("build/boot-pt-commit-conflict.o"),
               "dishonest_hia_reservation_object_sha256": digest("build/reservation-unsafe-boot.o"),
               "dishonest_hia_e820_object_sha256": digest("build/e820-allow-all.o"),
@@ -172,6 +184,9 @@ def main():
                                       machine, memory, mode="wp_hardware_fault"))
             report["runs"].append(run(args.qemu, Path("build/wp-bypass-multiboot.elf"),
                                       machine, memory, mode="wp_bypass_stored"))
+        for machine, memory in (("pc", "32"), ("q35", "64")):
+            report["runs"].append(run(args.qemu, Path("build/pf-corrupt-multiboot.elf"),
+                                      machine, memory, mode="pf_record_corrupt_rejected"))
         for machine, memory in (("pc", "32"), ("q35", "64")):
             report["runs"].append(run(args.qemu, Path("build/pt-commit-conflict-multiboot.elf"),
                                       machine, memory, mode="pt_commit_conflict_rejected"))
