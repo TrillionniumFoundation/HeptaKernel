@@ -8,47 +8,47 @@ block start(request:readbuf,reply:mutbuf,table:mutbuf)
 block short()
   idt_short:u32 = const() {"value":1}
   ret(idt_short)
-block check_req(ir:readbuf,or:mutbuf,t:mutbuf)
-  idt_n:usize = buffer.len(ir)
+block check_req(p1_3_ir:readbuf,p1_3_or:mutbuf,p1_3_t:mutbuf)
+  idt_n:usize = buffer.len(p1_3_ir)
   idt_need:usize = const() {"value":32}
   idt_req_ok:bool = compare.eq(idt_n,idt_need)
-  branch idt_req_ok check_table(ir,or,t) bad_request(or)
-block bad_request(r:mutbuf)
+  branch idt_req_ok check_table(p1_3_ir,p1_3_or,p1_3_t) bad_request(p1_3_or)
+block bad_request(p1_4_r:mutbuf)
   idt_bad_req_code:u32 = const() {"value":2}
   idt_bad_req_zero:u64 = const() {"value":0}
-  idt_bad_req_done:u32 = call(r,idt_bad_req_code,idt_bad_req_zero) {"function":"write_reply"}
+  idt_bad_req_done:u32 = call(p1_4_r,idt_bad_req_code,idt_bad_req_zero) {"function":"write_reply"}
   ret(idt_bad_req_done)
-block check_table(ir:readbuf,or:mutbuf,t:mutbuf)
-  idt_size:usize = buffer.len(t)
+block check_table(p1_5_ir:readbuf,p1_5_or:mutbuf,p1_5_t:mutbuf)
+  idt_size:usize = buffer.len(p1_5_t)
   idt_expected:usize = const() {"value":4096}
   idt_table_ok:bool = compare.eq(idt_size,idt_expected)
-  branch idt_table_ok decode(ir,or,t) bad_table(or)
-block bad_table(r:mutbuf)
+  branch idt_table_ok decode(p1_5_ir,p1_5_or,p1_5_t) bad_table(p1_5_or)
+block bad_table(p1_6_r:mutbuf)
   idt_bad_table_code:u32 = const() {"value":4}
   idt_bad_table_zero:u64 = const() {"value":0}
-  idt_bad_table_done:u32 = call(r,idt_bad_table_code,idt_bad_table_zero) {"function":"write_reply"}
+  idt_bad_table_done:u32 = call(p1_6_r,idt_bad_table_code,idt_bad_table_zero) {"function":"write_reply"}
   ret(idt_bad_table_done)
-block decode(ir:readbuf,or:mutbuf,t:mutbuf)
+block decode(p1_7_ir:readbuf,p1_7_or:mutbuf,p1_7_t:mutbuf)
   idt_off0:usize = const() {"value":0}
   idt_off1:usize = const() {"value":8}
   idt_off2:usize = const() {"value":16}
   idt_off3:usize = const() {"value":24}
-  idt_idx:u64 = call(ir,idt_off0) {"function":"read_request_u64"}
-  idt_addr:u64 = call(ir,idt_off1) {"function":"read_request_u64"}
-  idt_oldlo:u64 = call(ir,idt_off2) {"function":"read_request_u64"}
-  idt_oldhi:u64 = call(ir,idt_off3) {"function":"read_request_u64"}
-  jump valid(or,t,idt_idx,idt_addr,idt_oldlo,idt_oldhi)
-block valid(r:mutbuf,t:mutbuf,vector:u64,target:u64,expected_lo:u64,expected_hi:u64)
+  idt_idx:u64 = call(p1_7_ir,idt_off0) {"function":"read_request_u64"}
+  idt_addr:u64 = call(p1_7_ir,idt_off1) {"function":"read_request_u64"}
+  idt_oldlo:u64 = call(p1_7_ir,idt_off2) {"function":"read_request_u64"}
+  idt_oldhi:u64 = call(p1_7_ir,idt_off3) {"function":"read_request_u64"}
+  jump valid(p1_7_or,p1_7_t,idt_idx,idt_addr,idt_oldlo,idt_oldhi)
+block valid(p1_8_r:mutbuf,p1_8_t:mutbuf,p1_8_vector:u64,p1_8_target:u64,p1_8_expected_lo:u64,p1_8_expected_hi:u64)
   idt_limit:u64 = const() {"value":256}
   idt_zero:u64 = const() {"value":0}
   idt_one:u64 = const() {"value":1}
   idt_top_mask:u64 = const() {"value":65535}
   idt_47:u64 = const() {"value":47}
   idt_48:u64 = const() {"value":48}
-  idt_idx_ok:bool = compare.lt(vector,idt_limit)
-  idt_nonzero:bool = compare.ne(target,idt_zero)
-  idt_top:u64 = int.shr.checked(target,idt_48)
-  idt_shr47:u64 = int.shr.checked(target,idt_47)
+  idt_idx_ok:bool = compare.lt(p1_8_vector,idt_limit)
+  idt_nonzero:bool = compare.ne(p1_8_target,idt_zero)
+  idt_top:u64 = int.shr.checked(p1_8_target,idt_48)
+  idt_shr47:u64 = int.shr.checked(p1_8_target,idt_47)
   idt_sign:u64 = bit.and(idt_shr47,idt_one)
   idt_sign0:bool = compare.eq(idt_sign,idt_zero)
   idt_sign1:bool = compare.eq(idt_sign,idt_one)
@@ -59,118 +59,118 @@ block valid(r:mutbuf,t:mutbuf,vector:u64,target:u64,expected_lo:u64,expected_hi:
   idt_canonical:bool = bool.or(idt_lowcanon,idt_highcanon)
   idt_address_ok:bool = bool.and(idt_nonzero,idt_canonical)
   idt_valid:bool = bool.and(idt_idx_ok,idt_address_ok)
-  branch idt_valid compare_old(r,t,vector,target,expected_lo,expected_hi) bad_descriptor(r)
-block bad_descriptor(r:mutbuf)
+  branch idt_valid compare_old(p1_8_r,p1_8_t,p1_8_vector,p1_8_target,p1_8_expected_lo,p1_8_expected_hi) bad_descriptor(p1_8_r)
+block bad_descriptor(p1_9_r:mutbuf)
   idt_bad_desc_code:u32 = const() {"value":6}
   idt_bad_desc_zero:u64 = const() {"value":0}
-  idt_bad_desc_done:u32 = call(r,idt_bad_desc_code,idt_bad_desc_zero) {"function":"write_reply"}
+  idt_bad_desc_done:u32 = call(p1_9_r,idt_bad_desc_code,idt_bad_desc_zero) {"function":"write_reply"}
   ret(idt_bad_desc_done)
-block compare_old(r:mutbuf,t:mutbuf,vector:u64,target:u64,expected_lo:u64,expected_hi:u64)
+block compare_old(p1_10_r:mutbuf,p1_10_t:mutbuf,p1_10_vector:u64,p1_10_target:u64,p1_10_expected_lo:u64,p1_10_expected_hi:u64)
   idt_eight:u64 = const() {"value":8}
   idt_sixteen:u64 = const() {"value":16}
-  idt_index64:u64 = int.mul.wrap(vector,idt_sixteen)
+  idt_index64:u64 = int.mul.wrap(p1_10_vector,idt_sixteen)
   idt_index:usize = int.cast(idt_index64) {"mode":"wrap"}
   idt_index8_64:u64 = int.add.wrap(idt_index64,idt_eight)
   idt_index8:usize = int.cast(idt_index8_64) {"mode":"wrap"}
-  idt_seenlo:u64 = call(t,idt_index) {"function":"read_table_u64"}
-  idt_seenhi:u64 = call(t,idt_index8) {"function":"read_table_u64"}
-  idt_lo_ok:bool = compare.eq(idt_seenlo,expected_lo)
-  idt_hi_ok:bool = compare.eq(idt_seenhi,expected_hi)
+  idt_seenlo:u64 = call(p1_10_t,idt_index) {"function":"read_table_u64"}
+  idt_seenhi:u64 = call(p1_10_t,idt_index8) {"function":"read_table_u64"}
+  idt_lo_ok:bool = compare.eq(idt_seenlo,p1_10_expected_lo)
+  idt_hi_ok:bool = compare.eq(idt_seenhi,p1_10_expected_hi)
   idt_old_ok:bool = bool.and(idt_lo_ok,idt_hi_ok)
-  branch idt_old_ok encode(r,t,idt_index,idt_index8,target) mismatch(r)
-block mismatch(r:mutbuf)
+  branch idt_old_ok encode(p1_10_r,p1_10_t,idt_index,idt_index8,p1_10_target) mismatch(p1_10_r)
+block mismatch(p1_11_r:mutbuf)
   idt_mismatch_code:u32 = const() {"value":9}
   idt_mismatch_zero:u64 = const() {"value":0}
-  idt_mismatch_done:u32 = call(r,idt_mismatch_code,idt_mismatch_zero) {"function":"write_reply"}
+  idt_mismatch_done:u32 = call(p1_11_r,idt_mismatch_code,idt_mismatch_zero) {"function":"write_reply"}
   ret(idt_mismatch_done)
-block encode(r:mutbuf,t:mutbuf,offset:usize,offset8:usize,target:u64)
+block encode(p1_12_r:mutbuf,p1_12_t:mutbuf,p1_12_offset:usize,p1_12_offset8:usize,p1_12_target:u64)
   idt_mask16:u64 = const() {"value":65535}
   idt_shift16:u64 = const() {"value":16}
   idt_shift32:u64 = const() {"value":32}
   idt_shift48:u64 = const() {"value":48}
   idt_selector:u64 = const() {"value":524288}
   idt_flags:u64 = const() {"value":156130651144192}
-  idt_low16:u64 = bit.and(target,idt_mask16)
-  idt_mid_shift:u64 = int.shr.checked(target,idt_shift16)
+  idt_low16:u64 = bit.and(p1_12_target,idt_mask16)
+  idt_mid_shift:u64 = int.shr.checked(p1_12_target,idt_shift16)
   idt_mid16:u64 = bit.and(idt_mid_shift,idt_mask16)
   idt_midtop:u64 = int.shl.checked(idt_mid16,idt_shift48)
   idt_p1:u64 = bit.or(idt_low16,idt_selector)
   idt_p2:u64 = bit.or(idt_p1,idt_flags)
   idt_lowword:u64 = bit.or(idt_p2,idt_midtop)
-  idt_highword:u64 = int.shr.checked(target,idt_shift32)
-  jump store(r,t,offset,offset8,idt_lowword,idt_highword)
-block store(r:mutbuf,t:mutbuf,offset:usize,offset8:usize,lo:u64,hi:u64)
-  idt_writtenlo:u32 = call(t,offset,lo) {"function":"write_table_u64"}
-  idt_writtenhi:u32 = call(t,offset8,hi) {"function":"write_table_u64"}
+  idt_highword:u64 = int.shr.checked(p1_12_target,idt_shift32)
+  jump store(p1_12_r,p1_12_t,p1_12_offset,p1_12_offset8,idt_lowword,idt_highword)
+block store(p1_13_r:mutbuf,p1_13_t:mutbuf,p1_13_offset:usize,p1_13_offset8:usize,p1_13_lo:u64,p1_13_hi:u64)
+  idt_writtenlo:u32 = call(p1_13_t,p1_13_offset,p1_13_lo) {"function":"write_table_u64"}
+  idt_writtenhi:u32 = call(p1_13_t,p1_13_offset8,p1_13_hi) {"function":"write_table_u64"}
   idt_good:u32 = const() {"value":0}
-  idt_done:u32 = call(r,idt_good,lo) {"function":"write_reply"}
+  idt_done:u32 = call(p1_13_r,idt_good,p1_13_lo) {"function":"write_reply"}
   ret(idt_done)
 end
 fn read_request_u64(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
 block start(bytes:readbuf,offset:usize)
   rr_z:u64 = const() {"value":0}
   jump loop(bytes,offset,rr_z,rr_z)
-block loop(b:readbuf,base:usize,i:u64,acc:u64)
+block loop(p2_2_b:readbuf,p2_2_base:usize,p2_2_i:u64,p2_2_acc:u64)
   rr_w:u64 = const() {"value":8}
-  rr_cont:bool = compare.lt(i,rr_w)
-  branch rr_cont byte(b,base,i,acc) done(acc)
-block byte(b:readbuf,base:usize,i:u64,acc:u64)
-  rr_i:usize = int.cast(i) {"mode":"wrap"}
-  rr_off:usize = int.add.wrap(base,rr_i)
-  rr_oct:u8 = buffer.load(b,rr_off)
+  rr_cont:bool = compare.lt(p2_2_i,rr_w)
+  branch rr_cont byte(p2_2_b,p2_2_base,p2_2_i,p2_2_acc) done(p2_2_acc)
+block byte(p2_3_b:readbuf,p2_3_base:usize,p2_3_i:u64,p2_3_acc:u64)
+  rr_i:usize = int.cast(p2_3_i) {"mode":"wrap"}
+  rr_off:usize = int.add.wrap(p2_3_base,rr_i)
+  rr_oct:u8 = buffer.load(p2_3_b,rr_off)
   rr_wide:u64 = int.cast(rr_oct) {"mode":"wrap"}
   rr_eight:u64 = const() {"value":8}
-  rr_sh:u64 = int.mul.wrap(i,rr_eight)
+  rr_sh:u64 = int.mul.wrap(p2_3_i,rr_eight)
   rr_v:u64 = int.shl.checked(rr_wide,rr_sh)
-  rr_nextacc:u64 = bit.or(acc,rr_v)
+  rr_nextacc:u64 = bit.or(p2_3_acc,rr_v)
   rr_one:u64 = const() {"value":1}
-  rr_nexti:u64 = int.add.wrap(i,rr_one)
-  jump loop(b,base,rr_nexti,rr_nextacc)
-block done(value:u64)
-  ret(value)
+  rr_nexti:u64 = int.add.wrap(p2_3_i,rr_one)
+  jump loop(p2_3_b,p2_3_base,rr_nexti,rr_nextacc)
+block done(p2_4_value:u64)
+  ret(p2_4_value)
 end
 fn read_table_u64(bytes:mutbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
 block start(bytes:mutbuf,offset:usize)
   rt_z:u64 = const() {"value":0}
   jump loop(bytes,offset,rt_z,rt_z)
-block loop(b:mutbuf,base:usize,i:u64,acc:u64)
+block loop(p3_2_b:mutbuf,p3_2_base:usize,p3_2_i:u64,p3_2_acc:u64)
   rt_w:u64 = const() {"value":8}
-  rt_cont:bool = compare.lt(i,rt_w)
-  branch rt_cont byte(b,base,i,acc) done(acc)
-block byte(b:mutbuf,base:usize,i:u64,acc:u64)
-  rt_i:usize = int.cast(i) {"mode":"wrap"}
-  rt_off:usize = int.add.wrap(base,rt_i)
-  rt_oct:u8 = buffer.load(b,rt_off)
+  rt_cont:bool = compare.lt(p3_2_i,rt_w)
+  branch rt_cont byte(p3_2_b,p3_2_base,p3_2_i,p3_2_acc) done(p3_2_acc)
+block byte(p3_3_b:mutbuf,p3_3_base:usize,p3_3_i:u64,p3_3_acc:u64)
+  rt_i:usize = int.cast(p3_3_i) {"mode":"wrap"}
+  rt_off:usize = int.add.wrap(p3_3_base,rt_i)
+  rt_oct:u8 = buffer.load(p3_3_b,rt_off)
   rt_wide:u64 = int.cast(rt_oct) {"mode":"wrap"}
   rt_eight:u64 = const() {"value":8}
-  rt_sh:u64 = int.mul.wrap(i,rt_eight)
+  rt_sh:u64 = int.mul.wrap(p3_3_i,rt_eight)
   rt_v:u64 = int.shl.checked(rt_wide,rt_sh)
-  rt_nextacc:u64 = bit.or(acc,rt_v)
+  rt_nextacc:u64 = bit.or(p3_3_acc,rt_v)
   rt_one:u64 = const() {"value":1}
-  rt_nexti:u64 = int.add.wrap(i,rt_one)
-  jump loop(b,base,rt_nexti,rt_nextacc)
-block done(value:u64)
-  ret(value)
+  rt_nexti:u64 = int.add.wrap(p3_3_i,rt_one)
+  jump loop(p3_3_b,p3_3_base,rt_nexti,rt_nextacc)
+block done(p3_4_value:u64)
+  ret(p3_4_value)
 end
 fn write_table_u64(bytes:mutbuf,offset:usize,value:u64) -> (u32) effects(write,trap) entry(start)
 block start(bytes:mutbuf,offset:usize,value:u64)
   wt_zero:u64 = const() {"value":0}
   jump loop(bytes,offset,value,wt_zero)
-block loop(b:mutbuf,base:usize,word:u64,i:u64)
+block loop(p4_2_b:mutbuf,p4_2_base:usize,p4_2_word:u64,p4_2_i:u64)
   wt_width:u64 = const() {"value":8}
-  wt_cont:bool = compare.lt(i,wt_width)
-  branch wt_cont byte(b,base,word,i) done()
-block byte(b:mutbuf,base:usize,word:u64,i:u64)
-  wt_idx:usize = int.cast(i) {"mode":"wrap"}
-  wt_addr:usize = int.add.wrap(base,wt_idx)
+  wt_cont:bool = compare.lt(p4_2_i,wt_width)
+  branch wt_cont byte(p4_2_b,p4_2_base,p4_2_word,p4_2_i) done()
+block byte(p4_3_b:mutbuf,p4_3_base:usize,p4_3_word:u64,p4_3_i:u64)
+  wt_idx:usize = int.cast(p4_3_i) {"mode":"wrap"}
+  wt_addr:usize = int.add.wrap(p4_3_base,wt_idx)
   wt_eight:u64 = const() {"value":8}
-  wt_shift:u64 = int.mul.wrap(i,wt_eight)
-  wt_shifted:u64 = int.shr.checked(word,wt_shift)
+  wt_shift:u64 = int.mul.wrap(p4_3_i,wt_eight)
+  wt_shifted:u64 = int.shr.checked(p4_3_word,wt_shift)
   wt_oct:u8 = int.cast(wt_shifted) {"mode":"wrap"}
-  _ = buffer.store(b,wt_addr,wt_oct)
+  _ = buffer.store(p4_3_b,wt_addr,wt_oct)
   wt_one:u64 = const() {"value":1}
-  wt_next:u64 = int.add.wrap(i,wt_one)
-  jump loop(b,base,word,wt_next)
+  wt_next:u64 = int.add.wrap(p4_3_i,wt_one)
+  jump loop(p4_3_b,p4_3_base,p4_3_word,wt_next)
 block done()
   wt_ret:u32 = const() {"value":0}
   ret(wt_ret)
@@ -179,21 +179,21 @@ fn write_reply_word(bytes:mutbuf,offset:usize,value:u64) -> (u32) effects(write,
 block start(bytes:mutbuf,offset:usize,value:u64)
   wr_zero:u64 = const() {"value":0}
   jump loop(bytes,offset,value,wr_zero)
-block loop(b:mutbuf,base:usize,word:u64,i:u64)
+block loop(p5_2_b:mutbuf,p5_2_base:usize,p5_2_word:u64,p5_2_i:u64)
   wr_width:u64 = const() {"value":8}
-  wr_cont:bool = compare.lt(i,wr_width)
-  branch wr_cont byte(b,base,word,i) done()
-block byte(b:mutbuf,base:usize,word:u64,i:u64)
-  wr_idx:usize = int.cast(i) {"mode":"wrap"}
-  wr_addr:usize = int.add.wrap(base,wr_idx)
+  wr_cont:bool = compare.lt(p5_2_i,wr_width)
+  branch wr_cont byte(p5_2_b,p5_2_base,p5_2_word,p5_2_i) done()
+block byte(p5_3_b:mutbuf,p5_3_base:usize,p5_3_word:u64,p5_3_i:u64)
+  wr_idx:usize = int.cast(p5_3_i) {"mode":"wrap"}
+  wr_addr:usize = int.add.wrap(p5_3_base,wr_idx)
   wr_eight:u64 = const() {"value":8}
-  wr_shift:u64 = int.mul.wrap(i,wr_eight)
-  wr_shifted:u64 = int.shr.checked(word,wr_shift)
+  wr_shift:u64 = int.mul.wrap(p5_3_i,wr_eight)
+  wr_shifted:u64 = int.shr.checked(p5_3_word,wr_shift)
   wr_oct:u8 = int.cast(wr_shifted) {"mode":"wrap"}
-  _ = buffer.store(b,wr_addr,wr_oct)
+  _ = buffer.store(p5_3_b,wr_addr,wr_oct)
   wr_one:u64 = const() {"value":1}
-  wr_next:u64 = int.add.wrap(i,wr_one)
-  jump loop(b,base,word,wr_next)
+  wr_next:u64 = int.add.wrap(p5_3_i,wr_one)
+  jump loop(p5_3_b,p5_3_base,p5_3_word,wr_next)
 block done()
   wr_ret:u32 = const() {"value":0}
   ret(wr_ret)
