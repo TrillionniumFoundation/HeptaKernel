@@ -120,6 +120,35 @@ jobs:
                      base64.b64decode(e["operand_b64"]) for e in edges)
           assert sum(report["counts"]["kconfig_source_" + kind]
                      for kind in source_kinds) == len(edges)
+          # Independent upstream readback, not a replay of the extraction
+          # function: re-read every immutable Kconfig blob and reconstruct all
+          # four directive rows by whitespace tokenization.
+          actual_edges = [
+              (base64.b64decode(e["path_b64"]), e["line"], e["kind"].encode("ascii"),
+               base64.b64decode(e["operand_b64"]), e["blob_oid"])
+              for e in edges
+          ]
+          expected_edges = []
+          for record in rows:
+              path = base64.b64decode(record["path_b64"])
+              leaf = path.rsplit(b"/", 1)[-1]
+              if not (leaf == b"Kconfig" or leaf.startswith(b"Kconfig.")):
+                  continue
+              if record["mode"] not in ("100644", "100755"):
+                  continue
+              original = subprocess.check_output([
+                  "git", "-C", ".upstream/linux", "cat-file", "blob", record["oid"]
+              ])
+              assert len(original) == record["size"]
+              for number, line in enumerate(original.splitlines(), 1):
+                  tokens = line.lstrip(b" \t").split(None, 1)
+                  if len(tokens) != 2 or tokens[0] not in (
+                          b"source", b"rsource", b"osource", b"orsource"):
+                      continue
+                  expected_edges.append((path, number, tokens[0],
+                                         tokens[1].strip(b" \t"), record["oid"]))
+          assert actual_edges == expected_edges, (
+              "incomplete or reordered lexical Kconfig source-edge inventory")
           print("FULL_GIT_TREE_LOSSLESS_INVENTORY: PASS", len(rows))
           print("KCONFIG_DECLARATION_RECORDS:", report["counts"]["kconfig_declarations"])
           print("KCONFIG_SOURCE_EDGES:", report["counts"]["kconfig_source_edges"])
