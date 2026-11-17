@@ -122,7 +122,7 @@ test-x86-tss-gdt: build/x86-tss-gdt.so build/e820-allow-all.so
 
 # HIA native CPL3 segment descriptors for the active 64-byte GDT.
 build/x86-user-gdt.o: src/x86_user_gdt.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.x86-user-gdt.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \\
+	@set -eu; tmp=$(mktemp build/.x86-user-gdt.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
 	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \\
 	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
 
