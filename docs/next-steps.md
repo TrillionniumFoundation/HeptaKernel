@@ -10,7 +10,11 @@ dependency order, preserving the exact baseline and every unmet obligation in
    port I/O, MMIO, atomics/fences, static storage and linking. Test encodings
    independently and retain precise safety/effect semantics. Replace the
    current `.S` bridge only when equivalent HIA code has passed boot and
-   fault-injection tests.
+   fault-injection tests. The active 256-vector x86-64 IDT is now written
+   by a genuine native HIA table installer and independently checked with
+   a stale-word QEMU refusal test. Privileged `lidt`, CPU exception
+   entry/return, register sampling, TSS/IST and interrupt concurrency
+   remain outside HIA.
 2. Import the complete source/Kconfig/UAPI/driver/ABI baseline inventory without
    truncation. The present first-level families and x86-64 syscall table are
    initial coverage obligations, not a complete translation inventory.

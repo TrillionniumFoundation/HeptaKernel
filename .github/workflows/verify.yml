@@ -158,6 +158,10 @@ jobs:
             build/native-report.json
             build/e820-region-report.json
             build/arena-router-report.json
+            build/boot-idt-conflict.o
+            build/idt-conflict-multiboot.elf
+            build/idt-conflict.elf
+            build/idt-gate-boot.o
             build/x86-idt-report.json
             build/x86-idt.o
             build/x86-idt.so

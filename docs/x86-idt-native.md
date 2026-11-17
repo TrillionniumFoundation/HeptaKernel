@@ -20,11 +20,18 @@ single-owner check is not atomic CAS and cannot be used for live SMP updates.
 An independent Python oracle checks descriptor bytes, all 256 vectors,
 stale expected-old inputs, malformed buffers, noncanonical handlers, and
 guarded memory boundaries. A deliberately dishonest native HIA implementation
-is required to fail. Neither this direct native object nor host testing
-establishes that x86 hardware loaded an IDT. The current kernel bridge still
-constructs and loads its IDT in `arch/x86_64/boot.S`. The next integration
-must link this exact HIA object into PC/Q35 and use it to build the active
-IDT before `lidt`, including an intentionally stale old-word fault injection.
-Privileged `lidt`, hardware exception frame entry/IRET and IST still require
-upstream HIA architecture support; no binary payloads or translated stubs
-are counted as HIA.
+is required to fail. The native HIA IDT writer now executes in PC/Q35 before privileged
+`lidt`, writing each of the 256 interrupt gates. The test bridge checks
+both output qwords and selector/type fields, then overrides vector 14
+using the same HIA implementation in NX/WP fault images. Actual hardware
+page faults must still dispatch successfully through the HIA-written
+descriptor to the existing assembly entry and HIA policy checker.
+A fault-injected image supplies a stale expected-old word for vector
+zero, requiring status 9 with neither IDT qword modified and an
+independent pre-LIDT refusal marker. Byte-for-byte HIA compilation,
+native guarded oracles and all existing QEMU controls remain required.
+
+This is a live HIA IDT **table construction** milestone; it is not
+HIA-native privileged `lidt`, exception frame entry/IRET, TSS/IST or
+concurrent SMP update. No binary payloads or translated stubs are
+counted as HIA.
