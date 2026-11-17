@@ -4,7 +4,7 @@ QEMU ?= qemu-system-x86_64
 PYTHON ?= python3
 COMPILER_SHA256 := 87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54
 
-.PHONY: all check-compiler test test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-x86-user-gdt test-x86-tss-gdt test-x86-tss-state test-closure test-linux-inventory record-build full-acceptance clean
+.PHONY: all check-compiler test test-x86-pde-2m test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-x86-user-gdt test-x86-tss-gdt test-x86-tss-state test-closure test-linux-inventory record-build full-acceptance clean
 
 all: build/kernel-multiboot.elf
 
@@ -136,6 +136,22 @@ test-x86-user-gdt: build/x86-user-gdt.so build/e820-allow-all.so
 	timeout 90 $(PYTHON) tests/test_x86_user_gdt.py build/x86-user-gdt.so
 	$(PYTHON) tests/test_x86_user_gdt.py build/e820-allow-all.so --expect-unsafe
 
+# Real HIA Core v8 2 MiB huge PDE admission, distinct from the 4 KiB PTE writer.
+build/x86-pde-2m.o: src/x86_pde_2m.hepta | build check-compiler
+	@set -eu; tmp=$(mktemp build/.x86-pde-2m.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
+	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+
+build/x86-pde-2m.so: build/x86-pde-2m.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/pde-2m-boot.o: build/x86-pde-2m.o
+	objcopy --redefine-sym f0=pde_2m_f0 "$<" "$@"
+
+test-x86-pde-2m: build/x86-pde-2m.so build/e820-allow-all.so
+	timeout 90 $(PYTHON) tests/test_x86_pde_2m.py build/x86-pde-2m.so
+	$(PYTHON) tests/test_x86_pde_2m.py build/e820-allow-all.so --expect-unsafe
+
 # A deliberately stale expected IST1 must fail before HIA GDT and LTR.
 build/boot-tss-state-conflict.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_TSS_STATE_CONFLICT=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
@@ -153,12 +169,12 @@ build/boot-ring3-rsp0.o: arch/x86_64/boot.S build/boot-cases.bin
 build/boot-ring3-rsp0-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_RSP0_DECOY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
-build/ring3-rsp0-multiboot.elf: build/boot-ring3-rsp0.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o arch/x86_64/linker.ld
-	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/ring3-rsp0.elf build/boot-ring3-rsp0.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o
+build/ring3-rsp0-multiboot.elf: build/boot-ring3-rsp0.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o build/pde-2m-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/ring3-rsp0.elf build/boot-ring3-rsp0.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o build/pde-2m-boot.o
 	objcopy -O elf32-i386 build/ring3-rsp0.elf "$@"
 
-build/ring3-rsp0-decoy-multiboot.elf: build/boot-ring3-rsp0-decoy.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o arch/x86_64/linker.ld
-	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/ring3-rsp0-decoy.elf build/boot-ring3-rsp0-decoy.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o
+build/ring3-rsp0-decoy-multiboot.elf: build/boot-ring3-rsp0-decoy.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o build/pde-2m-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/ring3-rsp0-decoy.elf build/boot-ring3-rsp0-decoy.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o build/pde-2m-boot.o
 	objcopy -O elf32-i386 build/ring3-rsp0-decoy.elf "$@"
 
 # Deliberately stale RSP0 refuses the complete native HIA TSS transaction before LTR.
@@ -420,7 +436,7 @@ test-x86-pte: build/x86-pte.so build/e820-allow-all.so
 	timeout 90 $(PYTHON) tests/test_x86_pte_leaf.py build/x86-pte.so
 	$(PYTHON) tests/test_x86_pte_leaf.py build/e820-allow-all.so --expect-unsafe
 
-record-build: build/x86-user-gdt.so build/user-gdt-boot.o build/boot-user-gdt-conflict.o build/user-gdt-conflict-multiboot.elf build/boot-ring3-rsp0.o build/boot-ring3-rsp0-decoy.o build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/boot-tss-rsp0-conflict.o build/tss-rsp0-conflict-multiboot.elf build/boot-tss-state-conflict.o build/tss-state-conflict-multiboot.elf build/boot-tss-conflict.o build/tss-conflict-multiboot.elf build/x86-tss-gdt.so build/boot-idt-conflict.o build/idt-conflict-multiboot.elf build/idt-gate-boot.o build/tss-gdt-boot.o build/tss-state-boot.o build/x86-idt.so build/pf-corrupt-multiboot.elf build/boot-pf-corrupt.o build/x86-pf-gate.so build/pf-gate-boot.o build/pt-commit-conflict-multiboot.elf build/x86-pt-commit.so build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/pte-boot.o build/pt-commit-boot.o build/x86-pte.so build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/reservation-gate.so build/owner-binding.so build/owner-boot.o build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/arena-router.so build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
+record-build: build/x86-user-gdt.so build/user-gdt-boot.o build/boot-user-gdt-conflict.o build/user-gdt-conflict-multiboot.elf build/boot-ring3-rsp0.o build/boot-ring3-rsp0-decoy.o build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/boot-tss-rsp0-conflict.o build/tss-rsp0-conflict-multiboot.elf build/boot-tss-state-conflict.o build/tss-state-conflict-multiboot.elf build/boot-tss-conflict.o build/tss-conflict-multiboot.elf build/x86-tss-gdt.so build/boot-idt-conflict.o build/idt-conflict-multiboot.elf build/idt-gate-boot.o build/tss-gdt-boot.o build/tss-state-boot.o build/x86-idt.so build/pf-corrupt-multiboot.elf build/boot-pf-corrupt.o build/x86-pf-gate.so build/pf-gate-boot.o build/pt-commit-conflict-multiboot.elf build/x86-pt-commit.so build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/pte-boot.o build/pt-commit-boot.o build/x86-pte.so build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/reservation-gate.so build/owner-binding.so build/owner-boot.o build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/arena-router.so build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/x86-pde-2m.o build/x86-pde-2m.so build/pde-2m-boot.o
 	$(PYTHON) tools/record_build.py --compiler "$(HEPTA_COMPILER)"
 
 test-closure:
@@ -429,7 +445,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-x86-pde-2m test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 full-acceptance:
 	$(PYTHON) tools/check_closure.py
