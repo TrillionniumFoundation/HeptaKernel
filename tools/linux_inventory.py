@@ -235,7 +235,7 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
         },
         "unparsed_kconfig": kconfig_unreadable,
         "limitations": [
-            "Kconfig symbols and source edges are lexical only: no include expansion, 
+            "Kconfig symbols and source edges are lexical only: no include expansion, "
             "dependency resolution, architecture selection or config satisfiability.",
             "UAPI and syscall sources are path inventories, not parsed ABI or "
             "structure layouts; driver IDs and devices are not yet mapped.",

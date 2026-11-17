@@ -114,8 +114,9 @@ jobs:
           edges = [json.loads(x) for x in source_edges.splitlines()]
           assert len(edges) == report["counts"]["kconfig_source_edges"]
           source_kinds = ("source", "rsource", "osource", "orsource")
+          valid_blob_ids = {p["oid"] for p in rows}
           assert all(e["kind"] in source_kinds and e["line"] >= 1 and
-                     e["blob_oid"] in {p["oid"] for p in rows} and
+                     e["blob_oid"] in valid_blob_ids and
                      base64.b64decode(e["operand_b64"]) for e in edges)
           assert sum(report["counts"]["kconfig_source_" + kind]
                      for kind in source_kinds) == len(edges)
