@@ -11,6 +11,7 @@ FAIL_MARKER = "HEPTAKERNEL BOOT FAIL"
 MAP_MARKER = "HEPTAKERNEL HIA E820 VERIFIED"
 IDT_MARKER = "HEPTAKERNEL HIA LIVE IDT VERIFIED"
 IDT_STALE_MARKER = "HEPTAKERNEL HIA IDT STALE WORD REJECTED"
+IST_MARKER = "HEPTAKERNEL HIA IDT IST1 HARDWARE STACK VERIFIED"
 RESERVATION_MARKER = "HEPTAKERNEL HIA RESERVATIONS VERIFIED"
 ROUTER_MARKER = "HEPTAKERNEL HIA ARENA ROUTER VERIFIED"
 OWNER_MARKER = "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED"
@@ -39,6 +40,8 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         record.update(returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
         idt_verified = p.stdout.count(IDT_MARKER) == 1
         idt_stale_rejected = p.stdout.count(IDT_STALE_MARKER) == 1
+        ist_fault_verified = p.stdout.count(IST_MARKER) == 1
+        record["real_ist1_exception_stack_observed"] = ist_fault_verified
         record["native_hia_live_idt_observed"] = idt_verified
         record["native_hia_idt_stale_refusal_observed"] = idt_stale_rejected
         map_verified = p.stdout.count(MAP_MARKER) == 1
@@ -87,7 +90,7 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
         elif mode == "nx_hardware_fault":
             accepted = (map_verified and reservation_verified and not pte_verified and
-                        nx_fault_verified and not nx_bypass_executed and not route_verified and
+                        nx_fault_verified and ist_fault_verified and not nx_bypass_executed and not route_verified and
                         not owner_verified and p.returncode == 37 and
                         PASS_MARKER not in p.stdout and FAIL_MARKER not in p.stdout)
         elif mode == "nx_bypass_executed":
@@ -97,7 +100,7 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         PASS_MARKER not in p.stdout and FAIL_MARKER not in p.stdout)
         elif mode == "wp_hardware_fault":
             accepted = (map_verified and reservation_verified and not pte_verified and
-                        wp_fault_verified and not wp_bypass_executed and
+                        wp_fault_verified and ist_fault_verified and not wp_bypass_executed and
                         not nx_fault_verified and not nx_bypass_executed and
                         not route_verified and not owner_verified and p.returncode == 41 and
                         PASS_MARKER not in p.stdout and FAIL_MARKER not in p.stdout)
