@@ -197,6 +197,19 @@ def main():
         idt_native_text = Elf("build/x86-idt.o").section_bytes(".text")
         if Elf("build/idt-gate-boot.o").section_bytes(".text") != idt_native_text:
             raise ValueError("native HIA IDT symbol rename changed machine code")
+        state_source = Path("src/x86_tss_state.hepta").read_bytes()
+        state_object = Path("build/x86-tss-state.o").read_bytes()
+        state_rebuilt = subprocess.run([compiler], input=state_source, capture_output=True,
+                                      timeout=20, env={"PATH": ""})
+        if state_rebuilt.returncode or state_rebuilt.stderr or state_rebuilt.stdout != state_object:
+            raise ValueError("native HIA TSS state differs from empty-PATH rebuild")
+        if subprocess.check_output(["nm", "-u", "build/x86-tss-state.o"], text=True).strip():
+            raise ValueError("native HIA TSS state has undefined symbols")
+        state_text = Elf("build/x86-tss-state.o").section_bytes(".text")
+        if Elf("build/x86-tss-state.so").section_bytes(".text") != state_text:
+            raise ValueError("native HIA TSS state host code differs")
+        if Elf("build/tss-state-boot.o").section_bytes(".text") != state_text:
+            raise ValueError("native HIA TSS state symbol rename changed code")
         tss_source = Path("src/x86_tss_gdt.hepta").read_bytes()
         tss_object = Path("build/x86-tss-gdt.o").read_bytes()
         tss_rebuilt = subprocess.run([compiler], input=tss_source, capture_output=True,
@@ -272,6 +285,12 @@ def main():
         if (image64.text_at(idt_boot_entry, len(idt_native_text)) != idt_native_text or
                 image32.text_at(idt_boot_entry, len(idt_native_text)) != idt_native_text):
             raise ValueError("native HIA IDT gate absent or different in boot")
+        state_boot_entry = image64.symbol("tss_state_f0")
+        if image32.symbol("tss_state_f0") != state_boot_entry:
+            raise ValueError("native HIA TSS state entry differs after Multiboot")
+        if (image64.text_at(state_boot_entry, len(state_text)) != state_text or
+                image32.text_at(state_boot_entry, len(state_text)) != state_text):
+            raise ValueError("default boot lacks byte-exact HIA TSS state")
         tss_boot_entry = image64.symbol("tss_gdt_f0")
         if image32.symbol("tss_gdt_f0") != tss_boot_entry:
             raise ValueError("native HIA TSS GDT entry changed after Multiboot wrap")
@@ -310,6 +329,7 @@ def main():
         wp_bypass_code = Elf("build/boot-wp-bypass.o").section_bytes(".text.boot")
         pt_commit_conflict_code = Elf("build/boot-pt-commit-conflict.o").section_bytes(".text.boot")
         pf_corrupt_code = Elf("build/boot-pf-corrupt.o").section_bytes(".text.boot")
+        state_conflict_code = Elf("build/boot-tss-state-conflict.o").section_bytes(".text.boot")
         tss_conflict_code = Elf("build/boot-tss-conflict.o").section_bytes(".text.boot")
         idt_conflict_code = Elf("build/boot-idt-conflict.o").section_bytes(".text.boot")
         if len({sha(boot_code), sha(reserved_code), sha(persistent_code),
@@ -317,7 +337,7 @@ def main():
                 sha(nx_fault_code), sha(nx_bypass_code),
                 sha(wp_fault_code), sha(wp_bypass_code),
                  sha(pt_commit_conflict_code), sha(pf_corrupt_code),
-                 sha(idt_conflict_code), sha(tss_conflict_code)}) != 14:
+                 sha(idt_conflict_code), sha(tss_conflict_code), sha(state_conflict_code)}) != 15:
             raise ValueError("normal, reserved, persistent, alias and protected boot transports must differ")
         for stem, expected_e820, expected_arena, expected_reservation in (
                 ("e820-reserved", e820_code, arena_code, reservation_text),
@@ -336,7 +356,8 @@ def main():
                 ("wp-bypass", e820_code, arena_code, reservation_text),
                 ("pf-corrupt", e820_code, arena_code, reservation_text),
                 ("idt-conflict", e820_code, arena_code, reservation_text),
-                ("tss-conflict", e820_code, arena_code, reservation_text)):
+                ("tss-conflict", e820_code, arena_code, reservation_text),
+                ("tss-state-conflict", e820_code, arena_code, reservation_text)):
             linked64 = Elf("build/" + stem + ".elf")
             packed32 = Elf("build/" + stem + "-multiboot.elf")
             for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820),
@@ -346,7 +367,8 @@ def main():
                                            ("pt_commit_f0", commit_text),
                                            ("pf_gate_f0", pf_text),
                                            ("idt_gate_f0", idt_native_text),
-                                           ("tss_gdt_f0", tss_native_text)):
+                                           ("tss_gdt_f0", tss_native_text),
+                                           ("tss_state_f0", state_text)):
                 symbol_address = linked64.symbol(symbol)
                 if packed32.symbol(symbol) != symbol_address:
                     raise ValueError(stem + " symbol differs after Multiboot wrapping")
@@ -409,7 +431,13 @@ def main():
                        x86_idt_native_object_sha256=sha(idt_object),
                        x86_idt_live_boot_entry=idt_boot_entry,
                        x86_idt_live_boot_code_matches=True,
-                       x86_idt_assembly_lidt_bridge_retained=True,
+                       x86_tss_state_source_sha256=sha(state_source),
+                        x86_tss_state_object_sha256=sha(state_object),
+                        x86_tss_state_text_sha256=sha(state_text),
+                        x86_tss_state_boot_entry=state_boot_entry,
+                        x86_tss_state_boot_code_matches=True,
+                        x86_tss_state_native_ltr=False,
+                        x86_idt_assembly_lidt_bridge_retained=True,
                        x86_pf_native_exception_entry=False,
                        x86_pf_boot_entry=pf_boot_entry,
                        x86_pf_boot_code_matches=True,
