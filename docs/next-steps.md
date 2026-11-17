@@ -25,6 +25,12 @@ dependency order, preserving the exact baseline and every unmet obligation in
    user CS/SS/RIP/RSP verified. A post-HIA RSP0 decoy mutation must be
    detected at the *other* real exception stack. This is not a HIA privilege
    backend, user task or syscall implementation;
+   the isolated CPL3 path now asks a genuine native HIA exclusive-owner
+   2 MiB PDE writer to commit both user RX and user RW/NX huge-page
+   mappings, with independent stale-old refusal and QEMU physical hardware
+   execution. Upper-page-table U/S bits, TLB flush and all IRET/exception
+   instructions remain in the expressly NON-HIA test bridge. This is not
+   a general VMM or SMP atomically linearizable page-table manager;
    a native HIA single-owner paired CPL3 code/data GDT writer now
    replaces test-only assembler-preinitialized user selectors 0x30/0x38,
    with expected-old admission and a separate stale-word QEMU refusal.
