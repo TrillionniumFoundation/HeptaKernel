@@ -15,6 +15,8 @@ TSS_STATE_STALE_MARKER = "HEPTAKERNEL HIA TSS STATE STALE WORD REJECTED"
 TSS_RSP0_STALE_MARKER = "HEPTAKERNEL HIA TSS RSP0 STALE WORD REJECTED"
 RSP0_RING3_MARKER = "HEPTAKERNEL HIA TSS RSP0 CPL3 HARDWARE SWITCH VERIFIED"
 RSP0_DECOY_MARKER = "HEPTAKERNEL HIA TSS RSP0 DECOY STACK DETECTED"
+UPPER_USER_MARKER = "HEPTAKERNEL HIA LIVE UPPER USER TABLE VERIFIED"
+UPPER_USER_STALE_MARKER = "HEPTAKERNEL HIA UPPER USER TABLE STALE OLD REJECTED"
 PDE_2M_MARKER = "HEPTAKERNEL HIA LIVE USER 2M PDE VERIFIED"
 PDE_2M_STALE_MARKER = "HEPTAKERNEL HIA USER 2M PDE STALE OLD REJECTED"
 USER_GDT_MARKER = "HEPTAKERNEL HIA LIVE USER GDT VERIFIED"
@@ -61,6 +63,10 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         record["native_hia_tss_rsp0_stale_observed"] = rsp0_stale
         user_gdt_verified = p.stdout.count(USER_GDT_MARKER) == 1
         user_gdt_stale = p.stdout.count(USER_GDT_STALE_MARKER) == 1
+        upper_verified = p.stdout.count(UPPER_USER_MARKER) == 1
+        upper_stale = p.stdout.count(UPPER_USER_STALE_MARKER) == 1
+        record["native_hia_live_upper_user_grant"] = upper_verified
+        record["native_hia_upper_user_stale_rejected"] = upper_stale
         pde_verified = p.stdout.count(PDE_2M_MARKER) == 1
         pde_stale = p.stdout.count(PDE_2M_STALE_MARKER) == 1
         record["native_hia_live_user_huge_pde"] = pde_verified
@@ -104,6 +110,14 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         and not tss_verified and not idt_verified and not map_verified
                         and p.returncode == 35 and FAIL_MARKER in p.stdout
                         and PASS_MARKER not in p.stdout)
+        elif mode == "upper_user_stale_rejected":
+            accepted = (state_verified and user_gdt_verified and tss_verified
+                        and idt_verified and map_verified and reservation_verified
+                        and upper_stale and not upper_verified and not pde_verified
+                        and not ring3_observed and not decoy_observed
+                        and not pte_verified and not route_verified
+                        and p.returncode == 35 and PASS_MARKER not in p.stdout
+                        and FAIL_MARKER in p.stdout)
         elif mode == "pde_2m_stale_rejected":
             accepted = (state_verified and user_gdt_verified and tss_verified and
                         idt_verified and map_verified and reservation_verified and
@@ -219,7 +233,9 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         # the native HIA table commit, including faults and dishonest controls.
         precommit = {"reserved_rejected", "nonvolatile_rejected", "protected_rejected",
                      "pte_unsafe_rejected", "pt_commit_conflict_rejected"}
-        accepted = accepted and (pt_commit_verified == (mode not in precommit | {"user_gdt_conflict_rejected", "idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected", "rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected"}))
+        accepted = accepted and (pt_commit_verified == (mode not in precommit | {"user_gdt_conflict_rejected", "idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected", "rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected", "upper_user_stale_rejected"}))
+        accepted = accepted and (upper_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected"}))
+        accepted = accepted and (upper_stale == (mode == "upper_user_stale_rejected"))
         accepted = accepted and (pde_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected"}))
         accepted = accepted and (pde_stale == (mode == "pde_2m_stale_rejected"))
         accepted = accepted and (state_verified == (mode not in {"tss_state_conflict_rejected", "tss_rsp0_conflict_rejected"}))
@@ -248,7 +264,10 @@ def main():
               "all_kernel_code_in_hia": False,
               "source_sha256": digest("src/kernel.hepta"), "hia_object_sha256": digest("build/kernel.o"),
               "bridge_sha256": digest("arch/x86_64/boot.S"),
-              "native_hia_pde_2m_object_sha256": digest("build/x86-pde-2m.o"),
+              "native_hia_upper_user_object_sha256": digest("build/x86-upper-user.o"),
+               "native_hia_upper_user_boot_sha256": digest("build/upper-user-boot.o"),
+               "upper_user_stale_boot_sha256": digest("build/boot-ring3-upper-stale.o"),
+               "native_hia_pde_2m_object_sha256": digest("build/x86-pde-2m.o"),
               "native_hia_pde_2m_boot_symbol_sha256": digest("build/pde-2m-boot.o"),
               "pde_2m_stale_boot_sha256": digest("build/boot-ring3-pde-stale.o"),
               "native_hia_user_gdt_object_sha256": digest("build/x86-user-gdt.o"),
@@ -301,6 +320,8 @@ def main():
             report["runs"].append(run(args.qemu, Path("build/idt-conflict-multiboot.elf"),
                                       machine, memory, mode="idt_conflict_rejected"))
         for machine, memory in (("pc", "32"), ("q35", "64")):
+            report["runs"].append(run(args.qemu, Path("build/ring3-upper-stale-multiboot.elf"),
+                                       machine, memory, mode="upper_user_stale_rejected"))
             report["runs"].append(run(args.qemu, Path("build/ring3-pde-stale-multiboot.elf"),
                                       machine, memory, mode="pde_2m_stale_rejected"))
             report["runs"].append(run(args.qemu, Path("build/ring3-rsp0-multiboot.elf"),
