@@ -194,6 +194,9 @@ def main():
         if (Elf("build/x86-idt.so").section_bytes(".text") !=
                 Elf("build/x86-idt.o").section_bytes(".text")):
             raise ValueError("native HIA IDT host object machine bytes differ")
+        idt_native_text = Elf("build/x86-idt.o").section_bytes(".text")
+        if Elf("build/idt-gate-boot.o").section_bytes(".text") != idt_native_text:
+            raise ValueError("native HIA IDT symbol rename changed machine code")
         e820_source = Path("src/e820_region.hepta").read_bytes()
         e820_object = Path("build/e820-region.o").read_bytes()
         rebuilt_e820 = subprocess.run([compiler], input=e820_source, capture_output=True,
@@ -250,6 +253,12 @@ def main():
         if (image64.text_at(pf_boot_entry, len(pf_text)) != pf_text or
                 image32.text_at(pf_boot_entry, len(pf_text)) != pf_text):
             raise ValueError("QEMU boot lacks byte-exact native HIA #PF gate")
+        idt_boot_entry = image64.symbol("idt_gate_f0")
+        if image32.symbol("idt_gate_f0") != idt_boot_entry:
+            raise ValueError("native HIA IDT entry changed in Multiboot image")
+        if (image64.text_at(idt_boot_entry, len(idt_native_text)) != idt_native_text or
+                image32.text_at(idt_boot_entry, len(idt_native_text)) != idt_native_text):
+            raise ValueError("native HIA IDT gate absent or different in boot")
         reservation_entry = image64.symbol("reservation_f0")
         if image32.symbol("reservation_f0") != reservation_entry:
             raise ValueError("HIA reservation boot entry mismatch")
@@ -282,11 +291,13 @@ def main():
         wp_bypass_code = Elf("build/boot-wp-bypass.o").section_bytes(".text.boot")
         pt_commit_conflict_code = Elf("build/boot-pt-commit-conflict.o").section_bytes(".text.boot")
         pf_corrupt_code = Elf("build/boot-pf-corrupt.o").section_bytes(".text.boot")
+        idt_conflict_code = Elf("build/boot-idt-conflict.o").section_bytes(".text.boot")
         if len({sha(boot_code), sha(reserved_code), sha(persistent_code),
                 sha(alias_code), sha(protected_code), sha(pte_unsafe_code),
                 sha(nx_fault_code), sha(nx_bypass_code),
                 sha(wp_fault_code), sha(wp_bypass_code),
-                 sha(pt_commit_conflict_code), sha(pf_corrupt_code)}) != 12:
+                 sha(pt_commit_conflict_code), sha(pf_corrupt_code),
+                 sha(idt_conflict_code)}) != 13:
             raise ValueError("normal, reserved, persistent, alias and protected boot transports must differ")
         for stem, expected_e820, expected_arena, expected_reservation in (
                 ("e820-reserved", e820_code, arena_code, reservation_text),
@@ -303,7 +314,8 @@ def main():
                 ("nx-bypass", e820_code, arena_code, reservation_text),
                 ("wp-fault", e820_code, arena_code, reservation_text),
                 ("wp-bypass", e820_code, arena_code, reservation_text),
-                ("pf-corrupt", e820_code, arena_code, reservation_text)):
+                ("pf-corrupt", e820_code, arena_code, reservation_text),
+                ("idt-conflict", e820_code, arena_code, reservation_text)):
             linked64 = Elf("build/" + stem + ".elf")
             packed32 = Elf("build/" + stem + "-multiboot.elf")
             for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820),
@@ -311,7 +323,8 @@ def main():
                                           ("reservation_f0", expected_reservation),
                                           ("pte_f0", pte_text),
                                            ("pt_commit_f0", commit_text),
-                                           ("pf_gate_f0", pf_text)):
+                                           ("pf_gate_f0", pf_text),
+                                           ("idt_gate_f0", idt_native_text)):
                 symbol_address = linked64.symbol(symbol)
                 if packed32.symbol(symbol) != symbol_address:
                     raise ValueError(stem + " symbol differs after Multiboot wrapping")
@@ -370,6 +383,11 @@ def main():
                        x86_pf_text_sha256=sha(pf_text),
                        x86_pf_exact_recompilation=True,
                        x86_pf_loaded_text_matches=True,
+                       x86_idt_native_object_source_sha256=sha(idt_source),
+                       x86_idt_native_object_sha256=sha(idt_object),
+                       x86_idt_live_boot_entry=idt_boot_entry,
+                       x86_idt_live_boot_code_matches=True,
+                       x86_idt_assembly_lidt_bridge_retained=True,
                        x86_pf_native_exception_entry=False,
                        x86_pf_boot_entry=pf_boot_entry,
                        x86_pf_boot_code_matches=True,
