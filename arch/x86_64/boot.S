@@ -592,54 +592,90 @@ fail64:
 pte_page_fault64:
     cli
 #ifdef HEPTAKERNEL_TEST_NX_FETCH
-    /* CPU exception frame, at CPL0: error code at RSP, saved RIP at RSP+8.
-     * P=1 and I/D=1 must both hold: a present NX leaf denied a fetch.
-     * Check the exact faulting address and an armed post-HIA PTE setup. */
+    /* The bridge remains the CPU exception entry; policy is native HIA.
+     * Only an armed test is admitted to this isolated terminal path. */
     cmpq $0x4e584650, pte_nx_armed(%rip)
     jne exception64
-    cmpq $0x11, (%rsp)
-    jne exception64
-    cmpq $ARENA_MIN, 8(%rsp)
-    jne exception64
-    movq %cr2, %rax
-    cmpq $ARENA_MIN, %rax
-    jne exception64
-    leaq emergency_stack_top(%rip), %rsp
-    leaq message_nx_fault_pass(%rip), %rsi
-    call puts64
-    movl $0x12, %eax               /* QEMU exit 37, verified NX fault */
-    jmp debug_exit64
+    movq $1, pf_request(%rip)       /* kind 1: supervisor NX fetch */
+    movq $ARENA_MIN, pf_request+32(%rip)
+    movq $ARENA_MIN, pf_request+40(%rip)
 #elif defined(HEPTAKERNEL_TEST_WP_STORE)
-    /* Exact supervisor present-page write fault for HIA's read-only leaf.
-     * Validate CR0.WP, saved RIP, CR2 and the still-read-only PTE.
-     * Ignore hardware-updated A/D bits. */
     cmpq $0x5750524f, pte_wp_armed(%rip)
     jne exception64
-    cmpq $3, (%rsp)                /* P=1, W/R=1, U/S=0, I/D=0 */
-    jne exception64
+    movq $2, pf_request(%rip)       /* kind 2: supervisor CR0.WP */
+    movq $ARENA_MIN, pf_request+32(%rip)
     leaq wp_store_insn(%rip), %rax
-    cmpq %rax, 8(%rsp)
-    jne exception64
-    movq %cr2, %rax
-    cmpq $ARENA_MIN, %rax
-    jne exception64
-    movq %cr0, %rax
-    testq $0x10000, %rax
-    jz exception64
-    movq page_table_4m(%rip), %rax
-    testq $1, %rax
-    jz exception64
-    testq $2, %rax
-    jnz exception64
-    leaq emergency_stack_top(%rip), %rsp
-    leaq message_wp_fault_pass(%rip), %rsi
-    call puts64
-    movl $0x14, %eax               /* QEMU exit 41 */
-    jmp debug_exit64
+    movq %rax, pf_request+40(%rip)
 #else
-    /* Both bypass images MUST execute, never pass via a generic #PF. */
+    /* Bypass images must execute; generic fault is never a success. */
     jmp exception64
 #endif
+    /* Capture the genuine #PF error, CR2, RIP, active PTE, CR0 and EFER.
+     * Native HIA compares them against distinct expected values. */
+    movq (%rsp), %rax
+    movq %rax, pf_request+8(%rip)
+    movq %cr2, %rax
+    movq %rax, pf_request+16(%rip)
+    movq 8(%rsp), %rax
+    movq %rax, pf_request+24(%rip)
+    movq page_table_4m(%rip), %rax
+    movq %rax, pf_request+48(%rip)
+    movq %cr0, %rax
+    movq %rax, pf_request+56(%rip)
+    movl $0xc0000080, %ecx        /* IA32_EFER */
+    rdmsr
+    shlq $32, %rdx
+    orq %rdx, %rax
+    movq %rax, pf_request+64(%rip)
+#ifdef HEPTAKERNEL_TEST_PF_RECORD_CORRUPT
+    /* Hardware fault stays genuine; the bridge injects one false error bit
+     * to demonstrate the independent HIA classifier refuses a bad record. */
+    xorq $1, pf_request+8(%rip)
+#endif
+    movabsq $0xa55aa55a5aa55aa5, %r10
+    movq %r10, pf_guard_before(%rip)
+    movq %r10, pf_guard_after(%rip)
+    movq %r10, pf_unused(%rip)
+    movq %r10, pf_unused+8(%rip)
+    movq $-1, pf_reply(%rip)
+    movq $-1, pf_reply+8(%rip)
+    /* We do not return to a faulting context. Use an aligned isolated
+     * emergency stack for the SysV HIA native call. */
+    leaq emergency_stack_top(%rip), %rsp
+    andq $-16, %rsp
+    leaq pf_request(%rip), %rdi
+    movl $72, %esi
+    leaq pf_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq pf_unused(%rip), %r8
+    movl $16, %r9d
+    call pf_gate_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, pf_reply(%rip)
+    jne fail64
+    movq pf_request(%rip), %rax
+    cmpq %rax, pf_reply+8(%rip)
+    jne fail64
+    movabsq $0xa55aa55a5aa55aa5, %rax
+    cmpq %rax, pf_guard_before(%rip)
+    jne fail64
+    cmpq %rax, pf_guard_after(%rip)
+    jne fail64
+    cmpq %rax, pf_unused(%rip)
+    jne fail64
+    cmpq %rax, pf_unused+8(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_NX_FETCH
+    leaq message_nx_fault_pass(%rip), %rsi
+    call puts64
+    movl $0x12, %eax              /* QEMU exit 37 */
+#else
+    leaq message_wp_fault_pass(%rip), %rsi
+    call puts64
+    movl $0x14, %eax              /* QEMU exit 41 */
+#endif
+    jmp debug_exit64
 #endif
 
 exception64:
@@ -1397,6 +1433,11 @@ pte_guard_before: .skip 8
 pte_reply:        .skip 16
 pte_guard_after:  .skip 8
 pte_unused:       .skip 16
+pf_guard_before:  .skip 8
+pf_request:       .skip 72
+pf_reply:         .skip 16
+pf_guard_after:   .skip 8
+pf_unused:        .skip 16
 pte_nx_armed:     .skip 8
 pte_wp_armed:     .skip 8
 arena_guard_before: .skip 8
