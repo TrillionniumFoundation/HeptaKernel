@@ -71,8 +71,8 @@ def campaign(library: Path):
     def check(raw: bytes, table: bytes, reply_size: int = 16):
         nonlocal count, positives, denials
         inp = ctypes.create_string_buffer(b"\xa5" * 32 + raw + b"\xa5" * 32)
-        rep = ctypes.create_string_buffer(b"\\xb6" * (reply_size + 64))
-        mem = ctypes.create_string_buffer(b"\\xc7" * 32 + table + b"\\xc7" * 32)
+        rep = ctypes.create_string_buffer(b"\xb6" * (reply_size + 64))
+        mem = ctypes.create_string_buffer(b"\xc7" * 32 + table + b"\xc7" * 32)
         original_input = bytes(inp)
         original_reply = bytes(rep)
         rv = native(ctypes.addressof(inp) + 32, len(raw),
@@ -80,18 +80,18 @@ def campaign(library: Path):
                     ctypes.addressof(mem) + 32, len(table))
         expected_status, expected_value, expected_table = oracle(raw, table, reply_size)
         assert bytes(inp) == original_input, "request modified"
-        assert bytes(mem)[:32] == b"\\xc7" * 32, "before table guard modified"
-        assert bytes(mem)[32 + len(table):32 + len(table) + 32] == b"\\xc7" * 32, "after table guard modified"
+        assert bytes(mem)[:32] == b"\xc7" * 32, "before table guard modified"
+        assert bytes(mem)[32 + len(table):32 + len(table) + 32] == b"\xc7" * 32, "after table guard modified"
         assert bytes(mem)[32:32 + len(table)] == expected_table, "unauthorized table write or failed commit"
-        assert bytes(rep)[:32] == b"\\xb6" * 32, "before reply guard modified"
-        assert bytes(rep)[32 + reply_size:32 + reply_size + 32] == b"\\xb6" * 32, "after reply guard modified"
+        assert bytes(rep)[:32] == b"\xb6" * 32, "before reply guard modified"
+        assert bytes(rep)[32 + reply_size:32 + reply_size + 32] == b"\xb6" * 32, "after reply guard modified"
         assert rv == expected_status, ("status", rv, expected_status, raw.hex())
         if reply_size < 16:
             assert bytes(rep) == original_reply, "short reply was modified"
         else:
             status, value = struct.unpack_from("<2Q", rep, 32)
             assert (status, value) == (expected_status, expected_value)
-            assert bytes(rep)[48:32 + reply_size] == b"\\xb6" * (reply_size - 16)
+            assert bytes(rep)[48:32 + reply_size] == b"\xb6" * (reply_size - 16)
         count += 1
         positives += expected_status == 0
         denials += expected_status != 0
@@ -123,8 +123,8 @@ def campaign(library: Path):
         check(pack(slot, expect, proposed, caps), table)
 
     seed = bytes(PAGE)
-    for raw in (b"", b"\\0" * 24, b"\\0" * 31,
-                b"\\0" * 33, pack(0, 0, 0x8000000000400003) + b"\\0"):
+    for raw in (b"", b"\0" * 24, b"\0" * 31,
+                b"\0" * 33, pack(0, 0, 0x8000000000400003) + b"\0"):
         check(raw, seed)
     for length in (0, 1, 15, 16, 17, 31, 32):
         check(pack(0, 0, 0x8000000000400003), seed, reply_size=length)
@@ -148,7 +148,7 @@ def main():
             return
         raise SystemExit("dishonest PTE committer unexpectedly passed oracle")
     report = campaign(args.library)
-    Path("build/x86-pt-commit-report.json").write_text(json.dumps(report, indent=2) + "\\n")
+    Path("build/x86-pt-commit-report.json").write_text(json.dumps(report, indent=2) + "\n")
     print("native HIA PTE commit:", report)
 
 
