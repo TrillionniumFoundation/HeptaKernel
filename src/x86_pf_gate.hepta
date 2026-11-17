@@ -1,0 +1,176 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn x86_pf_gate(request:readbuf,reply:mutbuf,unused:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,unused:mutbuf)
+  pf_reply_size:usize = buffer.len(reply)
+  pf_reply_min:usize = const() {"value":16}
+  pf_reply_ok:bool = compare.ge(pf_reply_size,pf_reply_min)
+  branch pf_reply_ok check_request(request,reply) short_reply()
+block short_reply()
+  pf_short:u32 = const() {"value":1}
+  ret(pf_short)
+block check_request(pf_req:readbuf,pf_rep:mutbuf)
+  pf_request_size:usize = buffer.len(pf_req)
+  pf_request_expected:usize = const() {"value":72}
+  pf_request_ok:bool = compare.eq(pf_request_size,pf_request_expected)
+  branch pf_request_ok decode(pf_req,pf_rep) bad_request(pf_rep)
+block bad_request(pf_bad_rep:mutbuf)
+  pf_bad_status:u32 = const() {"value":2}
+  pf_bad_zero:u64 = const() {"value":0}
+  pf_bad_done:u32 = call(pf_bad_rep,pf_bad_status,pf_bad_zero) {"function":"write_reply"}
+  ret(pf_bad_done)
+block decode(pf_wire:readbuf,pf_out:mutbuf)
+  pf_off0:usize = const() {"value":0}
+  pf_off8:usize = const() {"value":8}
+  pf_off16:usize = const() {"value":16}
+  pf_off24:usize = const() {"value":24}
+  pf_off32:usize = const() {"value":32}
+  pf_off40:usize = const() {"value":40}
+  pf_off48:usize = const() {"value":48}
+  pf_off56:usize = const() {"value":56}
+  pf_off64:usize = const() {"value":64}
+  pf_kind:u64 = call(pf_wire,pf_off0) {"function":"read_u64"}
+  pf_err:u64 = call(pf_wire,pf_off8) {"function":"read_u64"}
+  pf_cr2:u64 = call(pf_wire,pf_off16) {"function":"read_u64"}
+  pf_rip:u64 = call(pf_wire,pf_off24) {"function":"read_u64"}
+  pf_want_addr:u64 = call(pf_wire,pf_off32) {"function":"read_u64"}
+  pf_want_rip:u64 = call(pf_wire,pf_off40) {"function":"read_u64"}
+  pf_leaf:u64 = call(pf_wire,pf_off48) {"function":"read_u64"}
+  pf_cr0:u64 = call(pf_wire,pf_off56) {"function":"read_u64"}
+  pf_efer:u64 = call(pf_wire,pf_off64) {"function":"read_u64"}
+  jump check_kind(pf_out,pf_kind,pf_err,pf_cr2,pf_rip,pf_want_addr,pf_want_rip,pf_leaf,pf_cr0,pf_efer)
+block check_kind(pf_kind_out:mutbuf,pf_which:u64,pf_code:u64,pf_addr:u64,pf_saved:u64,pf_expect_addr:u64,pf_expect_rip:u64,pf_pte:u64,pf_control:u64,pf_msr:u64)
+  pf_kind_nx:u64 = const() {"value":1}
+  pf_kind_wp:u64 = const() {"value":2}
+  pf_is_nx:bool = compare.eq(pf_which,pf_kind_nx)
+  pf_is_wp:bool = compare.eq(pf_which,pf_kind_wp)
+  pf_valid_kind:bool = bool.or(pf_is_nx,pf_is_wp)
+  branch pf_valid_kind common(pf_kind_out,pf_which,pf_code,pf_addr,pf_saved,pf_expect_addr,pf_expect_rip,pf_pte,pf_control,pf_msr,pf_is_nx) invalid_kind(pf_kind_out)
+block invalid_kind(pf_invalid_out:mutbuf)
+  pf_invalid_code:u32 = const() {"value":6}
+  pf_invalid_zero:u64 = const() {"value":0}
+  pf_invalid_done:u32 = call(pf_invalid_out,pf_invalid_code,pf_invalid_zero) {"function":"write_reply"}
+  ret(pf_invalid_done)
+block common(pf_common_out:mutbuf,pf_common_kind:u64,pf_common_error:u64,pf_common_cr2:u64,pf_common_rip:u64,pf_common_expected_addr:u64,pf_common_expected_rip:u64,pf_common_pte:u64,pf_common_cr0:u64,pf_common_efer:u64,pf_common_nx:bool)
+  pf_zero:u64 = const() {"value":0}
+  pf_one:u64 = const() {"value":1}
+  pf_four:u64 = const() {"value":4}
+  pf_page_mask:u64 = const() {"value":4095}
+  pf_physical_mask:u64 = const() {"value":4503599627366400}
+  pf_cr2_good:bool = compare.eq(pf_common_cr2,pf_common_expected_addr)
+  pf_rip_good:bool = compare.eq(pf_common_rip,pf_common_expected_rip)
+  pf_rip_nonzero:bool = compare.ne(pf_common_expected_rip,pf_zero)
+  pf_offset:u64 = bit.and(pf_common_expected_addr,pf_page_mask)
+  pf_aligned:bool = compare.eq(pf_offset,pf_zero)
+  pf_present:u64 = bit.and(pf_common_pte,pf_one)
+  pf_present_good:bool = compare.ne(pf_present,pf_zero)
+  pf_user:u64 = bit.and(pf_common_pte,pf_four)
+  pf_supervisor:bool = compare.eq(pf_user,pf_zero)
+  pf_phys:u64 = bit.and(pf_common_pte,pf_physical_mask)
+  pf_phys_good:bool = compare.eq(pf_phys,pf_common_expected_addr)
+  pf_actual_good:bool = bool.and(pf_cr2_good,pf_rip_good)
+  pf_expected_good:bool = bool.and(pf_rip_nonzero,pf_aligned)
+  pf_entry_good:bool = bool.and(pf_present_good,pf_supervisor)
+  pf_base_good:bool = bool.and(pf_actual_good,pf_expected_good)
+  pf_pte_good:bool = bool.and(pf_entry_good,pf_phys_good)
+  pf_all_good:bool = bool.and(pf_base_good,pf_pte_good)
+  branch pf_all_good mode(pf_common_out,pf_common_kind,pf_common_error,pf_common_pte,pf_common_cr0,pf_common_efer,pf_common_nx) mismatch(pf_common_out)
+block mode(pf_mode_out:mutbuf,pf_mode_kind:u64,pf_mode_error:u64,pf_mode_pte:u64,pf_mode_cr0:u64,pf_mode_efer:u64,pf_mode_nx:bool)
+  branch pf_mode_nx check_nx(pf_mode_out,pf_mode_kind,pf_mode_error,pf_mode_pte,pf_mode_efer) check_wp(pf_mode_out,pf_mode_kind,pf_mode_error,pf_mode_pte,pf_mode_cr0)
+block check_nx(pf_nx_out:mutbuf,pf_nx_kind:u64,pf_nx_error:u64,pf_nx_pte:u64,pf_nx_efer:u64)
+  pf_nx_code:u64 = const() {"value":17}
+  pf_nx_mask:u64 = const() {"value":9223372036854775808}
+  pf_efer_nxe_bit:u64 = const() {"value":2048}
+  pf_nx_zero:u64 = const() {"value":0}
+  pf_nx_error_ok:bool = compare.eq(pf_nx_error,pf_nx_code)
+  pf_nx_pte_bit:u64 = bit.and(pf_nx_pte,pf_nx_mask)
+  pf_nx_pte_ok:bool = compare.ne(pf_nx_pte_bit,pf_nx_zero)
+  pf_nx_efer_bit:u64 = bit.and(pf_nx_efer,pf_efer_nxe_bit)
+  pf_nx_efer_ok:bool = compare.ne(pf_nx_efer_bit,pf_nx_zero)
+  pf_nx_both:bool = bool.and(pf_nx_error_ok,pf_nx_pte_ok)
+  branch pf_nx_both nx_cpu(pf_nx_out,pf_nx_kind,pf_nx_efer_ok) mismatch(pf_nx_out)
+block nx_cpu(pf_nx_cpu_out:mutbuf,pf_nx_cpu_kind:u64,pf_nx_cpu_good:bool)
+  branch pf_nx_cpu_good accepted(pf_nx_cpu_out,pf_nx_cpu_kind) unsupported(pf_nx_cpu_out)
+block check_wp(pf_wp_out:mutbuf,pf_wp_kind:u64,pf_wp_error:u64,pf_wp_pte:u64,pf_wp_cr0:u64)
+  pf_wp_code:u64 = const() {"value":3}
+  pf_wp_mask:u64 = const() {"value":2}
+  pf_cr0_wp_bit:u64 = const() {"value":65536}
+  pf_wp_zero:u64 = const() {"value":0}
+  pf_wp_error_ok:bool = compare.eq(pf_wp_error,pf_wp_code)
+  pf_wp_rw_bit:u64 = bit.and(pf_wp_pte,pf_wp_mask)
+  pf_wp_ro:bool = compare.eq(pf_wp_rw_bit,pf_wp_zero)
+  pf_wp_cr0_bit:u64 = bit.and(pf_wp_cr0,pf_cr0_wp_bit)
+  pf_wp_enabled:bool = compare.ne(pf_wp_cr0_bit,pf_wp_zero)
+  pf_wp_guard:bool = bool.and(pf_wp_error_ok,pf_wp_ro)
+  branch pf_wp_guard wp_cpu(pf_wp_out,pf_wp_kind,pf_wp_enabled) mismatch(pf_wp_out)
+block wp_cpu(pf_wp_cpu_out:mutbuf,pf_wp_cpu_kind:u64,pf_wp_cpu_good:bool)
+  branch pf_wp_cpu_good accepted(pf_wp_cpu_out,pf_wp_cpu_kind) unsupported(pf_wp_cpu_out)
+block mismatch(pf_mismatch_out:mutbuf)
+  pf_mismatch_code:u32 = const() {"value":7}
+  pf_mismatch_zero:u64 = const() {"value":0}
+  pf_mismatch_done:u32 = call(pf_mismatch_out,pf_mismatch_code,pf_mismatch_zero) {"function":"write_reply"}
+  ret(pf_mismatch_done)
+block unsupported(pf_unsupported_out:mutbuf)
+  pf_unsupported_code:u32 = const() {"value":8}
+  pf_unsupported_zero:u64 = const() {"value":0}
+  pf_unsupported_done:u32 = call(pf_unsupported_out,pf_unsupported_code,pf_unsupported_zero) {"function":"write_reply"}
+  ret(pf_unsupported_done)
+block accepted(pf_good_out:mutbuf,pf_good_kind:u64)
+  pf_success:u32 = const() {"value":0}
+  pf_good_done:u32 = call(pf_good_out,pf_success,pf_good_kind) {"function":"write_reply"}
+  ret(pf_good_done)
+end
+fn read_u64(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
+  pf_rzero:u64 = const() {"value":0}
+  jump loop(bytes,offset,pf_rzero,pf_rzero)
+block loop(pf_rb:readbuf,pf_base:usize,pf_index:u64,pf_acc:u64)
+  pf_width:u64 = const() {"value":8}
+  pf_more:bool = compare.lt(pf_index,pf_width)
+  branch pf_more byte(pf_rb,pf_base,pf_index,pf_acc) done(pf_acc)
+block byte(pf_bbytes:readbuf,pf_bbase:usize,pf_bindex:u64,pf_bacc:u64)
+  pf_bi:usize = int.cast(pf_bindex) {"mode":"wrap"}
+  pf_address:usize = int.add.wrap(pf_bbase,pf_bi)
+  pf_octet:u8 = buffer.load(pf_bbytes,pf_address)
+  pf_wide:u64 = int.cast(pf_octet) {"mode":"wrap"}
+  pf_eight:u64 = const() {"value":8}
+  pf_shift:u64 = int.mul.wrap(pf_bindex,pf_eight)
+  pf_value:u64 = int.shl.checked(pf_wide,pf_shift)
+  pf_updated:u64 = bit.or(pf_bacc,pf_value)
+  pf_one:u64 = const() {"value":1}
+  pf_next:u64 = int.add.wrap(pf_bindex,pf_one)
+  jump loop(pf_bbytes,pf_bbase,pf_next,pf_updated)
+block done(pf_result:u64)
+  ret(pf_result)
+end
+fn write_u64(bytes:mutbuf,offset:usize,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(bytes:mutbuf,offset:usize,value:u64)
+  pf_first:u64 = const() {"value":0}
+  jump loop(bytes,offset,value,pf_first)
+block loop(pf_wbytes:mutbuf,pf_wbase:usize,pf_word:u64,pf_wi:u64)
+  pf_wwidth:u64 = const() {"value":8}
+  pf_wmore:bool = compare.lt(pf_wi,pf_wwidth)
+  branch pf_wmore byte(pf_wbytes,pf_wbase,pf_word,pf_wi) done()
+block byte(pf_wbbytes:mutbuf,pf_wbbase:usize,pf_wbword:u64,pf_wbi:u64)
+  pf_windex:usize = int.cast(pf_wbi) {"mode":"wrap"}
+  pf_waddress:usize = int.add.wrap(pf_wbbase,pf_windex)
+  pf_weigh:u64 = const() {"value":8}
+  pf_wshift:u64 = int.mul.wrap(pf_wbi,pf_weigh)
+  pf_wvalue:u64 = int.shr.checked(pf_wbword,pf_wshift)
+  pf_woctet:u8 = int.cast(pf_wvalue) {"mode":"wrap"}
+  _ = buffer.store(pf_wbbytes,pf_waddress,pf_woctet)
+  pf_wone:u64 = const() {"value":1}
+  pf_windex_next:u64 = int.add.wrap(pf_wbi,pf_wone)
+  jump loop(pf_wbbytes,pf_wbbase,pf_wbword,pf_windex_next)
+block done()
+  pf_wdone:u32 = const() {"value":0}
+  ret(pf_wdone)
+end
+fn write_reply(reply:mutbuf,status:u32,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(reply:mutbuf,status:u32,value:u64)
+  pf_off_status:usize = const() {"value":0}
+  pf_off_value:usize = const() {"value":8}
+  pf_widen:u64 = int.cast(status) {"mode":"wrap"}
+  pf_s:u32 = call(reply,pf_off_status,pf_widen) {"function":"write_u64"}
+  pf_v:u32 = call(reply,pf_off_value,value) {"function":"write_u64"}
+  ret(status)
+end
