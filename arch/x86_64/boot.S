@@ -330,6 +330,18 @@ long_entry:
     movl $0, 12(%rdi)
     addq $16, %rdi
     loop 7b
+#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS)
+    /* In fault-test images only, vector 14 has its own frame-aware entry.
+     * All other exception vectors retain the fail-closed handler. */
+    leaq nx_page_fault64(%rip), %rax
+    leaq idt64 + 224(%rip), %rdi
+    movw %ax, (%rdi)
+    movq %rax, %rdx
+    shrq $16, %rdx
+    movw %dx, 6(%rdi)
+    shrq $16, %rdx
+    movl %edx, 8(%rdi)
+#endif
     lidt idt64_descriptor(%rip)
 
     /* Real Multiboot loader map, passed to the actual HIA-generated
@@ -576,6 +588,33 @@ fail64:
     movl $0x11, %eax              /* QEMU exit code 35 */
     jmp debug_exit64
 
+#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS)
+nx_page_fault64:
+    cli
+#ifdef HEPTAKERNEL_TEST_NX_FETCH
+    /* CPU exception frame, at CPL0: error code at RSP, saved RIP at RSP+8.
+     * P=1 and I/D=1 must both hold: a present NX leaf denied a fetch.
+     * Check the exact faulting address and an armed post-HIA PTE setup. */
+    cmpq $0x4e584650, pte_nx_armed(%rip)
+    jne exception64
+    cmpq $0x11, (%rsp)
+    jne exception64
+    cmpq $ARENA_MIN, 8(%rsp)
+    jne exception64
+    movq %cr2, %rax
+    cmpq $ARENA_MIN, %rax
+    jne exception64
+    leaq emergency_stack_top(%rip), %rsp
+    leaq message_nx_fault_pass(%rip), %rsi
+    call puts64
+    movl $0x12, %eax               /* QEMU exit 37, verified NX fault */
+    jmp debug_exit64
+#else
+    /* The bypass mutant MUST execute, never pass via a page fault. */
+    jmp exception64
+#endif
+#endif
+
 exception64:
     cli
     leaq emergency_stack_top(%rip), %rsp
@@ -658,8 +697,34 @@ pte_fill_4m:
     movq %r10, (%rdi)
     cmpq %r10, (%rdi)
     jne fail64
+#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS)
+    /* A RET opcode gives an executable-page bypass a defined return path.
+     * In the genuine test, NX must fault before this byte can execute. */
+    movb $0xc3, (%rdi)
+#ifdef HEPTAKERNEL_TEST_NX_BYPASS
+    /* Deliberately corrupt the HIA-produced NX bit in a test-only bridge.
+     * Re-load CR3 to invalidate the previously cached translation. */
+    movq page_table_4m(%rip), %rax
+    btrq $63, %rax
+    movq %rax, page_table_4m(%rip)
+    movq %cr3, %rax
+    movq %rax, %cr3
+#endif
+    movq $0x4e584650, pte_nx_armed(%rip)
+    movl $ARENA_MIN, %eax
+    call *%rax
+#ifdef HEPTAKERNEL_TEST_NX_BYPASS
+    leaq message_nx_bypass_pass(%rip), %rsi
+    call puts64
+    movl $0x13, %eax               /* QEMU exit 39, bypass executed */
+    jmp debug_exit64
+#else
+    jmp fail64                      /* NX would be broken if fetch returned */
+#endif
+#else
     movq $0, (%rdi)
     ret
+#endif
 
 /* The non-HIA Multiboot transport populates a bounded native-HIA request.
  * Three actual live intervals cover the image/BSS/stack, Multiboot info,
@@ -1097,6 +1162,10 @@ message_reservation_pass:
     .asciz "HEPTAKERNEL HIA RESERVATIONS VERIFIED\r\n"
 message_pte_pass:
     .asciz "HEPTAKERNEL HIA LIVE PTE VERIFIED\r\n"
+message_nx_fault_pass:
+    .asciz "HEPTAKERNEL HIA NX FETCH FAULT VERIFIED\r\n"
+message_nx_bypass_pass:
+    .asciz "HEPTAKERNEL HIA NX BYPASS EXECUTED\r\n"
 message_router_pass:
     .asciz "HEPTAKERNEL HIA ARENA ROUTER VERIFIED\r\n"
 message_owner_pass:
@@ -1230,6 +1299,7 @@ pte_guard_before: .skip 8
 pte_reply:        .skip 16
 pte_guard_after:  .skip 8
 pte_unused:       .skip 16
+pte_nx_armed:     .skip 8
 arena_guard_before: .skip 8
 arena_reply:       .skip 16
 arena_guard_after: .skip 8
