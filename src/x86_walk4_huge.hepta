@@ -1,0 +1,151 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(walk4_huge)
+fn walk4_huge(va:u64,pml4e:u64,pdpte:u64,pde:u64,phys_bits:u64,page_shift:u64) -> (u64) effects(trap) entry(start)
+block start(va:u64,pml4e:u64,pdpte:u64,pde:u64,phys_bits:u64,page_shift:u64)
+  s_min:u64 = const() {"value":32}
+  s_max:u64 = const() {"value":52}
+  s_lower:bool = compare.le(s_min,phys_bits)
+  s_upper:bool = compare.le(phys_bits,s_max)
+  s_ok:bool = bool.and(s_lower,s_upper)
+  branch s_ok canonical(va,pml4e,pdpte,pde,phys_bits,page_shift) denied()
+block canonical(c_va:u64,c_l4:u64,c_l3:u64,c_l2:u64,c_bits:u64,c_shift:u64)
+  c_sh48:u64 = const() {"value":48}
+  c_hi:u64 = int.shr.checked(c_va,c_sh48)
+  c_signmask:u64 = const() {"value":140737488355328}
+  c_sign:u64 = bit.and(c_va,c_signmask)
+  c_zero:u64 = const() {"value":0}
+  c_ones:u64 = const() {"value":65535}
+  c_negative:bool = compare.ne(c_sign,c_zero)
+  c_highok:bool = compare.eq(c_hi,c_ones)
+  c_lowok:bool = compare.eq(c_hi,c_zero)
+  c_positive:bool = bool.not(c_negative)
+  c_goodhi:bool = bool.and(c_negative,c_highok)
+  c_goodlo:bool = bool.and(c_positive,c_lowok)
+  c_valid:bool = bool.or(c_goodhi,c_goodlo)
+  branch c_valid profile(c_va,c_l4,c_l3,c_l2,c_bits,c_shift) denied()
+block profile(p_va:u64,p_l4:u64,p_l3:u64,p_l2:u64,p_bits:u64,p_shift:u64)
+  p_shift2m:u64 = const() {"value":21}
+  p_shift1g:u64 = const() {"value":30}
+  p_two:bool = compare.eq(p_shift,p_shift2m)
+  p_one:bool = compare.eq(p_shift,p_shift1g)
+  p_mode_ok:bool = bool.or(p_two,p_one)
+  p_present:u64 = const() {"value":1}
+  p_l4_present:u64 = bit.and(p_l4,p_present)
+  p_l4_live:bool = compare.eq(p_l4_present,p_present)
+  p_reserved:u64 = const() {"value":9218868437227405312}
+  p_bad_high:u64 = bit.and(p_l4,p_reserved)
+  p_zero:u64 = const() {"value":0}
+  p_high_ok:bool = compare.eq(p_bad_high,p_zero)
+  p_nonleaf_bad:u64 = const() {"value":384}
+  p_bad_flags:u64 = bit.and(p_l4,p_nonleaf_bad)
+  p_flags_ok:bool = compare.eq(p_bad_flags,p_zero)
+  p_addr_mask:u64 = const() {"value":4503599627366400}
+  p_l4_addr:u64 = bit.and(p_l4,p_addr_mask)
+  p_nonnull:bool = compare.ne(p_l4_addr,p_zero)
+  p_unit:u64 = const() {"value":1}
+  p_limit:u64 = int.shl.checked(p_unit,p_bits)
+  p_inwidth:bool = compare.lt(p_l4_addr,p_limit)
+  p_pair1:bool = bool.and(p_l4_live,p_high_ok)
+  p_pair2:bool = bool.and(p_flags_ok,p_nonnull)
+  p_pair3:bool = bool.and(p_mode_ok,p_inwidth)
+  p_valid1:bool = bool.and(p_pair1,p_pair2)
+  p_valid:bool = bool.and(p_valid1,p_pair3)
+  branch p_valid choose(p_va,p_l4,p_l3,p_l2,p_limit,p_two) denied()
+block choose(ch_va:u64,ch_l4:u64,ch_l3:u64,ch_l2:u64,ch_limit:u64,ch_two:bool)
+  branch ch_two two_mib(ch_va,ch_l4,ch_l3,ch_l2,ch_limit) one_gib(ch_va,ch_l4,ch_l3,ch_limit)
+block two_mib(t_va:u64,t_l4:u64,t_l3:u64,t_l2:u64,t_limit:u64)
+  t_one:u64 = const() {"value":1}
+  t_ps:u64 = const() {"value":128}
+  t_nonleaf_bad:u64 = const() {"value":384}
+  t_highmask:u64 = const() {"value":9218868437227405312}
+  t_addrmask:u64 = const() {"value":4503599627366400}
+  t_zer:u64 = const() {"value":0}
+  t_l3_live:u64 = bit.and(t_l3,t_one)
+  t_l3_present:bool = compare.eq(t_l3_live,t_one)
+  t_l3_badflags:u64 = bit.and(t_l3,t_nonleaf_bad)
+  t_l3_flagsok:bool = compare.eq(t_l3_badflags,t_zer)
+  t_l3_high:u64 = bit.and(t_l3,t_highmask)
+  t_l3_highok:bool = compare.eq(t_l3_high,t_zer)
+  t_l3addr:u64 = bit.and(t_l3,t_addrmask)
+  t_l3_nonzero:bool = compare.ne(t_l3addr,t_zer)
+  t_l3_in:bool = compare.lt(t_l3addr,t_limit)
+  t_l2_live:u64 = bit.and(t_l2,t_one)
+  t_l2_present:bool = compare.eq(t_l2_live,t_one)
+  t_l2_ps:u64 = bit.and(t_l2,t_ps)
+  t_l2_isleaf:bool = compare.eq(t_l2_ps,t_ps)
+  t_l2_high:u64 = bit.and(t_l2,t_highmask)
+  t_l2_highok:bool = compare.eq(t_l2_high,t_zer)
+  t_reserved2m:u64 = const() {"value":2088960}
+  t_bad_low:u64 = bit.and(t_l2,t_reserved2m)
+  t_lowok:bool = compare.eq(t_bad_low,t_zer)
+  t_basemask:u64 = const() {"value":4503599625273344}
+  t_base:u64 = bit.and(t_l2,t_basemask)
+  t_base_in:bool = compare.lt(t_base,t_limit)
+  t_a:bool = bool.and(t_l3_present,t_l3_flagsok)
+  t_b:bool = bool.and(t_l3_highok,t_l3_nonzero)
+  t_c:bool = bool.and(t_l3_in,t_l2_present)
+  t_d:bool = bool.and(t_l2_isleaf,t_l2_highok)
+  t_e:bool = bool.and(t_lowok,t_base_in)
+  t_f:bool = bool.and(t_a,t_b)
+  t_g:bool = bool.and(t_c,t_d)
+  t_h:bool = bool.and(t_f,t_g)
+  t_all:bool = bool.and(t_h,t_e)
+  t_offset:u64 = const() {"value":2097151}
+  branch t_all finish(t_va,t_l4,t_l3,t_l2,t_base,t_offset) denied()
+block one_gib(g_va:u64,g_l4:u64,g_l3:u64,g_limit:u64)
+  g_present:u64 = const() {"value":1}
+  g_ps:u64 = const() {"value":128}
+  g_highmask:u64 = const() {"value":9218868437227405312}
+  g_zer:u64 = const() {"value":0}
+  g_presented:u64 = bit.and(g_l3,g_present)
+  g_live:bool = compare.eq(g_presented,g_present)
+  g_psbits:u64 = bit.and(g_l3,g_ps)
+  g_leaf:bool = compare.eq(g_psbits,g_ps)
+  g_high:u64 = bit.and(g_l3,g_highmask)
+  g_highok:bool = compare.eq(g_high,g_zer)
+  g_reserved1g:u64 = const() {"value":1073733632}
+  g_low:u64 = bit.and(g_l3,g_reserved1g)
+  g_lowok:bool = compare.eq(g_low,g_zer)
+  g_basemask:u64 = const() {"value":4503598553628672}
+  g_base:u64 = bit.and(g_l3,g_basemask)
+  g_base_in:bool = compare.lt(g_base,g_limit)
+  g_a:bool = bool.and(g_live,g_leaf)
+  g_b:bool = bool.and(g_highok,g_lowok)
+  g_c:bool = bool.and(g_a,g_b)
+  g_all:bool = bool.and(g_c,g_base_in)
+  g_mid:u64 = const() {"value":7}
+  g_offset:u64 = const() {"value":1073741823}
+  branch g_all finish(g_va,g_l4,g_mid,g_l3,g_base,g_offset) denied()
+block finish(f_va:u64,f_l4:u64,f_mid:u64,f_leaf:u64,f_base:u64,f_offset:u64)
+  f_rw_mask:u64 = const() {"value":2}
+  f_us_mask:u64 = const() {"value":4}
+  f_nx_mask:u64 = const() {"value":9223372036854775808}
+  f_zero:u64 = const() {"value":0}
+  f_pair:u64 = bit.and(f_l4,f_mid)
+  f_common:u64 = bit.and(f_pair,f_leaf)
+  f_rw:u64 = bit.and(f_common,f_rw_mask)
+  f_us:u64 = bit.and(f_common,f_us_mask)
+  f_writable:bool = compare.ne(f_rw,f_zero)
+  f_user:bool = compare.ne(f_us,f_zero)
+  f_nx_pair:u64 = bit.or(f_l4,f_mid)
+  f_nx_all:u64 = bit.or(f_nx_pair,f_leaf)
+  f_nx:u64 = bit.and(f_nx_all,f_nx_mask)
+  f_executable:bool = compare.eq(f_nx,f_zero)
+  f_w_flag:u64 = const() {"value":4611686018427387904}
+  f_u_flag:u64 = const() {"value":2305843009213693952}
+  f_x_flag:u64 = const() {"value":1152921504606846976}
+  f_success:u64 = const() {"value":9223372036854775808}
+  f_w:u64 = select(f_writable,f_w_flag,f_zero)
+  f_u:u64 = select(f_user,f_u_flag,f_zero)
+  f_x:u64 = select(f_executable,f_x_flag,f_zero)
+  f_vaoffset:u64 = bit.and(f_va,f_offset)
+  f_physical:u64 = bit.or(f_base,f_vaoffset)
+  f_o1:u64 = bit.or(f_success,f_physical)
+  f_o2:u64 = bit.or(f_o1,f_w)
+  f_o3:u64 = bit.or(f_o2,f_u)
+  f_o4:u64 = bit.or(f_o3,f_x)
+  ret(f_o4)
+block denied()
+  d_zero:u64 = const() {"value":0}
+  ret(d_zero)
+end
