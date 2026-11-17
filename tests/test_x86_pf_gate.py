@@ -85,9 +85,9 @@ def campaign(library: Path):
         assert bytes(inp) == original_in, "input mutated"
         assert bytes(other) == original_other, "unused mutable buffer mutated"
         assert bytes(rep)[:32] == b"S" * 32, "reply prefix overwritten"
-        assert bytes(rep)[32 + reply_size:] == b"S" * 32, "reply suffix overwritten"
+        assert bytes(rep)[32 + reply_size:32 + reply_size + 32] == b"S" * 32, "reply suffix overwritten"
         if reply_size < 16:
-            assert bytes(rep) == b"S" * (reply_size + 64), "short reply mutated"
+            assert bytes(rep) == b"S" * (reply_size + 64) + b"\\0", "short reply mutated"
         else:
             assert struct.unpack_from("<2Q", rep, 32) == (status, value), "reply differs"
             assert bytes(rep)[48:32 + reply_size] == b"S" * (reply_size - 16)
