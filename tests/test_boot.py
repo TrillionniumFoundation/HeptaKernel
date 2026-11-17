@@ -214,7 +214,7 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         accepted = accepted and (user_gdt_stale == (mode == "user_gdt_conflict_rejected"))
         accepted = accepted and (tss_verified == (mode not in {"user_gdt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected"}))
         accepted = accepted and (tss_stale == (mode == "tss_gdt_conflict_rejected"))
-        accepted = accepted and (idt_verified == (mode not in {"idt_conflict_rejected","tss_gdt_conflict_rejected","tss_state_conflict_rejected","tss_rsp0_conflict_rejected"}))
+        accepted = accepted and (idt_verified == (mode not in {"user_gdt_conflict_rejected", "idt_conflict_rejected","tss_gdt_conflict_rejected","tss_state_conflict_rejected","tss_rsp0_conflict_rejected"}))
         accepted = accepted and (idt_stale_rejected == (mode == "idt_conflict_rejected"))
         accepted = accepted and (pf_admitted == (mode in {"nx_hardware_fault", "wp_hardware_fault"}))
         record["status"] = "PASS" if accepted else "FAIL"

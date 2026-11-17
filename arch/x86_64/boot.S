@@ -1650,9 +1650,9 @@ message_rsp0_switch:
 message_rsp0_decoy:
     .asciz "HEPTAKERNEL HIA TSS RSP0 DECOY STACK DETECTED\r\n"
 message_user_gdt_pass:
-    .asciz "HEPTAKERNEL HIA LIVE USER GDT VERIFIED\\r\\n"
+    .asciz "HEPTAKERNEL HIA LIVE USER GDT VERIFIED\r\n"
 message_user_gdt_stale:
-    .asciz "HEPTAKERNEL HIA USER GDT STALE WORD REJECTED\\r\\n"
+    .asciz "HEPTAKERNEL HIA USER GDT STALE WORD REJECTED\r\n"
 message_tss_gdt_pass:
     .asciz "HEPTAKERNEL HIA LIVE TSS GDT VERIFIED\r\n"
 message_tss_gdt_stale:
