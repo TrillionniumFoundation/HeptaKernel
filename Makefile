@@ -453,7 +453,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-x86-cr3-gate test-x86-upper-user test-x86-pde-2m test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-x86-walk4 test-x86-cr3-gate test-x86-upper-user test-x86-pde-2m test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -508,3 +508,25 @@ build/cr3-allow-all.so: build/cr3-allow-all.o
 test-x86-cr3-gate: build/x86-cr3-gate.so build/cr3-allow-all.so
 	timeout 90 $(PYTHON) tests/test_x86_cr3_gate.py build/x86-cr3-gate.so --object build/x86-cr3-gate.o
 	$(PYTHON) tests/test_x86_cr3_gate.py build/cr3-allow-all.so --expect-unsafe
+
+# Genuine HIA native four-level 4KiB supplied-entry translation/policy.
+build/x86-walk4.o: src/x86_walk4_entries.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.x86-walk4.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/x86-walk4.so: build/x86-walk4.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/x86-walk4-unsafe.o: tests/negative/walk4_allow_all.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.x86-walk4-unsafe.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/x86-walk4-unsafe.so: build/x86-walk4-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+.PHONY: test-x86-walk4
+test-x86-walk4: build/x86-walk4.so build/x86-walk4-unsafe.so
+	timeout 90 $(PYTHON) tests/test_x86_walk4_entries.py build/x86-walk4.so --object build/x86-walk4.o
+	$(PYTHON) tests/test_x86_walk4_entries.py build/x86-walk4-unsafe.so --expect-unsafe

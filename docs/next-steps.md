@@ -93,3 +93,11 @@ returning ENOSYS for an implemented Linux syscall.
 `make full-acceptance` must remain HOLD until the complete ledger and its
 independent evidence satisfy the full-target conditions. Its mechanical checks
 are an evidence aggregator; a green manifest alone is not a correctness proof.
+
+The native supplied-entry x86-64 4KiB four-level HIA walk policy
+(`src/x86_walk4_entries.hepta`) combines canonical-address, present,
+reserved-bit, physical-width and inherited RW/U/S/NX checks in genuine
+HIA machine code, with independent native oracle and dishonest control.
+It does not independently fetch or authenticate indexed physical tables;
+actual CR3, TLB, ownership, concurrency, large-page and HIA privileged
+backend closure remain outstanding.
