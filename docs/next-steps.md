@@ -108,3 +108,12 @@ links against caller-declared page identities, with independent byte-level
 oracles and a dishonest HIA control. These are copied 16 KiB snapshots, not
 authenticated physical RAM nor a real CPU CR3/MMU walk. Hardware privilege,
 source-provenance, concurrent mutation and TLB coherence remain open.
+
+The native automatic indexed 4KiB/2MiB/1GiB snapshot translator
+(`src/x86_walk4_auto.hepta`) derives page size from the first
+L3/L2 PS bit and tests only traversed physical parent links. The 48-byte
+request and fixed 16KiB copied snapshots still require L3/L2/L1 identities
+even when huge-page descendants are unused. This is native HIA selfhost code
+with an independent oracle and a dishonest HIA negative control, but does not
+authenticate actual physical RAM, CPU 1GiB/NXE capability, ownership, CR3,
+TLB/SMP synchronization or complete Linux compatibility.
