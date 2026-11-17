@@ -56,6 +56,23 @@ build/reservation-boot.o: build/reservation-gate.o
 build/pte-boot.o: build/x86-pte.o
 	objcopy --redefine-sym f0=pte_f0 "$<" "$@"
 
+# Real hardware NX fetch must raise #PF(P=1, I/D=1) at the HIA NX leaf.
+# A separate mutation clears only the installed NX bit to prove the fetch
+# can execute; the bypass can never pass via a generic exception handler.
+build/boot-nx-fault.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_NX_FETCH=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-nx-bypass.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_NX_BYPASS=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/nx-fault-multiboot.elf: build/boot-nx-fault.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/nx-fault.elf build/boot-nx-fault.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o
+	objcopy -O elf32-i386 build/nx-fault.elf "$@"
+
+build/nx-bypass-multiboot.elf: build/boot-nx-bypass.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/nx-bypass.elf build/boot-nx-bypass.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o
+	objcopy -O elf32-i386 build/nx-bypass.elf "$@"
+
 build/boot-pte-unsafe.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_INJECT_PTE_UNSAFE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
@@ -140,7 +157,7 @@ build/%-multiboot.elf: build/%.o build/boot.o build/e820-boot.o build/arena-boot
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/$*.elf build/boot.o build/$*.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o
 	objcopy -O elf32-i386 build/$*.elf "$@"
 
-test-boot: build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
+test-boot: build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
 	$(PYTHON) tests/test_boot.py --qemu "$(QEMU)"
 
 test-guard-pages: build/kernel-host.so
@@ -214,7 +231,7 @@ test-x86-pte: build/x86-pte.so build/e820-allow-all.so
 	timeout 90 $(PYTHON) tests/test_x86_pte_leaf.py build/x86-pte.so
 	$(PYTHON) tests/test_x86_pte_leaf.py build/e820-allow-all.so --expect-unsafe
 
-record-build: build/pte-unsafe-multiboot.elf build/pte-boot.o build/x86-pte.so build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/reservation-gate.so build/owner-binding.so build/owner-boot.o build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/arena-router.so build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
+record-build: build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/pte-boot.o build/x86-pte.so build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/reservation-gate.so build/owner-binding.so build/owner-boot.o build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/arena-router.so build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
 	$(PYTHON) tools/record_build.py --compiler "$(HEPTA_COMPILER)"
 
 test-closure:
