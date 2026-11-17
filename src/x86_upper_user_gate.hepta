@@ -1,0 +1,175 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn x86_upper_user_gate(request:readbuf,reply:mutbuf,table:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,table:mutbuf)
+  q0_u_l:usize = buffer.len(reply)
+  q0_u_min:usize = const() {"value":16}
+  q0_u_ok:bool = compare.ge(q0_u_l,q0_u_min)
+  branch q0_u_ok reqcheck(request,reply,table) short()
+block short()
+  q1_u_code:u32 = const() {"value":1}
+  ret(q1_u_code)
+block reqcheck(q2_r:readbuf,q2_y:mutbuf,q2_t:mutbuf)
+  q2_u_l:usize = buffer.len(q2_r)
+  q2_u_n:usize = const() {"value":24}
+  q2_u_ok:bool = compare.eq(q2_u_l,q2_u_n)
+  branch q2_u_ok tablecheck(q2_r,q2_y,q2_t) badreq(q2_y)
+block badreq(q3_y:mutbuf)
+  q3_u_code:u32 = const() {"value":2}
+  q3_u_z:u64 = const() {"value":0}
+  q3_u_result:u32 = call(q3_y,q3_u_code,q3_u_z) {"function":"write_reply"}
+  ret(q3_u_result)
+block tablecheck(q4_r:readbuf,q4_y:mutbuf,q4_t:mutbuf)
+  q4_u_l:usize = buffer.len(q4_t)
+  q4_u_n:usize = const() {"value":4096}
+  q4_u_ok:bool = compare.eq(q4_u_l,q4_u_n)
+  branch q4_u_ok decode(q4_r,q4_y,q4_t) badtable(q4_y)
+block badtable(q5_y:mutbuf)
+  q5_u_code:u32 = const() {"value":4}
+  q5_u_z:u64 = const() {"value":0}
+  q5_u_result:u32 = call(q5_y,q5_u_code,q5_u_z) {"function":"write_reply"}
+  ret(q5_u_result)
+block decode(q6_r:readbuf,q6_y:mutbuf,q6_t:mutbuf)
+  q6_u_a:usize = const() {"value":0}
+  q6_u_b:usize = const() {"value":8}
+  q6_u_c:usize = const() {"value":16}
+  q6_u_slot:u64 = call(q6_r,q6_u_a) {"function":"read_request_u64"}
+  q6_u_old:u64 = call(q6_r,q6_u_b) {"function":"read_request_u64"}
+  q6_u_width:u64 = call(q6_r,q6_u_c) {"function":"read_request_u64"}
+  jump checkcaps(q6_y,q6_t,q6_u_slot,q6_u_old,q6_u_width)
+block checkcaps(q7_y:mutbuf,q7_t:mutbuf,q7_s:u64,q7_o:u64,q7_w:u64)
+  q7_u_min:u64 = const() {"value":32}
+  q7_u_max:u64 = const() {"value":52}
+  q7_u_lo:bool = compare.le(q7_u_min,q7_w)
+  q7_u_hi:bool = compare.le(q7_w,q7_u_max)
+  q7_u_ok:bool = bool.and(q7_u_lo,q7_u_hi)
+  branch q7_u_ok checkslot(q7_y,q7_t,q7_s,q7_o,q7_w) badcaps(q7_y)
+block badcaps(q8_y:mutbuf)
+  q8_u_code:u32 = const() {"value":8}
+  q8_u_z:u64 = const() {"value":0}
+  q8_u_result:u32 = call(q8_y,q8_u_code,q8_u_z) {"function":"write_reply"}
+  ret(q8_u_result)
+block checkslot(q9_y:mutbuf,q9_t:mutbuf,q9_s:u64,q9_o:u64,q9_w:u64)
+  q9_u_max:u64 = const() {"value":512}
+  q9_u_ok:bool = compare.lt(q9_s,q9_u_max)
+  branch q9_u_ok checkentry(q9_y,q9_t,q9_s,q9_o,q9_w) badentry(q9_y)
+block badentry(q10_y:mutbuf)
+  q10_u_code:u32 = const() {"value":6}
+  q10_u_z:u64 = const() {"value":0}
+  q10_u_result:u32 = call(q10_y,q10_u_code,q10_u_z) {"function":"write_reply"}
+  ret(q10_u_result)
+block checkentry(q11_y:mutbuf,q11_t:mutbuf,q11_s:u64,q11_o:u64,q11_w:u64)
+  q11_u_zero:u64 = const() {"value":0}
+  q11_u_one:u64 = const() {"value":1}
+  q11_u_both:u64 = const() {"value":3}
+  q11_u_forbidden:u64 = const() {"value":18442240474082185180}
+  q11_u_physmask:u64 = const() {"value":4503599627366400}
+  q11_u_badbits:u64 = bit.and(q11_o,q11_u_forbidden)
+  q11_u_flags:u64 = bit.and(q11_o,q11_u_both)
+  q11_u_phys:u64 = bit.and(q11_o,q11_u_physmask)
+  q11_u_bitsok:bool = compare.eq(q11_u_badbits,q11_u_zero)
+  q11_u_present_rw:bool = compare.eq(q11_u_flags,q11_u_both)
+  q11_u_nonzero:bool = compare.ne(q11_u_phys,q11_u_zero)
+  q11_u_limit:u64 = int.shl.checked(q11_u_one,q11_w)
+  q11_u_inwidth:bool = compare.lt(q11_u_phys,q11_u_limit)
+  q11_u_a:bool = bool.and(q11_u_bitsok,q11_u_present_rw)
+  q11_u_b:bool = bool.and(q11_u_nonzero,q11_u_inwidth)
+  q11_u_ok:bool = bool.and(q11_u_a,q11_u_b)
+  branch q11_u_ok checkold(q11_y,q11_t,q11_s,q11_o) badentry(q11_y)
+block checkold(q12_y:mutbuf,q12_t:mutbuf,q12_s:u64,q12_o:u64)
+  q12_u_eight:u64 = const() {"value":8}
+  q12_u_off64:u64 = int.mul.wrap(q12_s,q12_u_eight)
+  q12_u_off:usize = int.cast(q12_u_off64) {"mode":"wrap"}
+  q12_u_seen:u64 = call(q12_t,q12_u_off) {"function":"read_table_u64"}
+  q12_u_ok:bool = compare.eq(q12_u_seen,q12_o)
+  branch q12_u_ok commit(q12_y,q12_t,q12_u_off,q12_o) stale(q12_y)
+block stale(q13_y:mutbuf)
+  q13_u_code:u32 = const() {"value":9}
+  q13_u_z:u64 = const() {"value":0}
+  q13_u_result:u32 = call(q13_y,q13_u_code,q13_u_z) {"function":"write_reply"}
+  ret(q13_u_result)
+block commit(q14_y:mutbuf,q14_t:mutbuf,q14_offset:usize,q14_old:u64)
+  q14_u_bit:u64 = const() {"value":4}
+  q14_u_new:u64 = bit.or(q14_old,q14_u_bit)
+  q14_u_written:u32 = call(q14_t,q14_offset,q14_u_new) {"function":"write_table_u64"}
+  q14_u_ok:u32 = const() {"value":0}
+  q14_u_result:u32 = call(q14_y,q14_u_ok,q14_u_new) {"function":"write_reply"}
+  ret(q14_u_result)
+end
+fn read_request_u64(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
+  hp_rzero:u64 = const() {"value":0}
+  jump loop(bytes,offset,hp_rzero,hp_rzero)
+block loop(hp_rbytes:readbuf,hp_rbase:usize,hp_ri:u64,hp_racc:u64)
+  hp_rwidth:u64 = const() {"value":8}
+  hp_rmore:bool = compare.lt(hp_ri,hp_rwidth)
+  branch hp_rmore byte(hp_rbytes,hp_rbase,hp_ri,hp_racc) done(hp_racc)
+block byte(hp_rbbytes:readbuf,hp_rbbase:usize,hp_rbi:u64,hp_rbacc:u64)
+  hp_rbindex:usize = int.cast(hp_rbi) {"mode":"wrap"}
+  hp_rbaddress:usize = int.add.wrap(hp_rbbase,hp_rbindex)
+  hp_rboctet:u8 = buffer.load(hp_rbbytes,hp_rbaddress)
+  hp_rbwide:u64 = int.cast(hp_rboctet) {"mode":"wrap"}
+  hp_rbeight:u64 = const() {"value":8}
+  hp_rbshift:u64 = int.mul.wrap(hp_rbi,hp_rbeight)
+  hp_rbvalue:u64 = int.shl.checked(hp_rbwide,hp_rbshift)
+  hp_rbnext:u64 = bit.or(hp_rbacc,hp_rbvalue)
+  hp_rbone:u64 = const() {"value":1}
+  hp_rbinext:u64 = int.add.wrap(hp_rbi,hp_rbone)
+  jump loop(hp_rbbytes,hp_rbbase,hp_rbinext,hp_rbnext)
+block done(hp_rdone:u64)
+  ret(hp_rdone)
+end
+fn read_table_u64(bytes:mutbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:mutbuf,offset:usize)
+  hp_tzero:u64 = const() {"value":0}
+  jump loop(bytes,offset,hp_tzero,hp_tzero)
+block loop(hp_tbytes:mutbuf,hp_tbase:usize,hp_ti:u64,hp_tacc:u64)
+  hp_twidth:u64 = const() {"value":8}
+  hp_tmore:bool = compare.lt(hp_ti,hp_twidth)
+  branch hp_tmore byte(hp_tbytes,hp_tbase,hp_ti,hp_tacc) done(hp_tacc)
+block byte(hp_tbbytes:mutbuf,hp_tbbase:usize,hp_tbi:u64,hp_tbacc:u64)
+  hp_tbindex:usize = int.cast(hp_tbi) {"mode":"wrap"}
+  hp_tbaddress:usize = int.add.wrap(hp_tbbase,hp_tbindex)
+  hp_tboctet:u8 = buffer.load(hp_tbbytes,hp_tbaddress)
+  hp_tbwide:u64 = int.cast(hp_tboctet) {"mode":"wrap"}
+  hp_tbeight:u64 = const() {"value":8}
+  hp_tbshift:u64 = int.mul.wrap(hp_tbi,hp_tbeight)
+  hp_tbvalue:u64 = int.shl.checked(hp_tbwide,hp_tbshift)
+  hp_tbnext:u64 = bit.or(hp_tbacc,hp_tbvalue)
+  hp_tbone:u64 = const() {"value":1}
+  hp_tbinext:u64 = int.add.wrap(hp_tbi,hp_tbone)
+  jump loop(hp_tbbytes,hp_tbbase,hp_tbinext,hp_tbnext)
+block done(hp_tdone:u64)
+  ret(hp_tdone)
+end
+fn write_table_u64(bytes:mutbuf,offset:usize,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(bytes:mutbuf,offset:usize,value:u64)
+  hp_wzero:u64 = const() {"value":0}
+  jump loop(bytes,offset,value,hp_wzero)
+block loop(hp_wbytes:mutbuf,hp_wbase:usize,hp_word:u64,hp_wi:u64)
+  hp_wwidth:u64 = const() {"value":8}
+  hp_wmore:bool = compare.lt(hp_wi,hp_wwidth)
+  branch hp_wmore byte(hp_wbytes,hp_wbase,hp_word,hp_wi) done()
+block byte(hp_wbbytes:mutbuf,hp_wbbase:usize,hp_wbword:u64,hp_wbi:u64)
+  hp_wbindex:usize = int.cast(hp_wbi) {"mode":"wrap"}
+  hp_wbaddress:usize = int.add.wrap(hp_wbbase,hp_wbindex)
+  hp_wbeight:u64 = const() {"value":8}
+  hp_wbshift:u64 = int.mul.wrap(hp_wbi,hp_wbeight)
+  hp_wbvalue:u64 = int.shr.checked(hp_wbword,hp_wbshift)
+  hp_wboctet:u8 = int.cast(hp_wbvalue) {"mode":"wrap"}
+  _ = buffer.store(hp_wbbytes,hp_wbaddress,hp_wboctet)
+  hp_wbone:u64 = const() {"value":1}
+  hp_wbinext:u64 = int.add.wrap(hp_wbi,hp_wbone)
+  jump loop(hp_wbbytes,hp_wbbase,hp_wbword,hp_wbinext)
+block done()
+  hp_wdone:u32 = const() {"value":0}
+  ret(hp_wdone)
+end
+fn write_reply(reply:mutbuf,status:u32,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(reply:mutbuf,status:u32,value:u64)
+  hp_reply_off0:usize = const() {"value":0}
+  hp_reply_off8:usize = const() {"value":8}
+  hp_reply_status64:u64 = int.cast(status) {"mode":"wrap"}
+  hp_reply_a:u32 = call(reply,hp_reply_off0,hp_reply_status64) {"function":"write_table_u64"}
+  hp_reply_b:u32 = call(reply,hp_reply_off8,value) {"function":"write_table_u64"}
+  ret(status)
+end
