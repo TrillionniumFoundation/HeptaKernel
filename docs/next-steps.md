@@ -20,12 +20,16 @@ dependency order, preserving the exact baseline and every unmet obligation in
    refusal for RSP0 and IST1; the hardware RSP0 ring-transition path is
    now has an isolated PC/Q35 CPL3-to-CPL0 #UD hardware test: native HIA
    provisions TSS.RSP0 and the IST0 IDT vector, while an explicitly non-HIA
-   IRETQ/GDT observer enters CPL3 with separate U/RX code and U/RW/NX stack
+   IRETQ observer enters CPL3 with separate U/RX code and U/RW/NX stack
    pages. The hardware #UD frame must land exactly at TSS.RSP0-40, with
    user CS/SS/RIP/RSP verified. A post-HIA RSP0 decoy mutation must be
    detected at the *other* real exception stack. This is not a HIA privilege
    backend, user task or syscall implementation;
-   a native HIA
+   a native HIA single-owner paired CPL3 code/data GDT writer now
+   replaces test-only assembler-preinitialized user selectors 0x30/0x38,
+   with expected-old admission and a separate stale-word QEMU refusal.
+   It is validated by the genuine CPL3 #UD stack path but does not implement
+   IRETQ, context switching or Linux user execution. A native HIA
    single-owner GDT writer now installs the 16-byte 64-bit TSS descriptor
    at selector 0x20 with an independent stale-word negative control. The
    bridge loads IDT (`lidt`), samples CRx,
