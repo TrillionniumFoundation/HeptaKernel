@@ -9,6 +9,8 @@ from pathlib import Path
 PASS_MARKER = "HEPTAKERNEL HIA PMM PASS"
 FAIL_MARKER = "HEPTAKERNEL BOOT FAIL"
 MAP_MARKER = "HEPTAKERNEL HIA E820 VERIFIED"
+IDT_MARKER = "HEPTAKERNEL HIA LIVE IDT VERIFIED"
+IDT_STALE_MARKER = "HEPTAKERNEL HIA IDT STALE WORD REJECTED"
 RESERVATION_MARKER = "HEPTAKERNEL HIA RESERVATIONS VERIFIED"
 ROUTER_MARKER = "HEPTAKERNEL HIA ARENA ROUTER VERIFIED"
 OWNER_MARKER = "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED"
@@ -35,6 +37,10 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
         record.update(returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
+        idt_verified = p.stdout.count(IDT_MARKER) == 1
+        idt_stale_rejected = p.stdout.count(IDT_STALE_MARKER) == 1
+        record["native_hia_live_idt_observed"] = idt_verified
+        record["native_hia_idt_stale_refusal_observed"] = idt_stale_rejected
         map_verified = p.stdout.count(MAP_MARKER) == 1
         record["native_hia_e820_gate_observed"] = map_verified
         reservation_verified = p.stdout.count(RESERVATION_MARKER) == 1
@@ -57,7 +63,14 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         record["native_hia_arena_router_observed"] = route_verified
         owner_verified = p.stdout.count(OWNER_MARKER) == 1
         record["native_hia_multizone_state_and_readback_observed"] = owner_verified
-        if mode == "positive":
+        if mode == "idt_conflict_rejected":
+            accepted = (not idt_verified and idt_stale_rejected and
+                        not map_verified and not reservation_verified and
+                        not pte_verified and not pt_commit_verified and
+                        not route_verified and not owner_verified and
+                        p.returncode == 35 and FAIL_MARKER in p.stdout and
+                        PASS_MARKER not in p.stdout)
+        elif mode == "positive":
             accepted = (map_verified and reservation_verified and pte_verified and route_verified and owner_verified and p.returncode == 33 and
                         p.stdout.count(PASS_MARKER) == 1 and FAIL_MARKER not in p.stdout)
         elif mode == "allocator_negative":
@@ -132,7 +145,9 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         # the native HIA table commit, including faults and dishonest controls.
         precommit = {"reserved_rejected", "nonvolatile_rejected", "protected_rejected",
                      "pte_unsafe_rejected", "pt_commit_conflict_rejected"}
-        accepted = accepted and (pt_commit_verified == (mode not in precommit))
+        accepted = accepted and (pt_commit_verified == (mode not in precommit | {"idt_conflict_rejected"}))
+        accepted = accepted and (idt_verified == (mode != "idt_conflict_rejected"))
+        accepted = accepted and (idt_stale_rejected == (mode == "idt_conflict_rejected"))
         accepted = accepted and (pf_admitted == (mode in {"nx_hardware_fault", "wp_hardware_fault"}))
         record["status"] = "PASS" if accepted else "FAIL"
     except subprocess.TimeoutExpired as e:
@@ -150,6 +165,9 @@ def main():
               "all_kernel_code_in_hia": False,
               "source_sha256": digest("src/kernel.hepta"), "hia_object_sha256": digest("build/kernel.o"),
               "bridge_sha256": digest("arch/x86_64/boot.S"),
+              "native_hia_idt_gate_object_sha256": digest("build/x86-idt.o"),
+              "native_hia_idt_boot_symbol_object_sha256": digest("build/idt-gate-boot.o"),
+              "idt_conflict_boot_object_sha256": digest("build/boot-idt-conflict.o"),
               "native_hia_e820_object_sha256": digest("build/e820-region.o"),
               "native_hia_arena_router_object_sha256": digest("build/arena-router.o"),
               "native_hia_reservation_object_sha256": digest("build/reservation-gate.o"),
@@ -174,6 +192,8 @@ def main():
         report["qemu_version"] = version.stdout.splitlines()[0]
         for machine, memory in (("pc", "32"), ("q35", "64")):
             report["runs"].append(run(args.qemu, Path("build/kernel-multiboot.elf"), machine, memory))
+            report["runs"].append(run(args.qemu, Path("build/idt-conflict-multiboot.elf"),
+                                      machine, memory, mode="idt_conflict_rejected"))
         for machine, memory in (("pc", "32"), ("q35", "64")):
             report["runs"].append(run(args.qemu, Path("build/nx-fault-multiboot.elf"),
                                       machine, memory, mode="nx_hardware_fault"))
