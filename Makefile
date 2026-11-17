@@ -4,7 +4,7 @@ QEMU ?= qemu-system-x86_64
 PYTHON ?= python3
 COMPILER_SHA256 := 87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54
 
-.PHONY: all check-compiler test test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-closure test-linux-inventory record-build full-acceptance clean
+.PHONY: all check-compiler test test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-closure test-linux-inventory record-build full-acceptance clean
 
 all: build/kernel-multiboot.elf
 
@@ -85,6 +85,20 @@ build/pf-gate-boot.o: build/x86-pf-gate.o
 test-x86-pf-gate: build/x86-pf-gate.so build/e820-allow-all.so
 	timeout 90 $(PYTHON) tests/test_x86_pf_gate.py build/x86-pf-gate.so
 	$(PYTHON) tests/test_x86_pf_gate.py build/e820-allow-all.so --expect-unsafe
+
+
+# HIA native, single-owner IDT descriptor installer (no privileged LIDT yet).
+build/x86-idt.o: src/x86_idt_gate.hepta | build check-compiler
+	@set -eu; tmp=$(mktemp build/.x86-idt.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
+	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+
+build/x86-idt.so: build/x86-idt.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+test-x86-idt: build/x86-idt.so build/e820-allow-all.so
+	timeout 90 $(PYTHON) tests/test_x86_idt_gate.py build/x86-idt.so
+	$(PYTHON) tests/test_x86_idt_gate.py build/e820-allow-all.so --expect-unsafe
 
 # Exact HIA page-entry encoding under its own x86-64 boot symbol.
 build/pte-boot.o: build/x86-pte.o
@@ -300,7 +314,7 @@ test-x86-pte: build/x86-pte.so build/e820-allow-all.so
 	timeout 90 $(PYTHON) tests/test_x86_pte_leaf.py build/x86-pte.so
 	$(PYTHON) tests/test_x86_pte_leaf.py build/e820-allow-all.so --expect-unsafe
 
-record-build: build/pf-corrupt-multiboot.elf build/boot-pf-corrupt.o build/x86-pf-gate.so build/pf-gate-boot.o build/pt-commit-conflict-multiboot.elf build/x86-pt-commit.so build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/pte-boot.o build/pt-commit-boot.o build/x86-pte.so build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/reservation-gate.so build/owner-binding.so build/owner-boot.o build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/arena-router.so build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
+record-build: build/x86-idt.so build/pf-corrupt-multiboot.elf build/boot-pf-corrupt.o build/x86-pf-gate.so build/pf-gate-boot.o build/pt-commit-conflict-multiboot.elf build/x86-pt-commit.so build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/pte-boot.o build/pt-commit-boot.o build/x86-pte.so build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/reservation-gate.so build/owner-binding.so build/owner-boot.o build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/arena-router.so build/kernel-host.so build/kernel-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf
 	$(PYTHON) tools/record_build.py --compiler "$(HEPTA_COMPILER)"
 
 test-closure:
@@ -309,7 +323,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-boot test-closure test-linux-inventory record-build
+test: test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 full-acceptance:
 	$(PYTHON) tools/check_closure.py
