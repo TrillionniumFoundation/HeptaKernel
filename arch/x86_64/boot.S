@@ -578,7 +578,7 @@ hia_idt_next64:
 #endif
     /* Test-only CPL3 #UD: real HIA builds vector 6 with IST0.
      * IRET/exception entry and ring3 selectors remain NON-HIA test bridge. */
-#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE)
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE)
     movq $6, idt_gate_request(%rip)
     leaq rsp0_ring3_fault64(%rip), %rax
     movq %rax, idt_gate_request+8(%rip)
@@ -639,7 +639,7 @@ hia_idt_next64:
     call reservation_admit64
     leaq message_reservation_pass(%rip), %rsi
     call puts64
-#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE)
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE)
     /* After native E820/reservation admission: terminal ring3 observer. */
     call rsp0_ring3_exercise64
     jmp fail64
@@ -962,7 +962,7 @@ pte_page_fault64:
     jmp debug_exit64
 #endif
 
-#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE)
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE)
 /* Test-only NON-HIA CPL3 harness for native HIA-configured TSS and IDT.
  * E820/reservation already admitted both physical test regions. The 4MiB
  * huge page is user RX; 6MiB is user RW/NX. Kernel pages remain U/S=0.
@@ -970,12 +970,76 @@ pte_page_fault64:
 rsp0_ring3_exercise64:
     movq $ARENA_MIN, %rax
     movw $0x0b0f, (%rax)             /* fixture: UD2 at 0x400000 */
-    /* Only the parent U/S propagation and privileged CR3 flush stay in
-     * this NON-HIA observer. Genuine HIA exclusively commits BOTH 2MiB
-     * leaf PDEs with the 4KiB page-directory capability and a stale-old check.
+    /* Native HIA owns parent U/S and 2 MiB leaf PDE updates.
+     * CR3, hardware exception entry and IRETQ remain NON-HIA.
      * 0x400000 is user RX; 0x600000 is user RW/NX, with PS=1. */
-    orq $4, pml4(%rip)
-    orq $4, pdpt(%rip)
+    /* Quiescent exclusive-owner HIA upper-table grant and physical readback. */
+    movq $0, upper_user_request(%rip)
+    movq pml4(%rip), %rax
+    movq %rax, upper_user_request+8(%rip)
+    movl pte_caps(%rip), %eax
+    andl $255, %eax
+    movq %rax, upper_user_request+16(%rip)
+#ifdef HEPTAKERNEL_TEST_RING3_UPPER_STALE
+    xorq $32, upper_user_request+8(%rip) /* legal Accessed bit but stale old */
+#endif
+    leaq upper_user_request(%rip), %rdi
+    movl $24, %esi
+    leaq upper_user_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq pml4(%rip), %r8
+    movl $4096, %r9d
+    call upper_user_f0
+#ifdef HEPTAKERNEL_TEST_RING3_UPPER_STALE
+    cmpl $9, %eax
+    jne fail64
+    cmpq $9, upper_user_reply(%rip)
+    jne fail64
+    cmpq $0, upper_user_reply+8(%rip)
+    jne fail64
+    movq upper_user_request+8(%rip), %rax
+    xorq $32, %rax
+    cmpq %rax, pml4(%rip)
+    jne fail64
+    testq $4, pml4(%rip)
+    jnz fail64
+    testq $4, pdpt(%rip)
+    jnz fail64
+    leaq message_upper_stale(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, upper_user_reply(%rip)
+    jne fail64
+    movq upper_user_reply+8(%rip), %rax
+    cmpq %rax, pml4(%rip)
+    jne fail64
+    testq $4, %rax
+    jz fail64
+    movq $0, upper_user_request(%rip)
+    movq pdpt(%rip), %rax
+    movq %rax, upper_user_request+8(%rip)
+    leaq upper_user_request(%rip), %rdi
+    movl $24, %esi
+    leaq upper_user_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq pdpt(%rip), %r8
+    movl $4096, %r9d
+    call upper_user_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, upper_user_reply(%rip)
+    jne fail64
+    movq upper_user_reply+8(%rip), %rax
+    cmpq %rax, pdpt(%rip)
+    jne fail64
+    testq $4, %rax
+    jz fail64
+    leaq message_upper_pass(%rip), %rsi
+    call puts64
+#endif
     movq $2, pde_2m_request(%rip)
     movq page_directory+16(%rip), %rax
     movq %rax, pde_2m_request+8(%rip)
@@ -1714,6 +1778,10 @@ message_rsp0_switch:
     .asciz "HEPTAKERNEL HIA TSS RSP0 CPL3 HARDWARE SWITCH VERIFIED\r\n"
 message_rsp0_decoy:
     .asciz "HEPTAKERNEL HIA TSS RSP0 DECOY STACK DETECTED\r\n"
+message_upper_pass:
+    .asciz "HEPTAKERNEL HIA LIVE UPPER USER TABLE VERIFIED\r\n"
+message_upper_stale:
+    .asciz "HEPTAKERNEL HIA UPPER USER TABLE STALE OLD REJECTED\r\n"
 message_pde_2m_pass:
     .asciz "HEPTAKERNEL HIA LIVE USER 2M PDE VERIFIED\r\n"
 message_pde_2m_stale:
@@ -1867,6 +1935,8 @@ rsp0_decoy_stack_top:
 .balign 16
 tss_state_request: .skip 40
 tss_state_reply:   .skip 16
+upper_user_request: .skip 24
+upper_user_reply:   .skip 16
 pde_2m_request:  .skip 32
 pde_2m_reply:    .skip 16
 user_gdt_request: .skip 16

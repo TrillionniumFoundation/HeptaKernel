@@ -234,9 +234,12 @@ def main():
             raise ValueError("HIA upper-level U/S object has undefined symbols")
         if Elf("build/x86-upper-user.so").section_bytes(".text") != Elf("build/x86-upper-user.o").section_bytes(".text"):
             raise ValueError("HIA upper-level U/S host code differs from HIA object")
+        upper_code = Elf("build/x86-upper-user.o").section_bytes(".text")
+        if Elf("build/upper-user-boot.o").section_bytes(".text") != upper_code:
+            raise ValueError("HIA upper user symbol rename changed machine code")
         report["upper_user_gate"] = {"source_sha256":sha(upper_source),
                                      "object_sha256":sha(upper_object),
-                                     "live_qemu_integration":False,
+                                     "live_qemu_integration":True,
                                      "smp_atomicity_verified":False}
         # Rebuild the genuine HIA 2MiB huge PDE writer without a host PATH.
         huge_source = Path("src/x86_pde_2m.hepta").read_bytes()
@@ -394,6 +397,9 @@ def main():
         if (sha(Path("build/tss-rsp0-conflict-multiboot.elf").read_bytes()) ==
                 sha(Path("build/tss-state-conflict-multiboot.elf").read_bytes())):
             raise ValueError("RSP0 and IST1 fault images must differ after linking")
+        if (sha(Path("build/ring3-upper-stale-multiboot.elf").read_bytes()) ==
+                sha(Path("build/ring3-rsp0-multiboot.elf").read_bytes())):
+            raise ValueError("stale upper HIA image not distinct from ring3 positive")
         if (sha(Path("build/ring3-pde-stale-multiboot.elf").read_bytes()) ==
                 sha(Path("build/ring3-rsp0-multiboot.elf").read_bytes())):
             raise ValueError("stale HIA PDE and admitted ring3 image must differ")
@@ -426,7 +432,8 @@ def main():
                 ("tss-rsp0-conflict", e820_code, arena_code, reservation_text),
                 ("ring3-rsp0", e820_code, arena_code, reservation_text),
                 ("ring3-rsp0-decoy", e820_code, arena_code, reservation_text),
-                ("ring3-pde-stale", e820_code, arena_code, reservation_text)):
+                ("ring3-pde-stale", e820_code, arena_code, reservation_text),
+                ("ring3-upper-stale", e820_code, arena_code, reservation_text)):
             linked64 = Elf("build/" + stem + ".elf")
             packed32 = Elf("build/" + stem + "-multiboot.elf")
             for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820),
@@ -444,7 +451,7 @@ def main():
                 if (linked64.text_at(symbol_address, len(expected_code)) != expected_code or
                         packed32.text_at(symbol_address, len(expected_code)) != expected_code):
                     raise ValueError(stem + " lacks exact native HIA code for " + symbol)
-        for stem in ("ring3-rsp0", "ring3-rsp0-decoy", "ring3-pde-stale"):
+        for stem in ("ring3-rsp0", "ring3-rsp0-decoy", "ring3-pde-stale", "ring3-upper-stale"):
             huge_elf = Elf("build/" + stem + ".elf")
             huge_mb = Elf("build/" + stem + "-multiboot.elf")
             huge_entry = huge_elf.symbol("pde_2m_f0")
@@ -453,6 +460,12 @@ def main():
             if (huge_elf.text_at(huge_entry, len(huge_text)) != huge_text or
                     huge_mb.text_at(huge_entry, len(huge_text)) != huge_text):
                 raise ValueError(stem + " lacks byte-exact native HIA huge PDE code")
+            upper_entry = huge_elf.symbol("upper_user_f0")
+            if huge_mb.symbol("upper_user_f0") != upper_entry:
+                raise ValueError(stem + " upper HIA entry differed after Multiboot wrap")
+            if (huge_elf.text_at(upper_entry,len(upper_code)) != upper_code or
+                    huge_mb.text_at(upper_entry,len(upper_code)) != upper_code):
+                raise ValueError(stem + " missing native HIA upper-table exact code")
         host = Elf("build/kernel-host.so")
         if host.section_bytes(".text") != code:
             raise ValueError("native library changed HIA code")
