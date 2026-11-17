@@ -530,6 +530,35 @@ hia_idt_next64:
     cmpb $1, idt64+228(%rip)       /* HIA emitted IST1 */
     jne fail64
 #endif
+    /* Test-only CPL3 #UD: real HIA builds vector 6 with IST0.
+     * IRET/exception entry and ring3 selectors remain NON-HIA test bridge. */
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY)
+    movq $6, idt_gate_request(%rip)
+    leaq rsp0_ring3_fault64(%rip), %rax
+    movq %rax, idt_gate_request+8(%rip)
+    movq idt64+96(%rip), %rax
+    movq %rax, idt_gate_request+16(%rip)
+    movq idt64+104(%rip), %rax
+    movq $0, idt_gate_request+32(%rip)
+    leaq idt_gate_request(%rip), %rdi
+    movl $40, %esi
+    leaq idt_gate_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq idt64(%rip), %r8
+    movl $4096, %r9d
+    call idt_gate_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, idt_gate_reply(%rip)
+    jne fail64
+    movq idt64+96(%rip), %rax
+    cmpq idt_gate_reply+8(%rip), %rax
+    jne fail64
+    cmpb $0, idt64+100(%rip)
+    jne fail64
+    cmpb $0x8e, idt64+101(%rip)
+    jne fail64
+#endif
     /* Privileged LIDT is not yet expressible in the pinned HIA backend. */
     lidt idt64_descriptor(%rip)
     leaq message_idt_pass(%rip), %rsi
@@ -564,6 +593,11 @@ hia_idt_next64:
     call reservation_admit64
     leaq message_reservation_pass(%rip), %rsi
     call puts64
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY)
+    /* After native E820/reservation admission: terminal ring3 observer. */
+    call rsp0_ring3_exercise64
+    jmp fail64
+#endif
     call pte_live_exercise64
     leaq message_pte_pass(%rip), %rsi
     call puts64
@@ -880,6 +914,75 @@ pte_page_fault64:
     movl $0x14, %eax              /* QEMU exit 41 */
 #endif
     jmp debug_exit64
+#endif
+
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY)
+/* Test-only NON-HIA CPL3 harness for native HIA-configured TSS and IDT.
+ * E820/reservation already admitted both physical test regions. The 4MiB
+ * huge page is user RX; 6MiB is user RW/NX. Kernel pages remain U/S=0.
+ * Nothing here is a purported HIA privilege/backend implementation. */
+rsp0_ring3_exercise64:
+    movq $ARENA_MIN, %rax
+    movw $0x0b0f, (%rax)             /* fixture: UD2 at 0x400000 */
+    orq $4, pml4(%rip)
+    orq $4, pdpt(%rip)
+    andq $-3, page_directory+16(%rip)
+    orq $4, page_directory+16(%rip)
+    orq $4, page_directory+24(%rip)
+    btsq $63, page_directory+24(%rip)
+    movq %cr3, %rax
+    movq %rax, %cr3
+    leaq stack_top(%rip), %rax
+    cmpq %rax, tss64+4(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_RSP0_DECOY
+    /* Mutation after native HIA validation: separate real hardware stack. */
+    leaq rsp0_decoy_stack_top(%rip), %rax
+    movq %rax, tss64+4(%rip)
+#endif
+    pushq $0x3b                     /* CPL3 SS */
+    pushq $0x602000                 /* CPL3 NX stack */
+    pushq $0x2                      /* IF masked */
+    pushq $0x33                     /* CPL3 64-bit CS */
+    pushq $ARENA_MIN                /* user-mode #UD */
+    iretq                           /* test-only NON-HIA transition */
+    jmp fail64
+
+rsp0_ring3_fault64:
+    cli
+    /* Hardware CPL3->CPL0 #UD must save 5 qwords on TSS.RSP0, no IST. */
+    movw %cs, %ax
+    cmpw $0x08, %ax
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_RSP0_DECOY
+    leaq rsp0_decoy_stack_top(%rip), %rdx
+#else
+    leaq stack_top(%rip), %rdx
+#endif
+    cmpq %rdx, tss64+4(%rip)
+    jne fail64
+    leaq -40(%rdx), %rax
+    cmpq %rax, %rsp
+    jne fail64
+    cmpq $ARENA_MIN, 0(%rsp)
+    jne fail64
+    cmpq $0x33, 8(%rsp)
+    jne fail64
+    cmpq $0x602000, 24(%rsp)
+    jne fail64
+    cmpq $0x3b, 32(%rsp)
+    jne fail64
+    leaq emergency_stack_top(%rip), %rsp
+#ifdef HEPTAKERNEL_TEST_RSP0_DECOY
+    leaq message_rsp0_decoy(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    leaq message_rsp0_switch(%rip), %rsi
+    call puts64
+    movl $0x16, %eax                 /* QEMU exit 45 */
+    jmp debug_exit64
+#endif
 #endif
 
 exception64:
@@ -1481,6 +1584,8 @@ gdt:
     .quad 0x00cf9a000000ffff       /* selector 0x18: 32-bit supervisor code */
     .quad 0                        /* selector 0x20: 64-bit TSS low */
     .quad 0                        /* selector 0x20: 64-bit TSS high */
+    .quad 0x00affa000000ffff       /* 0x33: test-only CPL3 64-bit code */
+    .quad 0x00cff2000000ffff       /* 0x3b: test-only CPL3 data */
 gdt_end:
 gdt_descriptor:
     .word gdt_end - gdt - 1
@@ -1494,6 +1599,10 @@ message_tss_state_stale:
     .asciz "HEPTAKERNEL HIA TSS STATE STALE WORD REJECTED\r\n"
 message_tss_rsp0_stale:
     .asciz "HEPTAKERNEL HIA TSS RSP0 STALE WORD REJECTED\r\n"
+message_rsp0_switch:
+    .asciz "HEPTAKERNEL HIA TSS RSP0 CPL3 HARDWARE SWITCH VERIFIED\r\n"
+message_rsp0_decoy:
+    .asciz "HEPTAKERNEL HIA TSS RSP0 DECOY STACK DETECTED\r\n"
 message_tss_gdt_pass:
     .asciz "HEPTAKERNEL HIA LIVE TSS GDT VERIFIED\r\n"
 message_tss_gdt_stale:
@@ -1633,6 +1742,9 @@ tss64:            .skip 104
 .balign 16
 ist_stack_base:   .skip 8192
 ist_stack_top:
+.balign 16
+rsp0_decoy_stack_base: .skip 8192
+rsp0_decoy_stack_top:
 .balign 16
 tss_state_request: .skip 40
 tss_state_reply:   .skip 16
