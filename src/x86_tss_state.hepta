@@ -10,7 +10,7 @@ block short()
   ret(a3)
 block req(r0:readbuf,p0:mutbuf,t0:mutbuf)
   a4:usize = buffer.len(r0)
-  a5:usize = const() {"value":24}
+  a5:usize = const() {"value":40}
   a6:bool = compare.eq(a4,a5)
   branch a6 table(r0,p0,t0) bad_request(p0)
 block bad_request(p1:mutbuf)
@@ -29,14 +29,18 @@ block bad_table(p3:mutbuf)
   a15:u32 = call(p3,a13,a14) {"function":"write_reply"}
   ret(a15)
 block decode(r2:readbuf,p4:mutbuf,t2:mutbuf)
-  a16:usize = const() {"value":0}
-  a17:usize = const() {"value":8}
-  a18:usize = const() {"value":16}
-  top:u64 = call(r2,a16) {"function":"read_request_u64"}
-  oldist:u64 = call(r2,a17) {"function":"read_request_u64"}
-  oldmap:u64 = call(r2,a18) {"function":"read_request_u64"}
-  jump valid(p4,t2,top,oldist,oldmap)
-block valid(p5:mutbuf,t3:mutbuf,top3:u64,ist3:u64,map3:u64)
+  off_rsp:usize = const() {"value":0}
+  off_ist:usize = const() {"value":8}
+  off_oldrsp:usize = const() {"value":16}
+  off_oldist:usize = const() {"value":24}
+  off_oldmap:usize = const() {"value":32}
+  newrsp:u64 = call(r2,off_rsp) {"function":"read_request_u64"}
+  newist:u64 = call(r2,off_ist) {"function":"read_request_u64"}
+  oldrsp:u64 = call(r2,off_oldrsp) {"function":"read_request_u64"}
+  oldist:u64 = call(r2,off_oldist) {"function":"read_request_u64"}
+  oldmap:u64 = call(r2,off_oldmap) {"function":"read_request_u64"}
+  jump valid(p4,t2,newrsp,newist,oldrsp,oldist,oldmap)
+block valid(p5:mutbuf,t3:mutbuf,rsp3:u64,top3:u64,rspold3:u64,ist3:u64,map3:u64)
   a19:u64 = const() {"value":0}
   a20:u64 = const() {"value":1}
   a21:u64 = const() {"value":15}
@@ -61,17 +65,37 @@ block valid(p5:mutbuf,t3:mutbuf,top3:u64,ist3:u64,map3:u64)
   a40:bool = bool.and(a39,a38)
   a41:bool = compare.lt(map3,a25)
   a42:bool = bool.and(a40,a41)
-  branch a42 old(p5,t3,top3,ist3,map3) bad_value(p5)
+  rsp_nonzero:bool = compare.ne(rsp3,a19)
+  rsp_align_bits:u64 = bit.and(rsp3,a21)
+  rsp_aligned:bool = compare.eq(rsp_align_bits,a19)
+  rsp_upper:u64 = int.shr.checked(rsp3,a23)
+  rsp_signword:u64 = int.shr.checked(rsp3,a22)
+  rsp_sign:u64 = bit.and(rsp_signword,a20)
+  rsp_sign0:bool = compare.eq(rsp_sign,a19)
+  rsp_sign1:bool = compare.eq(rsp_sign,a20)
+  rsp_top0:bool = compare.eq(rsp_upper,a19)
+  rsp_top1:bool = compare.eq(rsp_upper,a24)
+  rsp_canonical0:bool = bool.and(rsp_sign0,rsp_top0)
+  rsp_canonical1:bool = bool.and(rsp_sign1,rsp_top1)
+  rsp_canonical:bool = bool.or(rsp_canonical0,rsp_canonical1)
+  rsp_distinct:bool = compare.ne(rsp3,top3)
+  rsp_both1:bool = bool.and(rsp_nonzero,rsp_aligned)
+  rsp_both2:bool = bool.and(rsp_canonical,rsp_distinct)
+  rsp_good:bool = bool.and(rsp_both1,rsp_both2)
+  both_good:bool = bool.and(a42,rsp_good)
+  branch both_good old(p5,t3,rsp3,top3,rspold3,ist3,map3) bad_value(p5)
 block bad_value(p6:mutbuf)
   a43:u32 = const() {"value":6}
   a44:u64 = const() {"value":0}
   a45:u32 = call(p6,a43,a44) {"function":"write_reply"}
   ret(a45)
-block old(p7:mutbuf,t4:mutbuf,top4:u64,ist4:u64,map4:u64)
+block old(p7:mutbuf,t4:mutbuf,rsp4:u64,top4:u64,rspold4:u64,ist4:u64,map4:u64)
+  rsp_slot:usize = const() {"value":4}
   a46:usize = const() {"value":36}
   a47:usize = const() {"value":102}
   a48:usize = const() {"value":103}
   a49:u64 = const() {"value":8}
+  original_rsp:u64 = call(t4,rsp_slot) {"function":"read_table_u64"}
   a50:u64 = call(t4,a46) {"function":"read_table_u64"}
   a51:u8 = buffer.load(t4,a47)
   a52:u8 = buffer.load(t4,a48)
@@ -79,21 +103,25 @@ block old(p7:mutbuf,t4:mutbuf,top4:u64,ist4:u64,map4:u64)
   a54:u64 = int.cast(a52) {"mode":"wrap"}
   a55:u64 = int.shl.checked(a54,a49)
   a56:u64 = bit.or(a53,a55)
+  rsp_matches:bool = compare.eq(original_rsp,rspold4)
   a57:bool = compare.eq(a50,ist4)
   a58:bool = compare.eq(a56,map4)
   a59:bool = bool.and(a57,a58)
-  branch a59 commit(p7,t4,top4) stale(p7)
+  old_all_good:bool = bool.and(a59,rsp_matches)
+  branch old_all_good commit(p7,t4,rsp4,top4) stale(p7)
 block stale(p8:mutbuf)
   a60:u32 = const() {"value":9}
   a61:u64 = const() {"value":0}
   a62:u32 = call(p8,a60,a61) {"function":"write_reply"}
   ret(a62)
-block commit(p9:mutbuf,t5:mutbuf,top5:u64)
+block commit(p9:mutbuf,t5:mutbuf,rsp5:u64,top5:u64)
+  rsp_commit_off:usize = const() {"value":4}
   a63:usize = const() {"value":36}
   a64:usize = const() {"value":102}
   a65:usize = const() {"value":103}
   a66:u8 = const() {"value":104}
   a67:u8 = const() {"value":0}
+  rsp_write:u32 = call(t5,rsp_commit_off,rsp5) {"function":"write_table_u64"}
   a68:u32 = call(t5,a63,top5) {"function":"write_table_u64"}
   _ = buffer.store(t5,a64,a66)
   _ = buffer.store(t5,a65,a67)
