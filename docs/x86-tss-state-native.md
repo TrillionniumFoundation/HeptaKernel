@@ -18,9 +18,12 @@ rejection the entire TSS remains unchanged. Codes are 0=committed,
 A deterministic independent Python integer oracle checks guard bytes,
 old-value refusal, invalid buffer geometry, address and alignment
 validation, correct two-field writes, and a dishonest native HIA
-negative control. This is a standalone verified component; the active
-QEMU TSS remains temporarily populated by boot.S until the bridge
-integration is separately validated and merged.
+negative control. The live PC/Q35 QEMU path now calls this native HIA component before
+the HIA GDT writer and non-HIA privileged LTR. A fault-injected image
+supplies a stale old IST1 value and must be rejected before LTR; the
+positive NX and supervisor write-protection cases then require genuine
+hardware IST1 switching. The native machine bytes are bound into the
+boot images, including fault-injected images.
 
 It does not implement LTR, exception entry, IRET, hardware provenance,
 SMP CAS, or privileged HIA backend support. The 17 Linux gates and
