@@ -666,6 +666,8 @@ pte_page_fault64:
     jne fail64
     cmpq %rax, pf_unused+8(%rip)
     jne fail64
+    leaq message_pf_admission_pass(%rip), %rsi
+    call puts64
 #ifdef HEPTAKERNEL_TEST_NX_FETCH
     leaq message_nx_fault_pass(%rip), %rsi
     call puts64
@@ -1288,6 +1290,8 @@ message_reservation_pass:
     .asciz "HEPTAKERNEL HIA RESERVATIONS VERIFIED\r\n"
 message_pt_commit_pass:
     .asciz "HEPTAKERNEL HIA PT COMMIT VERIFIED\r\n"
+message_pf_admission_pass:
+    .asciz "HEPTAKERNEL HIA PF RECORD ADMITTED\r\n"
 message_pte_pass:
     .asciz "HEPTAKERNEL HIA LIVE PTE VERIFIED\r\n"
 message_nx_fault_pass:
