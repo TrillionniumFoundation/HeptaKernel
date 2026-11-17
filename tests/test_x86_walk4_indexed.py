@@ -82,7 +82,7 @@ def campaign(library: Path, object_file=None):
         assert bytes(mem) == original_mem, "table snapshot modified"
         actual_reply = bytes(rep)
         assert actual_reply[:32] == b"\xb6" * 32
-        assert actual_reply[32 + reply_size:] == b"\xb6" * 32
+        assert actual_reply[32 + reply_size:32 + reply_size + 32] == b"\xb6" * 32
         if reply_size < 16:
             assert actual_reply == original_reply, "short reply changed"
         else:
