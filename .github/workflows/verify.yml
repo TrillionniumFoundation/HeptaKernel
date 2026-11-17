@@ -52,7 +52,7 @@ jobs:
           PYTHONPATH=.toolchain/hepta python3 - <<'PY'
           from pathlib import Path
           from hepta.hia_agent_assembly import assemble_program
-          for source in ("src/kernel.hepta", "src/e820_region.hepta", "src/arena_router.hepta", "src/owner_binding.hepta", "src/reservation_gate.hepta", "src/x86_pte_leaf.hepta", "src/x86_pt_commit.hepta", "src/x86_pf_gate.hepta", "src/x86_idt_gate.hepta", "src/x86_tss_gdt.hepta", "tests/negative/e820_allow_all.hepta"):
+          for source in ("src/kernel.hepta", "src/e820_region.hepta", "src/arena_router.hepta", "src/owner_binding.hepta", "src/reservation_gate.hepta", "src/x86_pte_leaf.hepta", "src/x86_pt_commit.hepta", "src/x86_pf_gate.hepta", "src/x86_idt_gate.hepta", "src/x86_tss_gdt.hepta", "src/x86_tss_state.hepta", "tests/negative/e820_allow_all.hepta"):
               checked = assemble_program(Path(source).read_bytes())
               print("Independent HIA Core syntax/semantics verification: PASS", source)
               print("Verified functions:", len(checked.as_dict()["functions"]))
@@ -118,6 +118,11 @@ jobs:
         run: |
           make test-x86-tss-gdt HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Verify native HIA TSS IST1 state and malicious control
+        shell: bash
+        run: |
+          make test-x86-tss-state HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Independently test full Linux inventory parser and refusal controls
         run: make test-linux-inventory
 
@@ -167,6 +172,9 @@ jobs:
             build/idt-conflict-multiboot.elf
             build/idt-conflict.elf
             build/idt-gate-boot.o
+            build/x86-tss-state-report.json
+            build/x86-tss-state.o
+            build/x86-tss-state.so
             build/x86-tss-gdt-report.json
             build/x86-tss-gdt.o
             build/x86-tss-gdt.so
