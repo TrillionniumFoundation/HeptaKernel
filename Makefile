@@ -4,7 +4,7 @@ QEMU ?= qemu-system-x86_64
 PYTHON ?= python3
 COMPILER_SHA256 := 87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54
 
-.PHONY: all check-compiler test test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-x86-tss-gdt test-closure test-linux-inventory record-build full-acceptance clean
+.PHONY: all check-compiler test test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-x86-tss-gdt test-x86-tss-state test-closure test-linux-inventory record-build full-acceptance clean
 
 all: build/kernel-multiboot.elf
 
@@ -335,6 +335,22 @@ test-reservations: build/reservation-gate.so build/e820-allow-all.so
 	$(PYTHON) tests/test_reservation_gate.py build/e820-allow-all.so --expect-unsafe
 
 
+# Native HIA TSS IST1/IOPB provisioning, prior to privileged LTR.
+build/x86-tss-state.o: src/x86_tss_state.hepta | build check-compiler
+	@set -eu; tmp=$(mktemp build/.x86-tss-state.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
+	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+
+build/x86-tss-state.so: build/x86-tss-state.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/tss-state-boot.o: build/x86-tss-state.o
+	objcopy --redefine-sym f0=tss_state_f0 "$<" "$@"
+
+test-x86-tss-state: build/x86-tss-state.so build/e820-allow-all.so
+	timeout 90 $(PYTHON) tests/test_x86_tss_state.py build/x86-tss-state.so
+	$(PYTHON) tests/test_x86_tss_state.py build/e820-allow-all.so --expect-unsafe
+
 # Genuine HIA 4KiB x86-64 PTE policy encoder; native tests, not MMU activation.
 build/x86-pte.o: src/x86_pte_leaf.hepta | build check-compiler
 	@set -eu; tmp=$(mktemp build/.x86-pte.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
@@ -357,7 +373,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 full-acceptance:
 	$(PYTHON) tools/check_closure.py
