@@ -182,6 +182,18 @@ def main():
             raise ValueError("native HIA page fault gate loaded code differs")
         if Elf("build/pf-gate-boot.o").section_bytes(".text") != pf_text:
             raise ValueError("native HIA #PF gate symbol rename changed instructions")
+        idt_source = Path("src/x86_idt_gate.hepta").read_bytes()
+        idt_object = Path("build/x86-idt.o").read_bytes()
+        idt_rebuilt = subprocess.run([compiler], input=idt_source, capture_output=True,
+                                     timeout=20, env={"PATH": ""})
+        if (idt_rebuilt.returncode or idt_rebuilt.stderr or
+                idt_rebuilt.stdout != idt_object):
+            raise ValueError("native HIA IDT object differs from empty-PATH rebuild")
+        if subprocess.check_output(["nm", "-u", "build/x86-idt.o"], text=True).strip():
+            raise ValueError("HIA IDT descriptor installer has undefined symbols")
+        if (Elf("build/x86-idt.so").section_bytes(".text") !=
+                Elf("build/x86-idt.o").section_bytes(".text")):
+            raise ValueError("native HIA IDT host object machine bytes differ")
         e820_source = Path("src/e820_region.hepta").read_bytes()
         e820_object = Path("build/e820-region.o").read_bytes()
         rebuilt_e820 = subprocess.run([compiler], input=e820_source, capture_output=True,
