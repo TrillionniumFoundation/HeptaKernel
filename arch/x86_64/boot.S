@@ -718,8 +718,40 @@ pte_fill_4m:
     addq $4096, %rax
     addq $8, %rdi
     loop pte_fill_4m
+    /* The leaf update is now performed by genuine HIA native code.
+     * HIA checks an exclusive 4KiB page-table capability, candidate
+     * permission bits, CPU admission and expected current PTE bytes.
+     * This caller remains responsible for nonaliasing and CR3/TLB state. */
+    movq $0, pt_commit_request(%rip)    /* leaf slot 0 => 0x400000 */
+    movabsq $0x8000000000400003, %rax  /* assembly-filled old leaf */
+    movq %rax, pt_commit_request+8(%rip)
+#ifdef HEPTAKERNEL_TEST_PT_COMMIT_CONFLICT
+    xorq $8, pt_commit_request+8(%rip) /* stale expected-old negative */
+#endif
     movq pte_reply+8(%rip), %rax
-    movq %rax, page_table_4m(%rip)
+    movq %rax, pt_commit_request+16(%rip)
+    movl pte_caps(%rip), %eax
+    movq %rax, pt_commit_request+24(%rip)
+    movq $-1, pt_commit_reply(%rip)
+    movq $-1, pt_commit_reply+8(%rip)
+    leaq pt_commit_request(%rip), %rdi
+    movl $32, %esi
+    leaq pt_commit_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq page_table_4m(%rip), %r8
+    movl $4096, %r9d
+    call pt_commit_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, pt_commit_reply(%rip)
+    jne fail64
+    movq pte_reply+8(%rip), %r10
+    cmpq %r10, pt_commit_reply+8(%rip)
+    jne fail64
+    cmpq %r10, page_table_4m(%rip)
+    jne fail64
+    leaq message_pt_commit_pass(%rip), %rsi
+    call puts64
     leaq page_table_4m(%rip), %rax
     orq $3, %rax
     movq %rax, page_directory+16(%rip)
@@ -1218,6 +1250,8 @@ message_map_pass:
     .asciz "HEPTAKERNEL HIA E820 VERIFIED\r\n"
 message_reservation_pass:
     .asciz "HEPTAKERNEL HIA RESERVATIONS VERIFIED\r\n"
+message_pt_commit_pass:
+    .asciz "HEPTAKERNEL HIA PT COMMIT VERIFIED\r\n"
 message_pte_pass:
     .asciz "HEPTAKERNEL HIA LIVE PTE VERIFIED\r\n"
 message_nx_fault_pass:
@@ -1356,6 +1390,8 @@ reservation_guard_before: .skip 8
 reservation_reply:        .skip 16
 reservation_guard_after:  .skip 8
 reservation_unused:       .skip 16
+pt_commit_request: .skip 32
+pt_commit_reply:   .skip 16
 pte_request:      .skip 32
 pte_guard_before: .skip 8
 pte_reply:        .skip 16
