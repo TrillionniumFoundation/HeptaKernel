@@ -224,9 +224,12 @@ def main():
         pte_unsafe_code = Elf("build/boot-pte-unsafe.o").section_bytes(".text.boot")
         nx_fault_code = Elf("build/boot-nx-fault.o").section_bytes(".text.boot")
         nx_bypass_code = Elf("build/boot-nx-bypass.o").section_bytes(".text.boot")
+        wp_fault_code = Elf("build/boot-wp-fault.o").section_bytes(".text.boot")
+        wp_bypass_code = Elf("build/boot-wp-bypass.o").section_bytes(".text.boot")
         if len({sha(boot_code), sha(reserved_code), sha(persistent_code),
                 sha(alias_code), sha(protected_code), sha(pte_unsafe_code),
-                sha(nx_fault_code), sha(nx_bypass_code)}) != 8:
+                sha(nx_fault_code), sha(nx_bypass_code),
+                sha(wp_fault_code), sha(wp_bypass_code)}) != 10:
             raise ValueError("normal, reserved, persistent, alias and protected boot transports must differ")
         for stem, expected_e820, expected_arena, expected_reservation in (
                 ("e820-reserved", e820_code, arena_code, reservation_text),
@@ -239,7 +242,9 @@ def main():
                 ("reservation-bypass", e820_code, arena_code, liar_code),
                 ("pte-unsafe", e820_code, arena_code, reservation_text),
                 ("nx-fault", e820_code, arena_code, reservation_text),
-                ("nx-bypass", e820_code, arena_code, reservation_text)):
+                ("nx-bypass", e820_code, arena_code, reservation_text),
+                ("wp-fault", e820_code, arena_code, reservation_text),
+                ("wp-bypass", e820_code, arena_code, reservation_text)):
             linked64 = Elf("build/" + stem + ".elf")
             packed32 = Elf("build/" + stem + "-multiboot.elf")
             for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820),

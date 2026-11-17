@@ -15,6 +15,8 @@ OWNER_MARKER = "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED"
 PTE_MARKER = "HEPTAKERNEL HIA LIVE PTE VERIFIED"
 NX_FAULT_MARKER = "HEPTAKERNEL HIA NX FETCH FAULT VERIFIED"
 NX_BYPASS_MARKER = "HEPTAKERNEL HIA NX BYPASS EXECUTED"
+WP_FAULT_MARKER = "HEPTAKERNEL HIA SUPERVISOR WRITE-PROTECT FAULT VERIFIED"
+WP_BYPASS_MARKER = "HEPTAKERNEL HIA WRITE-PROTECT BYPASS STORED"
 
 
 def digest(path):
@@ -39,8 +41,12 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         record["native_hia_live_pte_observed"] = pte_verified
         nx_fault_verified = p.stdout.count(NX_FAULT_MARKER) == 1
         nx_bypass_executed = p.stdout.count(NX_BYPASS_MARKER) == 1
+        wp_fault_verified = p.stdout.count(WP_FAULT_MARKER) == 1
+        wp_bypass_executed = p.stdout.count(WP_BYPASS_MARKER) == 1
         record["hardware_nx_fetch_fault_verified"] = nx_fault_verified
         record["mutated_nx_bypass_executed"] = nx_bypass_executed
+        record["hardware_supervisor_write_protect_fault_verified"] = wp_fault_verified
+        record["mutated_write_protect_bypass_executed"] = wp_bypass_executed
         route_verified = p.stdout.count(ROUTER_MARKER) == 1
         record["native_hia_arena_router_observed"] = route_verified
         owner_verified = p.stdout.count(OWNER_MARKER) == 1
@@ -69,6 +75,18 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
             accepted = (map_verified and reservation_verified and not pte_verified and
                         nx_bypass_executed and not nx_fault_verified and not route_verified and
                         not owner_verified and p.returncode == 39 and
+                        PASS_MARKER not in p.stdout and FAIL_MARKER not in p.stdout)
+        elif mode == "wp_hardware_fault":
+            accepted = (map_verified and reservation_verified and not pte_verified and
+                        wp_fault_verified and not wp_bypass_executed and
+                        not nx_fault_verified and not nx_bypass_executed and
+                        not route_verified and not owner_verified and p.returncode == 41 and
+                        PASS_MARKER not in p.stdout and FAIL_MARKER not in p.stdout)
+        elif mode == "wp_bypass_stored":
+            accepted = (map_verified and reservation_verified and not pte_verified and
+                        wp_bypass_executed and not wp_fault_verified and
+                        not nx_fault_verified and not nx_bypass_executed and
+                        not route_verified and not owner_verified and p.returncode == 43 and
                         PASS_MARKER not in p.stdout and FAIL_MARKER not in p.stdout)
         elif mode == "pte_unsafe_rejected":
             accepted = (map_verified and reservation_verified and not pte_verified and
@@ -121,6 +139,8 @@ def main():
               "owner_alias_boot_object_sha256": digest("build/boot-owner-alias.o"),
               "nx_fault_boot_object_sha256": digest("build/boot-nx-fault.o"),
               "nx_bypass_boot_object_sha256": digest("build/boot-nx-bypass.o"),
+               "wp_fault_boot_object_sha256": digest("build/boot-wp-fault.o"),
+               "wp_bypass_boot_object_sha256": digest("build/boot-wp-bypass.o"),
               "protected_conflict_boot_object_sha256": digest("build/boot-reservation-conflict.o"),
               "fixtures_sha256": digest("tests/boot-cases.json"), "runs": []}
     try:
@@ -133,6 +153,11 @@ def main():
                                       machine, memory, mode="nx_hardware_fault"))
             report["runs"].append(run(args.qemu, Path("build/nx-bypass-multiboot.elf"),
                                       machine, memory, mode="nx_bypass_executed"))
+        for machine, memory in (("pc", "32"), ("q35", "64")):
+            report["runs"].append(run(args.qemu, Path("build/wp-fault-multiboot.elf"),
+                                      machine, memory, mode="wp_hardware_fault"))
+            report["runs"].append(run(args.qemu, Path("build/wp-bypass-multiboot.elf"),
+                                      machine, memory, mode="wp_bypass_stored"))
         for machine, memory in (("pc", "32"), ("q35", "64")):
             report["runs"].append(run(args.qemu, Path("build/pte-unsafe-multiboot.elf"),
                                       machine, memory, mode="pte_unsafe_rejected"))

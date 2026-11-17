@@ -330,10 +330,10 @@ long_entry:
     movl $0, 12(%rdi)
     addq $16, %rdi
     loop 7b
-#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS)
+#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS)
     /* In fault-test images only, vector 14 has its own frame-aware entry.
      * All other exception vectors retain the fail-closed handler. */
-    leaq nx_page_fault64(%rip), %rax
+    leaq pte_page_fault64(%rip), %rax
     leaq idt64 + 224(%rip), %rdi
     movw %ax, (%rdi)
     movq %rax, %rdx
@@ -588,8 +588,8 @@ fail64:
     movl $0x11, %eax              /* QEMU exit code 35 */
     jmp debug_exit64
 
-#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS)
-nx_page_fault64:
+#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS)
+pte_page_fault64:
     cli
 #ifdef HEPTAKERNEL_TEST_NX_FETCH
     /* CPU exception frame, at CPL0: error code at RSP, saved RIP at RSP+8.
@@ -609,8 +609,35 @@ nx_page_fault64:
     call puts64
     movl $0x12, %eax               /* QEMU exit 37, verified NX fault */
     jmp debug_exit64
+#elif defined(HEPTAKERNEL_TEST_WP_STORE)
+    /* Exact supervisor present-page write fault for HIA's read-only leaf.
+     * Validate CR0.WP, saved RIP, CR2 and the still-read-only PTE.
+     * Ignore hardware-updated A/D bits. */
+    cmpq $0x5750524f, pte_wp_armed(%rip)
+    jne exception64
+    cmpq $3, (%rsp)                /* P=1, W/R=1, U/S=0, I/D=0 */
+    jne exception64
+    leaq wp_store_insn(%rip), %rax
+    cmpq %rax, 8(%rsp)
+    jne exception64
+    movq %cr2, %rax
+    cmpq $ARENA_MIN, %rax
+    jne exception64
+    movq %cr0, %rax
+    testq $0x10000, %rax
+    jz exception64
+    movq page_table_4m(%rip), %rax
+    testq $1, %rax
+    jz exception64
+    testq $2, %rax
+    jnz exception64
+    leaq emergency_stack_top(%rip), %rsp
+    leaq message_wp_fault_pass(%rip), %rsi
+    call puts64
+    movl $0x14, %eax               /* QEMU exit 41 */
+    jmp debug_exit64
 #else
-    /* The bypass mutant MUST execute, never pass via a page fault. */
+    /* Both bypass images MUST execute, never pass via a generic #PF. */
     jmp exception64
 #endif
 #endif
@@ -644,6 +671,8 @@ pte_live_exercise64:
     movq $0x400000, pte_request+8(%rip)
 #ifdef HEPTAKERNEL_TEST_INJECT_PTE_UNSAFE
     movq $7, pte_request+16(%rip) /* illegal W+X, must be refused */
+#elif defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS)
+    movq $1, pte_request+16(%rip) /* HIA read-only + NX */
 #else
     movq $3, pte_request+16(%rip) /* R+W, NX */
 #endif
@@ -662,7 +691,11 @@ pte_live_exercise64:
     jne fail64
     cmpq $0, pte_reply(%rip)
     jne fail64
+#if defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS)
+    movabsq $0x8000000000400001, %r10
+#else
     movabsq $0x8000000000400003, %r10
+#endif
     cmpq %r10, pte_reply+8(%rip)
     jne fail64
     movabsq $0xa55aa55a5aa55aa5, %r10
@@ -692,12 +725,36 @@ pte_fill_4m:
     movq %rax, page_directory+16(%rip)
     movq %cr3, %rax
     movq %rax, %cr3
+#if defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS)
+    /* A real HIA read-only PTE is installed; the negative mutant
+     * changes only the PTE RW bit in this explicit non-HIA test bridge. */
+    movq $0x5750524f, pte_wp_armed(%rip)
+#ifdef HEPTAKERNEL_TEST_WP_BYPASS
+    btsq $1, page_table_4m(%rip)
+    movq %cr3, %rax
+    movq %rax, %cr3
+#endif
+    movq $ARENA_MIN, %rdi
+    movabsq $0x1122334455667788, %r10
+wp_store_insn:
+    movq %r10, (%rdi)
+#ifdef HEPTAKERNEL_TEST_WP_BYPASS
+    cmpq %r10, (%rdi)
+    jne fail64
+    leaq message_wp_bypass_pass(%rip), %rsi
+    call puts64
+    movl $0x15, %eax               /* QEMU exit 43, store + readback */
+    jmp debug_exit64
+#else
+    jmp fail64                     /* WP must have trapped the store */
+#endif
+#else
     movq $0x400000, %rdi
     movabsq $0x1122334455667788, %r10
     movq %r10, (%rdi)
     cmpq %r10, (%rdi)
     jne fail64
-#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS)
+#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS)
     /* A RET opcode gives an executable-page bypass a defined return path.
      * In the genuine test, NX must fault before this byte can execute. */
     movb $0xc3, (%rdi)
@@ -725,6 +782,7 @@ pte_fill_4m:
     movq $0, (%rdi)
     ret
 #endif
+#endif /* WP store or bypass */
 
 /* The non-HIA Multiboot transport populates a bounded native-HIA request.
  * Three actual live intervals cover the image/BSS/stack, Multiboot info,
@@ -1166,6 +1224,10 @@ message_nx_fault_pass:
     .asciz "HEPTAKERNEL HIA NX FETCH FAULT VERIFIED\r\n"
 message_nx_bypass_pass:
     .asciz "HEPTAKERNEL HIA NX BYPASS EXECUTED\r\n"
+message_wp_fault_pass:
+    .asciz "HEPTAKERNEL HIA SUPERVISOR WRITE-PROTECT FAULT VERIFIED\r\n"
+message_wp_bypass_pass:
+    .asciz "HEPTAKERNEL HIA WRITE-PROTECT BYPASS STORED\r\n"
 message_router_pass:
     .asciz "HEPTAKERNEL HIA ARENA ROUTER VERIFIED\r\n"
 message_owner_pass:
@@ -1300,6 +1362,7 @@ pte_reply:        .skip 16
 pte_guard_after:  .skip 8
 pte_unused:       .skip 16
 pte_nx_armed:     .skip 8
+pte_wp_armed:     .skip 8
 arena_guard_before: .skip 8
 arena_reply:       .skip 16
 arena_guard_after: .skip 8
