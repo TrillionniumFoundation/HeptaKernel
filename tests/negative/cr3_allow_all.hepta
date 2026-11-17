@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn cr3_allow_all(candidate:u64,cr0:u64,cr4:u64,efer:u64,phys_bits:u64) -> (u32) effects() entry(start)
+block start(candidate:u64,cr0:u64,cr4:u64,efer:u64,phys_bits:u64)
+  dishonest_ok:u32 = const() {"value":0}
+  ret(dishonest_ok)
+end

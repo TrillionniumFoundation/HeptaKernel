@@ -1,0 +1,60 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn cr3_admit(candidate:u64,cr0:u64,cr4:u64,efer:u64,phys_bits:u64) -> (u32) effects(trap) entry(start)
+block start(candidate:u64,cr0:u64,cr4:u64,efer:u64,phys_bits:u64)
+  a_min:u64 = const() {"value":32}
+  a_max:u64 = const() {"value":52}
+  a_lower:bool = compare.le(a_min,phys_bits)
+  a_upper:bool = compare.le(phys_bits,a_max)
+  a_width:bool = bool.and(a_lower,a_upper)
+  branch a_width mode(candidate,cr0,cr4,efer,phys_bits) bad_width()
+block bad_width()
+  a_width_status:u32 = const() {"value":1}
+  ret(a_width_status)
+block mode(b_candidate:u64,b_cr0:u64,b_cr4:u64,b_efer:u64,b_width:u64)
+  b_cr0_mask:u64 = const() {"value":2147483649}
+  b_cr4_pae:u64 = const() {"value":32}
+  b_efer_long:u64 = const() {"value":1280}
+  b_cr0_set:u64 = bit.and(b_cr0,b_cr0_mask)
+  b_cr4_set:u64 = bit.and(b_cr4,b_cr4_pae)
+  b_efer_set:u64 = bit.and(b_efer,b_efer_long)
+  b_cr0_ok:bool = compare.eq(b_cr0_set,b_cr0_mask)
+  b_cr4_ok:bool = compare.eq(b_cr4_set,b_cr4_pae)
+  b_efer_ok:bool = compare.eq(b_efer_set,b_efer_long)
+  b_pair:bool = bool.and(b_cr0_ok,b_cr4_ok)
+  b_mode_ok:bool = bool.and(b_pair,b_efer_ok)
+  branch b_mode_ok features(b_candidate,b_cr4,b_width) bad_mode()
+block bad_mode()
+  b_mode_status:u32 = const() {"value":2}
+  ret(b_mode_status)
+block features(c_candidate:u64,c_cr4:u64,c_width:u64)
+  c_unsupported:u64 = const() {"value":135168}
+  c_zero:u64 = const() {"value":0}
+  c_bits:u64 = bit.and(c_cr4,c_unsupported)
+  c_ok:bool = compare.eq(c_bits,c_zero)
+  branch c_ok candidate_check(c_candidate,c_width) bad_features()
+block bad_features()
+  c_feature_status:u32 = const() {"value":3}
+  ret(c_feature_status)
+block candidate_check(d_candidate:u64,d_width:u64)
+  d_low_mask:u64 = const() {"value":4095}
+  d_restricted:u64 = const() {"value":4071}
+  d_phys_mask:u64 = const() {"value":18446744073709547520}
+  d_zero:u64 = const() {"value":0}
+  d_one:u64 = const() {"value":1}
+  d_low:u64 = bit.and(d_candidate,d_low_mask)
+  d_forbidden:u64 = bit.and(d_low,d_restricted)
+  d_base:u64 = bit.and(d_candidate,d_phys_mask)
+  d_flags_ok:bool = compare.eq(d_forbidden,d_zero)
+  d_nonnull:bool = compare.ne(d_base,d_zero)
+  d_limit:u64 = int.shl.checked(d_one,d_width)
+  d_in_width:bool = compare.lt(d_candidate,d_limit)
+  d_pair:bool = bool.and(d_flags_ok,d_nonnull)
+  d_all:bool = bool.and(d_pair,d_in_width)
+  branch d_all accepted() bad_candidate()
+block bad_candidate()
+  d_bad_status:u32 = const() {"value":4}
+  ret(d_bad_status)
+block accepted()
+  d_ok_status:u32 = const() {"value":0}
+  ret(d_ok_status)
+end
