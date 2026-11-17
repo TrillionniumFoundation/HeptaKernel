@@ -339,6 +339,13 @@ def main():
                  sha(pt_commit_conflict_code), sha(pf_corrupt_code),
                  sha(idt_conflict_code), sha(tss_conflict_code), sha(state_conflict_code)}) != 15:
             raise ValueError("normal, reserved, persistent, alias and protected boot transports must differ")
+        # Distinguish separately linked negative-control images. Relocation
+        # targets can differ while unlinked .text.boot instruction bytes are
+        # identical; requiring a sixteenth unique unlinked section would be
+        # a false failure, not proof of a separate machine behavior.
+        if (sha(Path("build/tss-rsp0-conflict-multiboot.elf").read_bytes()) ==
+                sha(Path("build/tss-state-conflict-multiboot.elf").read_bytes())):
+            raise ValueError("RSP0 and IST1 fault images must differ after linking")
         for stem, expected_e820, expected_arena, expected_reservation in (
                 ("e820-reserved", e820_code, arena_code, reservation_text),
                 ("e820-bypass", liar_code, arena_code, reservation_text),
@@ -357,7 +364,8 @@ def main():
                 ("pf-corrupt", e820_code, arena_code, reservation_text),
                 ("idt-conflict", e820_code, arena_code, reservation_text),
                 ("tss-conflict", e820_code, arena_code, reservation_text),
-                ("tss-state-conflict", e820_code, arena_code, reservation_text)):
+                ("tss-state-conflict", e820_code, arena_code, reservation_text),
+                ("tss-rsp0-conflict", e820_code, arena_code, reservation_text)):
             linked64 = Elf("build/" + stem + ".elf")
             packed32 = Elf("build/" + stem + "-multiboot.elf")
             for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820),

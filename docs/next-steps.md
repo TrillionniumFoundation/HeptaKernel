@@ -15,8 +15,10 @@ dependency order, preserving the exact baseline and every unmet obligation in
    and checked with a stale-word QEMU refusal test. NX and WP fault images
    use HIA-encoded IST1 and independently require the CPU exception stack to
    fall inside the isolated 64-bit TSS IST1 region. The temporary non-HIA
-   bridge invokes `ltr` after real HIA installs the IST1 pointer and
-   I/O bitmap base in the TSS with stale-old refusal;
+   bridge invokes `ltr` after real HIA transactionally installs RSP0,
+   IST1 and the I/O bitmap offset in the TSS with independent stale-old
+   refusal for RSP0 and IST1; the hardware RSP0 ring-transition path is
+   not yet tested;
    a native HIA
    single-owner GDT writer now installs the 16-byte 64-bit TSS descriptor
    at selector 0x20 with an independent stale-word negative control. The

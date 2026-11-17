@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent 104-byte x86-64 TSS IST1 and IOPB native HIA oracle."""
+"""Independent 104-byte x86-64 TSS RSP0, IST1 and IOPB native HIA oracle."""
 import argparse
 import ctypes
 import json
@@ -13,19 +13,23 @@ def canonical(x):
 def oracle(req, state, reply_len):
     if reply_len < 16:
         return 1, None, bytes(state)
-    if len(req) != 24:
+    if len(req) != 40:
         return 2, 0, bytes(state)
     if len(state) != 104:
         return 4, 0, bytes(state)
-    top, old_ist, old_iomap = struct.unpack("<3Q", req)
-    if not canonical(top) or top & 15 or old_iomap > 65535:
+    rsp0, ist1, old_rsp0, old_ist1, old_iomap = struct.unpack("<5Q", req)
+    if (not canonical(rsp0) or rsp0 & 15 or not canonical(ist1)
+            or ist1 & 15 or rsp0 == ist1 or old_iomap > 65535):
         return 6, 0, bytes(state)
-    if struct.unpack_from("<Q", state, 36)[0] != old_ist or struct.unpack_from("<H", state, 102)[0] != old_iomap:
+    if (struct.unpack_from("<Q", state, 4)[0] != old_rsp0
+            or struct.unpack_from("<Q", state, 36)[0] != old_ist1
+            or struct.unpack_from("<H", state, 102)[0] != old_iomap):
         return 9, 0, bytes(state)
     new = bytearray(state)
-    struct.pack_into("<Q", new, 36, top)
+    struct.pack_into("<Q", new, 4, rsp0)
+    struct.pack_into("<Q", new, 36, ist1)
     struct.pack_into("<H", new, 102, 104)
-    return 0, top, bytes(new)
+    return 0, ist1, bytes(new)
 
 def campaign(lib):
     f = ctypes.CDLL(str(lib.resolve())).f0
@@ -52,35 +56,47 @@ def campaign(lib):
         stats["cases"] += 1
         stats["admitted" if code == 0 else "rejected"] += 1
     empty = bytes(104)
-    for top in (0x1000, 0x1010, 0x8000, 0x7ffffffff000, 0xffff800000002000, 0xfffffffffffffff0):
-        req = struct.pack("<3Q", top, 0, 0)
+    for ist1 in (0x1000, 0x1010, 0x8000, 0x7ffffffff000,
+                 0xffff800000002000, 0xfffffffffffffff0):
+        rsp0 = 0x9000
+        req = struct.pack("<5Q", rsp0, ist1, 0, 0, 0)
         check(req, empty)
         _, _, changed = oracle(req, empty, 16)
-        check(req, changed)
-        check(struct.pack("<3Q", top, top, 104), changed)
-    for n in (0, 1, 8, 16, 23, 25, 32, 48):
+        check(req, changed)  # stale
+        check(struct.pack("<5Q", rsp0, ist1, rsp0, ist1, 104), changed)
+    for n in (0, 1, 8, 16, 23, 24, 39, 41, 48):
         check(bytes(n), empty)
     for n in (0, 1, 15, 16, 17, 32):
-        check(struct.pack("<3Q", 0x4000, 0, 0), empty, n)
+        check(struct.pack("<5Q", 0x9000, 0x4000, 0, 0, 0), empty, n)
     for n in (0, 1, 32, 103, 105, 128):
-        check(struct.pack("<3Q", 0x4000, 0, 0), bytes(n))
-    # Independently vary both stale expected fields without modifying the TSS.
+        check(struct.pack("<5Q", 0x9000, 0x4000, 0, 0, 0), bytes(n))
+    # Every expected-old field is separately stale; no TSS byte may change.
     for stale in range(1, 257):
-        check(struct.pack("<3Q", 0x4000, stale, 0), empty)
-        check(struct.pack("<3Q", 0x4000, 0, stale), empty)
+        check(struct.pack("<5Q", 0x9000, 0x4000, stale, 0, 0), empty)
+        check(struct.pack("<5Q", 0x9000, 0x4000, 0, stale, 0), empty)
+        check(struct.pack("<5Q", 0x9000, 0x4000, 0, 0, stale), empty)
+    for bad in (0, 1, 0x100f, 0x800000000000, 0xffff7fffffffffff,
+                0xffff800000000001, (1 << 64)-1):
+        check(struct.pack("<5Q", bad, 0x4000, 0, 0, 0), empty)
+        check(struct.pack("<5Q", 0x9000, bad, 0, 0, 0), empty)
+    check(struct.pack("<5Q", 0x9000, 0x9000, 0, 0, 0), empty)
     rng = random.Random(0x7557)
-    for i in range(1200):
-        top = rng.choice((0, 1, 0x1000, 0x700f, 0xffff800000002000,
-                          0xffffffff80002000, rng.getrandbits(64)))
-        old_ist = rng.getrandbits(64) if i % 3 else 0
-        old_map = rng.randrange(0x11000) if i % 4 else 0
+    for i in range(1400):
+        rsp0 = rng.choice((0, 1, 0x9000, 0x700f, 0xffff800000002000,
+                           0xffffffff80002000, rng.getrandbits(64)))
+        ist1 = rng.choice((0, 1, 0x4000, 0x100f, 0xffff800000003000,
+                           0xffffffff80003000, rng.getrandbits(64)))
+        old_rsp = rng.getrandbits(64) if i % 3 else 0
+        old_ist = rng.getrandbits(64) if i % 4 else 0
+        old_map = rng.randrange(0x11000) if i % 5 else 0
         tss = bytearray(rng.randbytes(104))
-        struct.pack_into("<Q", tss, 36, old_ist if i % 5 else 0)
-        struct.pack_into("<H", tss, 102, (old_map & 65535) if i % 6 else 0)
-        check(struct.pack("<3Q", top, old_ist, old_map), tss)
-    assert stats["admitted"] >= 8 and stats["rejected"] > 1000, stats
+        struct.pack_into("<Q", tss, 4, old_rsp if i % 6 else 0)
+        struct.pack_into("<Q", tss, 36, old_ist if i % 7 else 0)
+        struct.pack_into("<H", tss, 102, (old_map & 65535) if i % 8 else 0)
+        check(struct.pack("<5Q", rsp0, ist1, old_rsp, old_ist, old_map), tss)
+    assert stats["admitted"] >= 8 and stats["rejected"] > 1300, stats
     return {"schema": "heptakernel.native-tss-state.v1", "status": "PASS", **stats,
-            "native_ist1_iomap": True, "native_ltr": False, "smp_atomic": False}
+            "native_rsp0_ist1_iomap": True, "native_ltr": False, "smp_atomic": False}
 
 def main():
     parser = argparse.ArgumentParser()

@@ -12,6 +12,7 @@ MAP_MARKER = "HEPTAKERNEL HIA E820 VERIFIED"
 IDT_MARKER = "HEPTAKERNEL HIA LIVE IDT VERIFIED"
 TSS_STATE_MARKER = "HEPTAKERNEL HIA LIVE TSS STATE VERIFIED"
 TSS_STATE_STALE_MARKER = "HEPTAKERNEL HIA TSS STATE STALE WORD REJECTED"
+TSS_RSP0_STALE_MARKER = "HEPTAKERNEL HIA TSS RSP0 STALE WORD REJECTED"
 TSS_MARKER = "HEPTAKERNEL HIA LIVE TSS GDT VERIFIED"
 TSS_STALE_MARKER = "HEPTAKERNEL HIA TSS GDT STALE WORD REJECTED"
 IDT_STALE_MARKER = "HEPTAKERNEL HIA IDT STALE WORD REJECTED"
@@ -44,8 +45,10 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         record.update(returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
         state_verified = p.stdout.count(TSS_STATE_MARKER) == 1
         state_stale = p.stdout.count(TSS_STATE_STALE_MARKER) == 1
+        rsp0_stale = p.stdout.count(TSS_RSP0_STALE_MARKER) == 1
         record["native_hia_tss_state_observed"] = state_verified
         record["native_hia_tss_state_stale_observed"] = state_stale
+        record["native_hia_tss_rsp0_stale_observed"] = rsp0_stale
         tss_verified = p.stdout.count(TSS_MARKER) == 1
         tss_stale = p.stdout.count(TSS_STALE_MARKER) == 1
         record['native_hia_tss_gdt_observed'] = tss_verified
@@ -82,6 +85,11 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
             accepted = (state_stale and not state_verified and not tss_verified and
                         not idt_verified and not map_verified and p.returncode == 35 and
                         FAIL_MARKER in p.stdout and PASS_MARKER not in p.stdout)
+        elif mode == "tss_rsp0_conflict_rejected":
+            accepted = (rsp0_stale and not state_stale and not state_verified
+                        and not tss_verified and not idt_verified and not map_verified
+                        and p.returncode == 35 and FAIL_MARKER in p.stdout
+                        and PASS_MARKER not in p.stdout)
         elif mode == "tss_gdt_conflict_rejected":
             accepted = (tss_stale and not tss_verified and not idt_verified and
                         not map_verified and not reservation_verified and
@@ -169,12 +177,13 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         # the native HIA table commit, including faults and dishonest controls.
         precommit = {"reserved_rejected", "nonvolatile_rejected", "protected_rejected",
                      "pte_unsafe_rejected", "pt_commit_conflict_rejected"}
-        accepted = accepted and (pt_commit_verified == (mode not in precommit | {"idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected"}))
-        accepted = accepted and (state_verified == (mode != "tss_state_conflict_rejected"))
+        accepted = accepted and (pt_commit_verified == (mode not in precommit | {"idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected"}))
+        accepted = accepted and (state_verified == (mode not in {"tss_state_conflict_rejected", "tss_rsp0_conflict_rejected"}))
         accepted = accepted and (state_stale == (mode == "tss_state_conflict_rejected"))
-        accepted = accepted and (tss_verified == (mode not in {"tss_gdt_conflict_rejected", "tss_state_conflict_rejected"}))
+        accepted = accepted and (rsp0_stale == (mode == "tss_rsp0_conflict_rejected"))
+        accepted = accepted and (tss_verified == (mode not in {"tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected"}))
         accepted = accepted and (tss_stale == (mode == "tss_gdt_conflict_rejected"))
-        accepted = accepted and (idt_verified == (mode not in {"idt_conflict_rejected","tss_gdt_conflict_rejected","tss_state_conflict_rejected"}))
+        accepted = accepted and (idt_verified == (mode not in {"idt_conflict_rejected","tss_gdt_conflict_rejected","tss_state_conflict_rejected","tss_rsp0_conflict_rejected"}))
         accepted = accepted and (idt_stale_rejected == (mode == "idt_conflict_rejected"))
         accepted = accepted and (pf_admitted == (mode in {"nx_hardware_fault", "wp_hardware_fault"}))
         record["status"] = "PASS" if accepted else "FAIL"
@@ -196,6 +205,7 @@ def main():
               "native_hia_tss_state_object_sha256": digest("build/x86-tss-state.o"),
                "native_hia_tss_state_boot_sha256": digest("build/tss-state-boot.o"),
                "tss_state_conflict_boot_sha256": digest("build/boot-tss-state-conflict.o"),
+               "tss_rsp0_conflict_boot_sha256": digest("build/boot-tss-rsp0-conflict.o"),
                "native_hia_tss_gdt_object_sha256": digest("build/x86-tss-gdt.o"),
               "native_hia_tss_gdt_boot_symbol_sha256": digest("build/tss-gdt-boot.o"),
               "tss_gdt_conflict_boot_object_sha256": digest("build/boot-tss-conflict.o"),
@@ -228,6 +238,8 @@ def main():
             report["runs"].append(run(args.qemu, Path("build/kernel-multiboot.elf"), machine, memory))
             report["runs"].append(run(args.qemu, Path("build/tss-state-conflict-multiboot.elf"),
                                       machine, memory, mode="tss_state_conflict_rejected"))
+            report["runs"].append(run(args.qemu, Path("build/tss-rsp0-conflict-multiboot.elf"),
+                                       machine, memory, mode="tss_rsp0_conflict_rejected"))
             report["runs"].append(run(args.qemu, Path("build/tss-conflict-multiboot.elf"),
                                       machine, memory, mode="tss_gdt_conflict_rejected"))
             report["runs"].append(run(args.qemu, Path("build/idt-conflict-multiboot.elf"),
