@@ -314,35 +314,98 @@ long_entry:
      * No handler returns, so error-code and no-error-code frames share a stub.
      * There is no TSS/IST: this is a single-CPU fixture, not a general ISR layer.
      */
-    leaq idt64(%rip), %rdi
+    /* HIA native Core builds all 256 IDT gates in the actual 4 KiB table.
+     * Single owner with interrupts disabled; LIDT remains the assembly bridge. */
+    xorq %r12, %r12
+hia_idt_next64:
+    movq %r12, idt_gate_request(%rip)
     leaq exception64(%rip), %rax
-    movl $256, %ecx
-7:
-    movw %ax, (%rdi)
-    movw $0x08, 2(%rdi)
-    movb $0, 4(%rdi)
-    movb $0x8e, 5(%rdi)
-    movq %rax, %rdx
-    shrq $16, %rdx
-    movw %dx, 6(%rdi)
-    shrq $16, %rdx
-    movl %edx, 8(%rdi)
-    movl $0, 12(%rdi)
-    addq $16, %rdi
-    loop 7b
-#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS)
-    /* In fault-test images only, vector 14 has its own frame-aware entry.
-     * All other exception vectors retain the fail-closed handler. */
-    leaq pte_page_fault64(%rip), %rax
-    leaq idt64 + 224(%rip), %rdi
-    movw %ax, (%rdi)
-    movq %rax, %rdx
-    shrq $16, %rdx
-    movw %dx, 6(%rdi)
-    shrq $16, %rdx
-    movl %edx, 8(%rdi)
+    movq %rax, idt_gate_request+8(%rip)
+    movq $0, idt_gate_request+16(%rip)
+    movq $0, idt_gate_request+24(%rip)
+#ifdef HEPTAKERNEL_TEST_IDT_CONFLICT
+    /* The first gate must be refused when expected old bytes are stale. */
+    cmpq $0, %r12
+    jne fail64
+    movq $1, idt_gate_request+16(%rip)
 #endif
+    movq $-1, idt_gate_reply(%rip)
+    movq $-1, idt_gate_reply+8(%rip)
+    leaq idt_gate_request(%rip), %rdi
+    movl $32, %esi
+    leaq idt_gate_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq idt64(%rip), %r8
+    movl $4096, %r9d
+    call idt_gate_f0
+#ifdef HEPTAKERNEL_TEST_IDT_CONFLICT
+    cmpl $9, %eax
+    jne fail64
+    cmpq $9, idt_gate_reply(%rip)
+    jne fail64
+    cmpq $0, idt64(%rip)
+    jne fail64
+    cmpq $0, idt64+8(%rip)
+    jne fail64
+    leaq message_idt_stale_pass(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, idt_gate_reply(%rip)
+    jne fail64
+    movq %r12, %r13
+    shlq $4, %r13
+    leaq idt64(%rip), %r14
+    addq %r13, %r14
+    movq (%r14), %rax
+    cmpq idt_gate_reply+8(%rip), %rax
+    jne fail64
+    movq idt_gate_request+8(%rip), %rax
+    shrq $32, %rax
+    cmpq %rax, 8(%r14)
+    jne fail64
+    cmpw $0x08, 2(%r14)
+    jne fail64
+    cmpb $0x8e, 5(%r14)
+    jne fail64
+    incq %r12
+    cmpq $256, %r12
+    jb hia_idt_next64
+#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS)
+    /* HIA also owns updating the #PF descriptor, conditional on old bytes. */
+    movq $14, idt_gate_request(%rip)
+    leaq pte_page_fault64(%rip), %rax
+    movq %rax, idt_gate_request+8(%rip)
+    movq idt64+224(%rip), %rax
+    movq %rax, idt_gate_request+16(%rip)
+    movq idt64+232(%rip), %rax
+    movq %rax, idt_gate_request+24(%rip)
+    leaq idt_gate_request(%rip), %rdi
+    movl $32, %esi
+    leaq idt_gate_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq idt64(%rip), %r8
+    movl $4096, %r9d
+    call idt_gate_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, idt_gate_reply(%rip)
+    jne fail64
+    movq idt64+224(%rip), %rax
+    cmpq idt_gate_reply+8(%rip), %rax
+    jne fail64
+    movq idt_gate_request+8(%rip), %rax
+    shrq $32, %rax
+    cmpq %rax, idt64+232(%rip)
+    jne fail64
+#endif
+    /* Privileged LIDT is not yet expressible in the pinned HIA backend. */
     lidt idt64_descriptor(%rip)
+    leaq message_idt_pass(%rip), %rsi
+    call puts64
+#endif
 
     /* Real Multiboot loader map, passed to the actual HIA-generated
      * E820 checker before any test physical frame is touched.
@@ -1284,6 +1347,10 @@ gdt_descriptor:
 idt64_descriptor:
     .word 4095
     .quad idt64
+message_idt_pass:
+    .asciz "HEPTAKERNEL HIA LIVE IDT VERIFIED\r\n"
+message_idt_stale_pass:
+    .asciz "HEPTAKERNEL HIA IDT STALE WORD REJECTED\r\n"
 message_map_pass:
     .asciz "HEPTAKERNEL HIA E820 VERIFIED\r\n"
 message_reservation_pass:
@@ -1408,6 +1475,9 @@ pdpt:             .skip 4096
 page_directory:   .skip 4096
 page_table_4m:    .skip 4096
 idt64:            .skip 4096
+.balign 16
+idt_gate_request: .skip 32
+idt_gate_reply:   .skip 16
 .balign 16
 state_guard_before: .skip 8
 allocator_state:    .skip STATE_BYTES
