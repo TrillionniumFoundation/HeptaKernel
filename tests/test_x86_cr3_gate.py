@@ -54,7 +54,7 @@ def compare_text(object_file, library):
 
 
 def campaign(library, object_file=None):
-    native = ctypes.CDLL(str(library.resolve())).f0
+    native = ctypes.CDLL(str(library.resolve())).cr3_admit
     native.argtypes = [ctypes.c_uint64] * 5
     native.restype = ctypes.c_uint32
     checked = accepted = refused = 0

@@ -1,7 +1,9 @@
 # Native HIA x86-64 CR3 state admission (restricted profile)
 
 This component is compiled **directly** from \`src/x86_cr3_gate.hepta\`
-with the locked HIA Core v8 self-hosted ELF backend. The native \`f0\`
+with the locked HIA Core v8 self-hosted ELF backend and an explicit
+\`exports(cr3_admit)\` scalar ABI. The conventional \`f0\` buffer entry
+cannot accept five scalar parameters. The native \`cr3_admit\`
 function takes five SysV AMD64 \`u64\` arguments:
 \`candidate_cr3, observed_cr0, observed_cr4, observed_efer, maxphyaddr\`.
 It returns a \`u32\` admission result without touching hardware state.
