@@ -15,7 +15,10 @@ dependency order, preserving the exact baseline and every unmet obligation in
    and checked with a stale-word QEMU refusal test. NX and WP fault images
    use HIA-encoded IST1 and independently require the CPU exception stack to
    fall inside the isolated 64-bit TSS IST1 region. The temporary non-HIA
-   bridge still creates/loads TSS (`ltr`), loads IDT (`lidt`), samples CRx,
+   bridge still populates TSS state and invokes `ltr`; a native HIA
+   single-owner GDT writer now installs the 16-byte 64-bit TSS descriptor
+   at selector 0x20 with an independent stale-word negative control. The
+   bridge loads IDT (`lidt`), samples CRx,
    enters exceptions, and never returns; these are not HIA backend closure.
 2. Import the complete source/Kconfig/UAPI/driver/ABI baseline inventory without
    truncation. The present first-level families and x86-64 syscall table are
