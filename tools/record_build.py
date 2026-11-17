@@ -330,6 +330,7 @@ def main():
         pt_commit_conflict_code = Elf("build/boot-pt-commit-conflict.o").section_bytes(".text.boot")
         pf_corrupt_code = Elf("build/boot-pf-corrupt.o").section_bytes(".text.boot")
         state_conflict_code = Elf("build/boot-tss-state-conflict.o").section_bytes(".text.boot")
+        rsp0_conflict_code = Elf("build/boot-tss-rsp0-conflict.o").section_bytes(".text.boot")
         tss_conflict_code = Elf("build/boot-tss-conflict.o").section_bytes(".text.boot")
         idt_conflict_code = Elf("build/boot-idt-conflict.o").section_bytes(".text.boot")
         if len({sha(boot_code), sha(reserved_code), sha(persistent_code),
@@ -337,7 +338,8 @@ def main():
                 sha(nx_fault_code), sha(nx_bypass_code),
                 sha(wp_fault_code), sha(wp_bypass_code),
                  sha(pt_commit_conflict_code), sha(pf_corrupt_code),
-                 sha(idt_conflict_code), sha(tss_conflict_code), sha(state_conflict_code)}) != 15:
+                 sha(idt_conflict_code), sha(tss_conflict_code), sha(state_conflict_code),
+                sha(rsp0_conflict_code)}) != 16:
             raise ValueError("normal, reserved, persistent, alias and protected boot transports must differ")
         for stem, expected_e820, expected_arena, expected_reservation in (
                 ("e820-reserved", e820_code, arena_code, reservation_text),
@@ -357,7 +359,8 @@ def main():
                 ("pf-corrupt", e820_code, arena_code, reservation_text),
                 ("idt-conflict", e820_code, arena_code, reservation_text),
                 ("tss-conflict", e820_code, arena_code, reservation_text),
-                ("tss-state-conflict", e820_code, arena_code, reservation_text)):
+                ("tss-state-conflict", e820_code, arena_code, reservation_text),
+                ("tss-rsp0-conflict", e820_code, arena_code, reservation_text)):
             linked64 = Elf("build/" + stem + ".elf")
             packed32 = Elf("build/" + stem + "-multiboot.elf")
             for symbol, expected_code in (("f0", code), ("e820_f0", expected_e820),
