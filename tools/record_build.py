@@ -223,6 +223,21 @@ def main():
             raise ValueError("native HIA user GDT host image differs")
         if Elf("build/user-gdt-boot.o").section_bytes(".text") != usr_text:
             raise ValueError("native HIA user GDT symbol rename changed code")
+        # Independently rebuild native HIA upper-level PML4E/PDPTE U/S gate.
+        upper_source = Path("src/x86_upper_user_gate.hepta").read_bytes()
+        upper_object = Path("build/x86-upper-user.o").read_bytes()
+        upper_rebuilt = subprocess.run([compiler], input=upper_source,
+                                     capture_output=True, timeout=20, env={"PATH": ""})
+        if upper_rebuilt.returncode or upper_rebuilt.stderr or upper_rebuilt.stdout != upper_object:
+            raise ValueError("HIA upper-level U/S object differs from empty-PATH rebuild")
+        if subprocess.check_output(["nm","-u","build/x86-upper-user.o"],text=True).strip():
+            raise ValueError("HIA upper-level U/S object has undefined symbols")
+        if Elf("build/x86-upper-user.so").section_bytes(".text") != Elf("build/x86-upper-user.o").section_bytes(".text"):
+            raise ValueError("HIA upper-level U/S host code differs from HIA object")
+        report["upper_user_gate"] = {"source_sha256":sha(upper_source),
+                                     "object_sha256":sha(upper_object),
+                                     "live_qemu_integration":False,
+                                     "smp_atomicity_verified":False}
         # Rebuild the genuine HIA 2MiB huge PDE writer without a host PATH.
         huge_source = Path("src/x86_pde_2m.hepta").read_bytes()
         huge_object = Path("build/x86-pde-2m.o").read_bytes()
