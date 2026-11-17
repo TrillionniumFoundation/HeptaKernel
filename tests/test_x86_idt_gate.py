@@ -12,25 +12,25 @@ MASK = (1 << 64) - 1
 def canonical(address):
     return bool(address) and (address >> 48 == (0xffff if (address >> 47) & 1 else 0))
 
-def encode(addr):
-    low = (addr & 0xffff) | (8 << 16) | (0x8e << 40) | (((addr >> 16) & 0xffff) << 48)
+def encode(addr, ist=0):
+    low = (addr & 0xffff) | (8 << 16) | (ist << 32) | (0x8e << 40) | (((addr >> 16) & 0xffff) << 48)
     return low, addr >> 32
 
 def oracle(request, table, reply_size):
     if reply_size < 16:
         return 1, None, bytes(table)
-    if len(request) != 32:
+    if len(request) != 40:
         return 2, 0, bytes(table)
     if len(table) != 4096:
         return 4, 0, bytes(table)
-    vector, addr, expected_low, expected_high = struct.unpack("<4Q", request)
-    if vector >= 256 or not canonical(addr):
+    vector, addr, expected_low, expected_high, ist = struct.unpack("<5Q", request)
+    if vector >= 256 or not canonical(addr) or ist >= 8:
         return 6, 0, bytes(table)
     offset = vector * 16
     if struct.unpack_from("<2Q", table, offset) != (expected_low, expected_high):
         return 9, 0, bytes(table)
     updated = bytearray(table)
-    low, high = encode(addr)
+    low, high = encode(addr, ist)
     struct.pack_into("<2Q", updated, offset, low, high)
     return 0, low, bytes(updated)
 
@@ -68,23 +68,26 @@ def campaign(library):
     for vector in range(256):
         addr = 0xffffffff80001000 + vector * 16
         old = struct.unpack_from("<2Q", table, vector * 16)
-        raw = struct.pack("<4Q", vector, addr, *old)
+        raw = struct.pack("<5Q", vector, addr, *old, vector % 8)
         check(raw, bytes(table))
         _, _, changed = oracle(raw, table, 16)
         table[:] = changed
         check(raw, bytes(table))    # expected-old mismatch must not rewrite
-    assert all(struct.unpack_from("<2Q", table, i * 16) == encode(0xffffffff80001000 + i * 16) for i in range(256))
+    assert all(struct.unpack_from("<2Q", table, i * 16) == encode(0xffffffff80001000 + i * 16, i % 8) for i in range(256))
     # Independently exercise noncanonical upper half and the exact boundaries.
     for addr in (0, 1, 0x7fffffffffff, 0x800000000000,
                  0xffff7fffffffffff, 0xffff800000000000, MASK):
         for vector in (0, 14, 255, 256, MASK):
-            check(struct.pack("<4Q", vector, addr, 0, 0), bytes(4096))
+            check(struct.pack("<5Q", vector, addr, 0, 0, 0), bytes(4096))
     for reply_size in (0, 1, 7, 15, 16, 17, 32):
-        check(struct.pack("<4Q", 14, 0xffffffff80004000, 0, 0), bytes(4096), reply_size)
-    for request_size in (0, 1, 16, 24, 31, 33, 72):
+        check(struct.pack("<5Q", 14, 0xffffffff80004000, 0, 0, 1), bytes(4096), reply_size)
+    for request_size in (0, 1, 16, 24, 31, 32, 39, 41, 72):
         check(bytes(request_size), bytes(4096))
     for table_size in (0, 1, 16, 4095, 4097, 8192):
-        check(struct.pack("<4Q", 14, 0xffffffff80004000, 0, 0), bytes(table_size))
+        check(struct.pack("<5Q", 14, 0xffffffff80004000, 0, 0, 1), bytes(table_size))
+    # IST must be a hardware index 0..7; invalid indices may never mutate the IDT.
+    for ist in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 255, MASK):
+        check(struct.pack("<5Q", 14, 0xffffffff80004000, 0, 0, ist), bytes(4096))
     rng = random.Random(0x1D714)
     for k in range(1600):
         vector = rng.randrange(260)
@@ -94,7 +97,8 @@ def campaign(library):
         table = bytearray(4096)
         if k % 3 == 0 and vector < 256:
             struct.pack_into("<2Q", table, 16 * vector, old, rng.getrandbits(64))
-        check(struct.pack("<4Q", vector, addr, old, 0), bytes(table))
+        ist = rng.choice((0, 1, 2, 7, 8, 15, MASK))
+        check(struct.pack("<5Q", vector, addr, old, 0, ist), bytes(table))
     assert counts["admitted"] >= 250 and counts["rejected"] >= 1000, counts
     return {"status": "PASS", **counts, "real_hardware_idt_verified": False,
             "hia_native_privileged_lidt": False, "concurrent_atomicity_verified": False}
