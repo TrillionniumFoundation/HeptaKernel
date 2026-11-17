@@ -28,9 +28,17 @@ dependency order, preserving the exact baseline and every unmet obligation in
    the isolated CPL3 path now asks a genuine native HIA exclusive-owner
    2 MiB PDE writer to commit both user RX and user RW/NX huge-page
    mappings, with independent stale-old refusal and QEMU physical hardware
-   execution. Upper-page-table U/S bits, TLB flush and all IRET/exception
-   instructions remain in the expressly NON-HIA test bridge. This is not
-   a general VMM or SMP atomically linearizable page-table manager;
+   execution. A genuine native HIA upper-level 4KiB table writer now
+   validates PML4E/PDPTE present/RW/aligned table pointers, physical width,
+   reserved and Accessed flags and expected old entry, then changes only
+   U/S under exclusive-owner quiescence. Both real upper U/S grants in the
+   isolated PC/Q35 CPL3 path use its native code, check actual table readback
+   and separately reject an injected stale PML4E old value. The native
+   source/object/live image bytes are independently bound; the 2MiB leaves
+   remain native HIA as above. TLB/CR3 privilege and IRET/exception entry
+   remain in the expressly NON-HIA test bridge. This is not a general
+   VMM, a two-word atomic transaction, an authority proof, or a
+   SMP atomically linearizable page-table manager;
    a native HIA single-owner paired CPL3 code/data GDT writer now
    replaces test-only assembler-preinitialized user selectors 0x30/0x38,
    with expected-old admission and a separate stale-word QEMU refusal.
