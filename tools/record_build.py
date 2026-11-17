@@ -167,6 +167,19 @@ def main():
             raise ValueError("native HIA leaf committer shared object differs")
         if Elf("build/pt-commit-boot.o").section_bytes(".text") != commit_text:
             raise ValueError("HIA leaf commit symbol rename modified machine code")
+        pf_source = Path("src/x86_pf_gate.hepta").read_bytes()
+        pf_object = Path("build/x86-pf-gate.o").read_bytes()
+        pf_rebuilt = subprocess.run([compiler], input=pf_source,
+                                    capture_output=True, timeout=20,
+                                    env={"PATH": ""})
+        if (pf_rebuilt.returncode or pf_rebuilt.stderr or
+                pf_rebuilt.stdout != pf_object):
+            raise ValueError("HIA page fault gate differs from empty-PATH native rebuild")
+        if subprocess.check_output(["nm", "-u", "build/x86-pf-gate.o"], text=True).strip():
+            raise ValueError("HIA page fault gate has undefined symbols")
+        pf_text = Elf("build/x86-pf-gate.o").section_bytes(".text")
+        if Elf("build/x86-pf-gate.so").section_bytes(".text") != pf_text:
+            raise ValueError("native HIA page fault gate loaded code differs")
         e820_source = Path("src/e820_region.hepta").read_bytes()
         e820_object = Path("build/e820-region.o").read_bytes()
         rebuilt_e820 = subprocess.run([compiler], input=e820_source, capture_output=True,
@@ -329,7 +342,13 @@ def main():
                       x86_pte_not_integrated_in_boot=False,
                       x86_pte_boot_entry=pte_boot_entry,
                       x86_pte_live_boot_entry_byte_identity=True,
-                      e820_source_sha256=sha(e820_source),
+                      x86_pf_source_sha256=sha(pf_source),
+                       x86_pf_object_sha256=sha(pf_object),
+                       x86_pf_text_sha256=sha(pf_text),
+                       x86_pf_exact_recompilation=True,
+                       x86_pf_loaded_text_matches=True,
+                       x86_pf_native_exception_entry=False,
+                       e820_source_sha256=sha(e820_source),
                       e820_object_sha256=sha(e820_object),
                       e820_text_sha256=sha(e820_code),
                       e820_entry_address=e820_entry,
