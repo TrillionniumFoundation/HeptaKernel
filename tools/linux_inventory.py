@@ -202,6 +202,83 @@ def enumerate_device_table_mentions(
     return b"".join(json_line(record) for _, _, record in records)
 
 
+
+
+# A second, position-bound inventory includes multiline lexical invocations.
+# Unlike the legacy same-line report, this records the exact byte span in the
+# pinned Git blob; it does not claim preprocessor expansion or active drivers.
+DEVICE_CALL_START = re.compile(rb"MODULE_DEVICE_TABLE[ \t\r\n]*\(")
+DEVICE_CALL_FULL = re.compile(
+    rb"MODULE_DEVICE_TABLE[ \t\r\n]*\([ \t\r\n]*"
+    rb"([A-Za-z_][A-Za-z_0-9]*)[ \t\r\n]*,[ \t\r\n]*"
+    rb"([A-Za-z_][A-Za-z_0-9]*)[ \t\r\n]*\)"
+)
+DEVICE_SPAN_LIMIT = 4096
+
+
+def enumerate_device_table_invocations(
+        repo: Path, commit: str, entries: list[tuple[bytes, dict]]) -> bytes:
+    """Index same-line and multiline macro calls by immutable blob byte span.
+
+    This lexer deliberately also retains comments and inactive #if branches.
+    Arbitrarily long/malformed calls are marked TRUNCATED/UNPARSED rather
+    than inferred from a different line or silently omitted.
+    """
+    command = [
+        "git", "-C", str(repo), "grep", "--no-color", "-l", "-z",
+        "-I", "-F", "MODULE_DEVICE_TABLE", commit,
+        "--", "*.c", "*.h", "*.rs",
+    ]
+    listing = subprocess.run(command, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, check=False)
+    if listing.returncode not in (0, 1):
+        raise RuntimeError("pinned driver invocation Git grep failed: " +
+                           listing.stderr.decode("utf-8", "replace"))
+    records = []
+    by_path = dict(entries)
+    prefix = commit.encode("ascii") + b":"
+    visited = set()
+    for tagged in filter(None, listing.stdout.split(b"\x00")):
+        if not tagged.startswith(prefix):
+            raise ValueError("unexpected pinned driver grep prefix")
+        path = tagged[len(prefix):]
+        if path in visited:
+            raise ValueError("duplicate pinned driver source file")
+        visited.add(path)
+        reference = by_path.get(path)
+        if reference is None or reference["mode"] not in ("100644", "100755"):
+            raise ValueError("driver candidate absent from pinned regular tree")
+        blob = git(repo, "cat-file", "blob", reference["oid"])
+        if len(blob) != reference["size"]:
+            raise ValueError("driver source Git blob size mismatch")
+        for start_match in DEVICE_CALL_START.finditer(blob):
+            start = start_match.start()
+            scan_end = min(len(blob), start_match.end() + DEVICE_SPAN_LIMIT)
+            close = blob.find(b")", start_match.end(), scan_end)
+            end = close + 1 if close >= 0 else scan_end
+            raw = blob[start:end]
+            parsed = DEVICE_CALL_FULL.fullmatch(raw) if close >= 0 else None
+            status = ("TRUNCATED" if close < 0 else
+                      "LEXICAL_ARGUMENTS" if parsed else "UNPARSED")
+            records.append((path, start, {
+                **encode_path(path),
+                "blob_oid": reference["oid"],
+                "start_byte": start,
+                "end_byte": end,
+                "start_line": blob.count(b"\n", 0, start) + 1,
+                "end_line": blob.count(b"\n", 0, end - 1) + 1,
+                "raw_b64": base64.b64encode(raw).decode("ascii"),
+                "status": status,
+                "bus_b64": (base64.b64encode(parsed.group(1)).decode("ascii")
+                            if parsed else None),
+                "symbol_b64": (base64.b64encode(parsed.group(2)).decode("ascii")
+                               if parsed else None),
+            }))
+    records.sort(key=lambda item: (item[0], item[1]))
+    if len({(path, byte) for path, byte, _ in records}) != len(records):
+        raise ValueError("duplicate driver macro byte offset")
+    return b"".join(json_line(record) for _, _, record in records)
+
 def build(repo: Path, lock: Path, destination: Path) -> dict:
     pinned = json.loads(lock.read_text(encoding="utf-8"))["linux"]["commit"]
     if not isinstance(pinned, str) or not re.fullmatch(r"[0-9a-f]{40}", pinned):
@@ -336,6 +413,8 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
     syscall_bytes = bytes(syscall_rows)
     device_table_bytes = enumerate_device_table_mentions(repo, pinned, entries)
     device_rows = [json.loads(line) for line in device_table_bytes.splitlines()]
+    invocation_bytes = enumerate_device_table_invocations(repo, pinned, entries)
+    invocation_rows = [json.loads(line) for line in invocation_bytes.splitlines()]
     report = {
         "schema": "heptakernel.pinned-linux-tree-inventory.v1",
         "status": "PARTIAL_SOURCE_INVENTORY_NOT_LINUX_IMPLEMENTATION",
@@ -357,6 +436,8 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
         "syscall_table_rows_sha256": hashlib.sha256(syscall_bytes).hexdigest(),
         "module_device_table_mentions_file": "module-device-table-mentions.jsonl",
         "module_device_table_mentions_sha256": hashlib.sha256(device_table_bytes).hexdigest(),
+        "module_device_table_invocations_file": "module-device-table-invocations.jsonl",
+        "module_device_table_invocations_sha256": hashlib.sha256(invocation_bytes).hexdigest(),
         "counts": {
             **dict(sorted(path_counts.items())),
             "directory_tree_objects": len(directories),
@@ -377,6 +458,11 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
             "module_device_table_mentions": len(device_rows),
             "module_device_table_unparsed": sum(
                 row["status"] == "UNPARSED" for row in device_rows),
+            "module_device_table_invocations": len(invocation_rows),
+            "module_device_table_multiline": sum(
+                row["end_line"] > row["start_line"] for row in invocation_rows),
+            "module_device_table_invocations_unparsed": sum(
+                row["status"] != "LEXICAL_ARGUMENTS" for row in invocation_rows),
         },
         "unparsed_kconfig": kconfig_unreadable,
         "unreadable_syscall_tables": unreadable_syscall_tables,
@@ -393,6 +479,11 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
             "resolved hardware IDs or proven active driver match tables; "
             "same-line C/H/Rust text matches exclude binary blobs and "
             "multi-line calls and retain comments/inactive conditions.",
+            "The separate position-bound invocation inventory includes multiline "
+            "whitespace calls but is still lexical; function-like comments, "
+            "preprocessor expansion, inactive branches, C tokens between macro "
+            "name and parentheses, binary files, and spans beyond the bounded "
+            "scan are not resolved to hardware IDs.",
             "Tracked blobs, symlinks and gitlinks are all included; generated "
             "files, external submodules, firmware and runtime behavior are not.",
             "The 17 full-acceptance gates and 422 x86-64 baseline syscall "
@@ -412,6 +503,7 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
     (destination / "uapi-macro-rows.jsonl").write_bytes(uapi_macro_bytes)
     (destination / "syscall-table-rows.jsonl").write_bytes(syscall_bytes)
     (destination / "module-device-table-mentions.jsonl").write_bytes(device_table_bytes)
+    (destination / "module-device-table-invocations.jsonl").write_bytes(invocation_bytes)
     (destination / "report.json").write_bytes(
         json.dumps(report, ensure_ascii=True, sort_keys=True,
                    indent=2).encode("ascii") + b"\n"
