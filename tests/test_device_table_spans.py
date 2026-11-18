@@ -98,7 +98,7 @@ def main() -> None:
         # Legacy same-line rows retain their original format and scope.
         legacy = inventory.enumerate_device_table_mentions(
             repo, pinned, entries).splitlines()
-        assert len(legacy) == 4, len(legacy)
+        assert len(legacy) == 6, len(legacy)
     print("PINNED_MULTILINE_DEVICE_TABLE_SPANS: PASS 7")
     print("UNPARSED_AND_TRUNCATED: PASS")
     print("RAW_BYTE_PATH_AND_IMMUTABLE_OBJECT: PASS")
