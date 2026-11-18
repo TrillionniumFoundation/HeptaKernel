@@ -137,7 +137,12 @@ block mismatch(pc_mismatch_reply:mutbuf)
   pc_mismatch_result:u32 = call(pc_mismatch_reply,pc_mismatch_code,pc_mismatch_zero) {"function":"write_reply"}
   ret(pc_mismatch_result)
 block commit(pc_commit_reply:mutbuf,pc_commit_page:mutbuf,pc_commit_offset:usize,pc_commit_new:u64)
-  pc_commit_written:u32 = call(pc_commit_page,pc_commit_offset,pc_commit_new) {"function":"write_table_u64"}
+  pc_commit_shift:u64 = const() {"value":56}
+  pc_commit_high:u64 = int.shr.checked(pc_commit_new,pc_commit_shift)
+  pc_commit_byte:u8 = int.cast(pc_commit_high) {"mode":"wrap"}
+  pc_commit_high_offset:usize = const() {"value":7}
+  pc_commit_at:usize = int.add.wrap(pc_commit_offset,pc_commit_high_offset)
+  _ = buffer.store(pc_commit_page,pc_commit_at,pc_commit_byte)
   pc_commit_ok:u32 = const() {"value":0}
   pc_commit_result:u32 = call(pc_commit_reply,pc_commit_ok,pc_commit_new) {"function":"write_reply"}
   ret(pc_commit_result)

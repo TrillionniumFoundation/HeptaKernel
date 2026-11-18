@@ -30,8 +30,19 @@ negative controls demand a stale-but-valid old value be refused with an
 unchanged PTE, and a deliberately restored RX PTE execute after INVLPG.
 All three images must contain byte-exact original HIA .text.
 
-This is still an exclusive-owner quiescent update, and its eight bytewise
-stores are not a CPU CMPXCHG. Privileged INVLPG, CR2, exception entry,
+This is still an exclusive-owner quiescent update; the one-byte HIA store
+after the expected-old check is not a CPU CMPXCHG. Privileged INVLPG, CR2, exception entry,
 and the initial test opcode writer remain non-HIA. SMP TLB shootdown,
 provenance, concurrent safety and Linux `mprotect` are not implemented.
 The non-HIA boot/exception bridge and all 17 Linux acceptance gates stay open.
+
+## Single-byte HIA permission-store revision
+
+After the full 64-bit expected-old check, the native HIA commit path now
+stores only PTE byte 7 (the high byte containing NX) via `buffer.store`;
+no seven lower bytes are rewritten. Native differential and real QEMU
+instruction-fetch #PF checks are required for the **new binary**.
+
+A single byte store is not a linearizable 64-bit CAS of the old PTE. The
+expected-old comparison still precedes the store without atomic linkage;
+TLB invalidation and multi-CPU shootdown remain external/unfinished.

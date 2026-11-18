@@ -14,7 +14,7 @@ the leaf RW bit is cleared, and *every other bit* (frame address, user,
 cache, Accessed/Dirty, PAT, global, software flags, NX) is preserved.
 High reserved bits, out-of-profile physical addresses, user/global conflict
 and unsupported NXE/PGE are refused. The existing live old entry must
-match all 64 expected bits before the eight-byte modification.
+match all 64 expected bits before the single-byte low-flag update.
 
 Statuses: 1 short reply, 2 wrong request length, 4 invalid table length,
 6 invalid transition/index/PTE, 8 invalid CPU capability profile, 9 stale
@@ -24,8 +24,8 @@ upgrades, malformed caps, exact-old stale replay and buffer guards. A second
 genuine-HIA implementation that dishonestly returns 0 without writing
 must be rejected by the same oracle.
 
-**Scope:** only single-owner, quiescent mapping downgrade; writes are
-bytewise and not atomic 64-bit CAS. This does not invalidate TLB entries,
+**Scope:** only single-owner, quiescent mapping downgrade; the one-byte
+HIA store does not make the preceding full-word comparison an atomic CAS. This does not invalidate TLB entries,
 guarantee remote CPU visibility, enforce authority for page ownership,
 implement `mprotect`, or solve arbitrary Linux memory-management behavior.
 The existing non-HIA `INVLPG` and exception bridge remains explicitly
@@ -57,3 +57,16 @@ The experiments do not make CR2, `INVLPG`, exception entry or GDT/IDT
 privilege operations HIA-native; they do not implement concurrency,
 remote TLB shootdown, safe physical frame reclamation, or Linux `mprotect`.
 All 17 complete-kernel gates remain HOLD.
+
+## Single-byte HIA permission-store revision
+
+The HIA commit block now performs one native `buffer.store` of the low PTE
+byte after the complete 64-bit expected-old compare, instead of rewriting
+all eight bytes. The single byte clears RW and leaves seven other bytes
+untouched, including the high NX byte. The independent native oracle and QEMU
+hardware #PF controls must be rerun on the **changed object and image**.
+
+This avoids an eight-store PTE update for this restricted transition; it is
+**not** a 64-bit atomic compare-exchange, does not preclude the race between
+the full-word read and the byte write, and establishes neither a TLB-shootdown
+protocol nor SMP-safe Linux `mprotect`.
