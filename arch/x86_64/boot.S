@@ -653,6 +653,11 @@ hia_idt_next64:
     call reservation_admit64
     leaq message_reservation_pass(%rip), %rsi
     call puts64
+#if defined(HEPTAKERNEL_TEST_PDPT_1G_HW) || defined(HEPTAKERNEL_TEST_PDPT_1G_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_DECOY)
+    /* Terminal single-owner HIA 1GiB PDPTE hardware experiment. */
+    call pdpt_1g_exercise64
+    jmp fail64
+#endif
 #if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
     /* After native E820/reservation admission: terminal ring3 observer. */
     call rsp0_ring3_exercise64
@@ -1136,6 +1141,92 @@ pte_page_fault64:
     movl $0x14, %eax              /* QEMU exit 41 */
 #endif
     jmp debug_exit64
+#endif
+
+
+#if defined(HEPTAKERNEL_TEST_PDPT_1G_HW) || defined(HEPTAKERNEL_TEST_PDPT_1G_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_DECOY)
+/* Non-HIA CPL0 observer for a real HIA Core v8 1GiB PDPTE writer.
+ * HIA writes pdpt[1]; CPUID, CR3 flush and MMU alias load remain explicit
+ * assembler test bridges. VA [1GiB, 2GiB) aliases physical [0, 1GiB).
+ * Only a known low-RAM code/data word is read, never unadmitted RAM. */
+pdpt_1g_exercise64:
+    cmpq $0, pdpt+8(%rip)
+    jne fail64
+    movl $0x80000000, %eax
+    cpuid
+    cmpl $0x80000001, %eax
+    jb fail64
+    movl $0x80000001, %eax
+    cpuid
+    testl $0x04000000, %edx         /* architectural PDPE1GB */
+    jz fail64
+    movq $1, pdpt_1g_request(%rip)   /* slot 1: 1GiB virtual alias */
+    movq $0, pdpt_1g_request+8(%rip)
+    movq $0x81, pdpt_1g_request+16(%rip) /* 1GiB RX, phys=0, P|PS */
+    movl pte_caps(%rip), %eax        /* observed MAXPHYADDR and active NXE */
+    orl $0x400, %eax                /* CPUID PDPE1GB observed above */
+    movq %rax, pdpt_1g_request+24(%rip)
+#ifdef HEPTAKERNEL_TEST_PDPT_1G_STALE
+    movq $1, pdpt_1g_request+8(%rip) /* wrong expected-old; not a live bit */
+#endif
+    movq $-1, pdpt_1g_reply(%rip)
+    movq $-1, pdpt_1g_reply+8(%rip)
+    leaq pdpt_1g_request(%rip), %rdi
+    movl $32, %esi
+    leaq pdpt_1g_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq pdpt(%rip), %r8
+    movl $4096, %r9d
+    call pdpt_1g_f0
+#ifdef HEPTAKERNEL_TEST_PDPT_1G_STALE
+    cmpl $9, %eax
+    jne fail64
+    cmpq $9, pdpt_1g_reply(%rip)
+    jne fail64
+    cmpq $0, pdpt_1g_reply+8(%rip)
+    jne fail64
+    cmpq $0, pdpt+8(%rip)          /* no write on stale-old refusal */
+    jne fail64
+    leaq message_pdpt_1g_stale(%rip), %rsi
+    call puts64
+    movl $0x29, %eax               /* debug-exit 83 */
+    jmp debug_exit64
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, pdpt_1g_reply(%rip)
+    jne fail64
+    cmpq $0x81, pdpt_1g_reply+8(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_PDPT_1G_DECOY
+    btrq $0, pdpt+8(%rip)          /* deliberate non-HIA post-write decoy */
+#endif
+    cmpq $0x81, pdpt+8(%rip)
+    je pdpt_1g_readback_ok64
+#ifdef HEPTAKERNEL_TEST_PDPT_1G_DECOY
+    leaq message_pdpt_1g_decoy(%rip), %rsi
+    call puts64
+#endif
+    jmp fail64
+pdpt_1g_readback_ok64:
+    movq %cr3, %rax               /* explicit NON-HIA TLB invalidation */
+    movq %rax, %cr3
+    leaq message_idt_pass(%rip), %rdx
+    leaq 0x40000000(%rdx), %r8    /* hardware 1GiB virtual alias */
+    movq (%rdx), %rax
+    cmpq (%r8), %rax              /* compare two independently addressed words */
+    jne fail64
+    movq 8(%rdx), %rax
+    cmpq 8(%r8), %rax
+    jne fail64
+    testq $0x20, pdpt+8(%rip)      /* CPU set Accessed during actual MMU walk */
+    jz fail64
+    leaq message_pdpt_1g_hw(%rip), %rsi
+    call puts64
+    movl $0x28, %eax              /* debug-exit 81 */
+    jmp debug_exit64
+#endif
+}
 #endif
 
 #if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
@@ -2352,6 +2443,12 @@ message_upper_pass:
     .asciz "HEPTAKERNEL HIA LIVE UPPER USER TABLE VERIFIED\r\n"
 message_upper_stale:
     .asciz "HEPTAKERNEL HIA UPPER USER TABLE STALE OLD REJECTED\r\n"
+message_pdpt_1g_hw:
+    .asciz "HEPTAKERNEL HIA 1G PDPTE HARDWARE ALIAS VERIFIED\r\n"
+message_pdpt_1g_stale:
+    .asciz "HEPTAKERNEL HIA 1G PDPTE STALE OLD REJECTED\r\n"
+message_pdpt_1g_decoy:
+    .asciz "HEPTAKERNEL HIA 1G PDPTE POSTWRITE DECOY DETECTED\r\n"
 message_pde_2m_pass:
     .asciz "HEPTAKERNEL HIA LIVE USER 2M PDE VERIFIED\r\n"
 message_pde_2m_stale:
@@ -2533,6 +2630,8 @@ upper_user_request: .skip 24
 upper_user_reply:   .skip 16
 pde_2m_request:  .skip 32
 pde_2m_reply:    .skip 16
+pdpt_1g_request: .skip 32
+pdpt_1g_reply:   .skip 16
 user_gdt_request: .skip 16
 user_gdt_reply:   .skip 16
 tss_gdt_request:  .skip 32
