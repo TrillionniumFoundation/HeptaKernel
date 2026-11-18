@@ -1226,7 +1226,6 @@ pdpt_1g_readback_ok64:
     movl $0x28, %eax              /* debug-exit 81 */
     jmp debug_exit64
 #endif
-}
 #endif
 
 #if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
