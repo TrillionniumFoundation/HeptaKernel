@@ -15,3 +15,17 @@ Status: 1 short reply, 2 malformed request, 4 wrong table size, 6 invalid transi
 This is **not** a linearizable PTE CAS: it updates 8 bytes sequentially under the exclusive-owner/quiescence assumption. It has no native HIA CR3, INVLPG, shootdown, authority proof or independent CPL3/QEMU user-access fault validation. It does not implement Linux `mprotect`, user-memory isolation, page freeing or memory ownership. These remain open in the 17-gate acceptance ledger.
 
 The Foundation pipeline checks Core syntax/effects, full native differential behavior, malicious control, empty-PATH recompilation, and object/shared-image `.text` identity. The pinned Linux and HIA revisions, all 422 syscall obligations and HOLD acceptance outcome remain unchanged.
+
+## Single-byte HIA permission-store revision
+
+The native HIA commit block now writes only PTE byte 0 after validating the
+complete expected-old 64-bit entry. It clears U/S and leaves the upper seven
+bytes untouched, rather than issuing eight separate table-byte stores. This
+is the same HIA machine-code path exercised by the CPL3 QEMU #PF control;
+that hardware experiment and the independent native oracle must be rerun
+against the new source and object identity.
+
+The change is a narrower physical write, not an atomic compare-exchange or
+concurrent ownership proof. A changing PTE between read and store remains a
+race; neither SMP TLB shootdown nor Linux user address-space management is
+implemented.
