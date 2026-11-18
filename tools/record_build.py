@@ -448,6 +448,18 @@ def main():
             raise ValueError("HIA huge PDE native library bytes differ")
         if Elf("build/pde-2m-boot.o").section_bytes(".text") != huge_text:
             raise ValueError("HIA huge PDE symbol rename changed its machine code")
+        # New 1GiB PDPTE writer: independent empty-PATH rebuild and loaded .text.
+        pdpt_source = Path("src/x86_pdpt_1g.hepta").read_bytes()
+        pdpt_object = Path("build/x86-pdpt-1g.o").read_bytes()
+        pdpt_rebuilt = subprocess.run([compiler], input=pdpt_source, capture_output=True,
+                                      timeout=20, env={"PATH": ""})
+        if pdpt_rebuilt.returncode or pdpt_rebuilt.stderr or pdpt_rebuilt.stdout != pdpt_object:
+            raise ValueError("HIA 1GiB PDPTE differs from empty-PATH rebuild")
+        if subprocess.check_output(["nm", "-u", "build/x86-pdpt-1g.o"], text=True).strip():
+            raise ValueError("HIA 1GiB PDPTE has undefined symbols")
+        pdpt_text = Elf("build/x86-pdpt-1g.o").section_bytes(".text")
+        if Elf("build/x86-pdpt-1g.so").section_bytes(".text") != pdpt_text:
+            raise ValueError("HIA 1GiB PDPTE loaded .text differs from native object")
         tss_source = Path("src/x86_tss_gdt.hepta").read_bytes()
         tss_object = Path("build/x86-tss-gdt.o").read_bytes()
         tss_rebuilt = subprocess.run([compiler], input=tss_source, capture_output=True,
@@ -721,6 +733,13 @@ def main():
                        x86_pde_2m_empty_path_recompiled=True,
                        x86_pde_2m_live_cpl3_hardware_path_bytes_match=True,
                        x86_pde_2m_privileged_backend=False,
+                       x86_pdpt_1g_source_sha256=sha(pdpt_source),
+                       x86_pdpt_1g_object_sha256=sha(pdpt_object),
+                       x86_pdpt_1g_text_sha256=sha(pdpt_text),
+                       x86_pdpt_1g_empty_path_recompiled=True,
+                       x86_pdpt_1g_native_loaded_text_matches=True,
+                       x86_pdpt_1g_hardware_execution_tested=False,
+                       x86_pdpt_1g_atomic_smp_verified=False,
                        x86_user_gdt_source_sha256=sha(usr_source),
                        x86_user_gdt_object_sha256=sha(usr_object),
                        x86_user_gdt_text_sha256=sha(usr_text),
