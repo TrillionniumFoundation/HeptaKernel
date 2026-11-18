@@ -22,6 +22,10 @@ DECLARATION = re.compile(rb"^[ \t]*(config|menuconfig)[ \t]+([A-Za-z_][A-Za-z0-9
 # environment variables, relative path or conditional reachability resolve.
 SOURCE_EDGE = re.compile(rb"^[ \t]*(source|rsource|osource|orsource)[ \t]+(.+?)[ \t]*$")
 OID = re.compile(rb"^[0-9a-f]{40}$")
+# Source-line inventory only: no C preprocessing or claim of ABI reachability.
+UAPI_DEFINE = re.compile(
+    rb"^[ \t]*#[ \t]*define[ \t]+([A-Za-z_][A-Za-z0-9_]*)\b"
+)
 
 
 def git(repo: Path, *arguments: str) -> bytes:
@@ -153,6 +157,7 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
     kconfig_lines = bytearray()
     source_edge_lines = bytearray()
     syscall_rows = bytearray()
+    uapi_macros = bytearray()
     source_edge_counts = Counter()
     uapi_lines = bytearray()
     directory_bytes = b"".join(json_line(record) for _, record in directories)
@@ -165,6 +170,9 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
     syscall_table_rows = 0
     syscall_table_unparsed_rows = 0
     unreadable_syscall_tables = []
+    uapi_header_files = 0
+    uapi_macro_rows = 0
+    unreadable_uapi_headers = []
     for path, record in entries:
         source_lines.extend(json_line(record))
         path_counts["tracked_paths"] += 1
@@ -174,6 +182,26 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
         if is_uapi(path):
             path_counts["uapi_tree_entries"] += 1
             uapi_lines.extend(json_line(record))
+            if path.endswith(b".h"):
+                uapi_header_files += 1
+                if record["mode"] not in ("100644", "100755"):
+                    unreadable_uapi_headers.append(encode_path(path))
+                else:
+                    header = git(repo, "cat-file", "blob", record["oid"])
+                    if len(header) != record["size"]:
+                        raise ValueError("UAPI header Git blob size mismatch")
+                    for number, raw in enumerate(header.split(b"\n"), 1):
+                        macro = UAPI_DEFINE.match(raw)
+                        if not macro:
+                            continue
+                        uapi_macro_rows += 1
+                        uapi_macros.extend(json_line({
+                            **encode_path(path), "blob_oid": record["oid"],
+                            "line": number,
+                            "name_b64": base64.b64encode(macro.group(1)).decode("ascii"),
+                            "raw_b64": base64.b64encode(raw).decode("ascii"),
+                            "status": "LEXICAL_DEFINE",
+                        }))
         if is_abi_source(path):
             path_counts["selected_syscall_abi_sources"] += 1
         if is_syscall_table(path):
@@ -242,6 +270,7 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
     kconfig_bytes = bytes(kconfig_lines)
     source_edges_bytes = bytes(source_edge_lines)
     uapi_bytes = bytes(uapi_lines)
+    uapi_macro_bytes = bytes(uapi_macros)
     syscall_bytes = bytes(syscall_rows)
     report = {
         "schema": "heptakernel.pinned-linux-tree-inventory.v1",
@@ -258,6 +287,8 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
         "directory_objects_sha256": hashlib.sha256(directory_bytes).hexdigest(),
         "uapi_entries_file": "uapi-paths.jsonl",
         "uapi_entries_sha256": hashlib.sha256(uapi_bytes).hexdigest(),
+        "uapi_macro_rows_file": "uapi-macro-rows.jsonl",
+        "uapi_macro_rows_sha256": hashlib.sha256(uapi_macro_bytes).hexdigest(),
         "syscall_table_rows_file": "syscall-table-rows.jsonl",
         "syscall_table_rows_sha256": hashlib.sha256(syscall_bytes).hexdigest(),
         "counts": {
@@ -270,6 +301,9 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
                for k in ("source", "rsource", "osource", "orsource")},
             "distinct_kconfig_symbol_names": len(kconfig_names),
             "unparsed_kconfig_paths": len(kconfig_unreadable),
+            "uapi_header_files": uapi_header_files,
+            "uapi_macro_rows": uapi_macro_rows,
+            "unreadable_uapi_header_files": len(unreadable_uapi_headers),
             "syscall_table_files": syscall_table_files,
             "syscall_table_rows": syscall_table_rows,
             "syscall_table_unparsed_rows": syscall_table_unparsed_rows,
@@ -277,12 +311,15 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
         },
         "unparsed_kconfig": kconfig_unreadable,
         "unreadable_syscall_tables": unreadable_syscall_tables,
+        "unreadable_uapi_headers": unreadable_uapi_headers,
         "limitations": [
             "Kconfig symbols and source edges are lexical only: no include expansion, "
             "dependency resolution, architecture selection or config satisfiability.",
-            "UAPI remains a path index; syscall table rows are lexical, "
-            "not resolved ABI semantics or executable dispatch. Driver IDs "
-            "and device mappings are not yet qualified.",
+            "UAPI macro rows cover tracked regular .h files only, without "
+            "C preprocessing, #if reachability, continued-line expansion, "
+            "struct layouts or arch-generated header semantics. Syscall rows "
+            "are lexical, not executable dispatch. Driver IDs and device "
+            "mappings remain unqualified.",
             "Tracked blobs, symlinks and gitlinks are all included; generated "
             "files, external submodules, firmware and runtime behavior are not.",
             "The 17 full-acceptance gates and 422 x86-64 baseline syscall "
@@ -299,6 +336,7 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
     (destination / "kconfig-source-edges.jsonl").write_bytes(source_edges_bytes)
     (destination / "directory-objects.jsonl").write_bytes(directory_bytes)
     (destination / "uapi-paths.jsonl").write_bytes(uapi_bytes)
+    (destination / "uapi-macro-rows.jsonl").write_bytes(uapi_macro_bytes)
     (destination / "syscall-table-rows.jsonl").write_bytes(syscall_bytes)
     (destination / "report.json").write_bytes(
         json.dumps(report, ensure_ascii=True, sort_keys=True,
@@ -325,6 +363,7 @@ def main() -> None:
         "kconfig_source_edges_sha256": report["kconfig_source_edges_sha256"],
         "directory_objects_sha256": report["directory_objects_sha256"],
         "uapi_entries_sha256": report["uapi_entries_sha256"],
+        "uapi_macro_rows_sha256": report["uapi_macro_rows_sha256"],
         "syscall_table_rows_sha256": report["syscall_table_rows_sha256"],
     }, sort_keys=True))
 
