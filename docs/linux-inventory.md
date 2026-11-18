@@ -104,3 +104,21 @@ behavioral qualification. It does not establish unique numbers across ABI
 personalities, kernel dispatch, errno, compatible layouts or userspace
 correctness. All 422 x86-64 syscall obligations and 17 full-acceptance gates
 remain open, and `make full-acceptance` must remain HOLD.
+
+## Immutable UAPI macro declaration rows
+
+The pinned-source inventory now also emits `uapi-macro-rows.jsonl`.
+For each tracked regular `.h` file beneath common or architecture-specific
+UAPI directories, every lexical `#define` source line records its original
+byte sequence, line number, macro name, raw-byte path and immutable Git blob
+OID. The inventory reports the count of nonregular/unreadable UAPI headers
+instead of silently resolving symlinks or dropping them. The artifact has a
+separate SHA-256 in the exact-candidate report, and CI independently re-reads
+all corresponding Git blobs to verify completeness, source order and bytes.
+
+This is a **lexical declaration inventory**, not the set of exported ABI
+constants after preprocessing. Definitions under inactive `#if` branches
+are intentionally retained. Replacement-list continuations, macro expansion,
+C type/layout compatibility, generated headers and arch-dependent expression
+semantics remain unresolved. Existing syscall obligations, every full Linux
+acceptance gate, and `inventory_complete=false` remain unchanged.
