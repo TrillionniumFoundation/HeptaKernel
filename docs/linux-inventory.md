@@ -122,3 +122,22 @@ are intentionally retained. Replacement-list continuations, macro expansion,
 C type/layout compatibility, generated headers and arch-dependent expression
 semantics remain unresolved. Existing syscall obligations, every full Linux
 acceptance gate, and `inventory_complete=false` remain unchanged.
+
+## Pinned module device-table source references
+
+`module-device-table-mentions.jsonl` extends the immutable Git-object inventory
+to same-line `MODULE_DEVICE_TABLE(...)` references in tracked C, header and
+Rust text files, with raw-byte-safe paths, exact blob IDs, source lines, macro
+argument tokens when parseable, and explicit `UNPARSED` entries. The
+`report.json` SHA-256 and counts bind the new rows; the upstream CI independently
+locates candidate files and reconstructs each match from immutable blobs.
+Fixture tests retain comments and reject a malformed argument list without
+dropping the line. Newline/invalid-UTF8 paths remain protected by NUL-delimited
+Git output.
+
+These are **lexical references, not actual resolved device IDs**. Inactive
+preprocessor branches, comments and macro definitions can match; multiline
+invocations and binary source files are not included. Resolving PCI/USB/ACPI/OF
+identifier values, generated aliases, Kconfig activation and device-driver
+behavior remains open. This addition neither changes `inventory_complete=false`
+nor closes any of the 17 Linux gates or 422 x86-64 syscall obligations.
