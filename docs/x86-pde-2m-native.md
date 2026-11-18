@@ -18,7 +18,7 @@ Admission requires a present 2 MiB PDE with PS=1, physical base aligned
 to 2 MiB and below MAXPHYADDR. The huge-leaf PAT bit 12, PWT/PCD,
 Accessed/Dirty, and software bits 9..11 and 52..58 are admitted and
 preserved; actual reserved address bits 13..20 and unsupported high-key
-bits 59..62 remain rejected. W^X and other policy checks are unchanged. It enforces W^X,
+bits 59..62 remain rejected. The existing policy enforces W^X,
 prohibits USER+GLOBAL, and refuses NX without NXE and GLOBAL without
 PGE. The requested slot must be <512; all bytes of the existing entry
 must equal `expected_old` before the first store. The successful
