@@ -74,12 +74,14 @@ jobs:
           directories = (root / report["directory_objects_file"]).read_bytes()
           uapi = (root / report["uapi_entries_file"]).read_bytes()
           syscall = (root / report["syscall_table_rows_file"]).read_bytes()
+          uapi_macros = (root / report["uapi_macro_rows_file"]).read_bytes()
           assert hashlib.sha256(source).hexdigest() == report["source_paths_sha256"]
           assert hashlib.sha256(kconfig).hexdigest() == report["kconfig_declarations_sha256"]
           assert hashlib.sha256(source_edges).hexdigest() == report["kconfig_source_edges_sha256"]
           assert hashlib.sha256(directories).hexdigest() == report["directory_objects_sha256"]
           assert hashlib.sha256(uapi).hexdigest() == report["uapi_entries_sha256"]
           assert hashlib.sha256(syscall).hexdigest() == report["syscall_table_rows_sha256"]
+          assert hashlib.sha256(uapi_macros).hexdigest() == report["uapi_macro_rows_sha256"]
           rows = [json.loads(x) for x in source.splitlines()]
           paths = [base64.b64decode(x["path_b64"]) for x in rows]
           actual = subprocess.check_output([
@@ -109,6 +111,62 @@ jobs:
                   for x in directory_rows} == ref_directories
           assert len(directory_rows) == report["counts"]["directory_tree_objects"]
           by_path = {base64.b64decode(x["path_b64"]): x for x in rows}
+          # Independent UAPI lexer over each exact immutable upstream blob.
+          # Do not import or repeat the extractor regex. All #if branches
+          # remain visible as lexical source, not claimed ABI exports.
+          actual_macros = [json.loads(x) for x in uapi_macros.splitlines()]
+          expected_macros = []
+          uapi_headers = 0
+          unreadable_headers = 0
+          for ref in uapi_rows:
+              path = base64.b64decode(ref["path_b64"])
+              if not path.endswith(b".h"):
+                  continue
+              uapi_headers += 1
+              if ref["mode"] not in ("100644", "100755"):
+                  unreadable_headers += 1
+                  continue
+              blob = subprocess.check_output([
+                  "git", "-C", ".upstream/linux", "cat-file", "blob", ref["oid"]
+              ])
+              assert len(blob) == ref["size"]
+              for number, physical in enumerate(blob.split(b"\n"), 1):
+                  stripped = physical.lstrip(b" \t")
+                  if not stripped.startswith(b"#"):
+                      continue
+                  directive = stripped[1:].lstrip(b" \t")
+                  if not directive.startswith(b"define"):
+                      continue
+                  tail = directive[6:]
+                  if not tail or tail[0] not in (32, 9):
+                      continue
+                  identifier = tail.lstrip(b" \t")
+                  if not identifier or not (
+                      65 <= identifier[0] <= 90 or
+                      97 <= identifier[0] <= 122 or identifier[0] == 95
+                  ):
+                      continue
+                  width = 1
+                  while width < len(identifier) and (
+                      65 <= identifier[width] <= 90 or
+                      97 <= identifier[width] <= 122 or
+                      48 <= identifier[width] <= 57 or
+                      identifier[width] == 95
+                  ):
+                      width += 1
+                  expected_macros.append((
+                      path, ref["oid"], number, identifier[:width], physical
+                  ))
+          observed_macros = [
+              (base64.b64decode(x["path_b64"]), x["blob_oid"], x["line"],
+               base64.b64decode(x["name_b64"]), base64.b64decode(x["raw_b64"]))
+              for x in actual_macros
+          ]
+          assert observed_macros == expected_macros, (
+              "missing/reordered/modified UAPI macro source rows")
+          assert len(actual_macros) == report["counts"]["uapi_macro_rows"]
+          assert uapi_headers == report["counts"]["uapi_header_files"]
+          assert unreadable_headers == report["counts"]["unreadable_uapi_header_files"]
           assert len(uapi_rows) == report["counts"]["uapi_tree_entries"]
           for uapi_record in uapi_rows:
               assert by_path[base64.b64decode(uapi_record["path_b64"])] == uapi_record
@@ -192,6 +250,7 @@ jobs:
           print("KCONFIG_DECLARATION_RECORDS:", report["counts"]["kconfig_declarations"])
           print("KCONFIG_SOURCE_EDGES:", report["counts"]["kconfig_source_edges"])
           print("SYSCALL_TABLE_ROWS:", len(actual_syscalls))
+          print("UAPI_MACRO_SOURCE_ROWS:", len(actual_macros))
           print("UNPARSED_SYSCALL_ROWS:", unparsed_syscalls)
           print("FULL_LINUX_REWRITE: HOLD")
           PY
@@ -215,6 +274,7 @@ jobs:
             build/linux-inventory/kconfig-source-edges.jsonl
             build/linux-inventory/directory-objects.jsonl
             build/linux-inventory/uapi-paths.jsonl
+            build/linux-inventory/uapi-macro-rows.jsonl
             build/linux-inventory/syscall-table-rows.jsonl
             build/linux-inventory/report.json
             build/linux-inventory/closure-state.json
