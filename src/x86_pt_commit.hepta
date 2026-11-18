@@ -50,7 +50,7 @@ block validate(pc_valid_reply:mutbuf,pc_valid_page:mutbuf,pc_valid_slot:u64,pc_v
   pc_width_mask:u64 = const() {"value":255}
   pc_min_width:u64 = const() {"value":32}
   pc_max_width:u64 = const() {"value":52}
-  pc_forbidden_mask:u64 = const() {"value":9218868437227409144}
+  pc_forbidden_mask:u64 = const() {"value":8646911284551352320}
   pc_phys_mask:u64 = const() {"value":4503599627366400}
   pc_nx_mask:u64 = const() {"value":9223372036854775808}
   pc_slot_ok:bool = compare.lt(pc_valid_slot,pc_page_limit)
@@ -74,7 +74,7 @@ block check_bits(pc_bits_reply:mutbuf,pc_bits_page:mutbuf,pc_bits_slot:u64,pc_bi
   pc_bglobal:u64 = const() {"value":256}
   pc_bnxe:u64 = const() {"value":256}
   pc_bpge:u64 = const() {"value":512}
-  pc_badmask:u64 = const() {"value":9218868437227409144}
+  pc_badmask:u64 = const() {"value":8646911284551352320}
   pc_pmask:u64 = const() {"value":4503599627366400}
   pc_nx:u64 = const() {"value":9223372036854775808}
   pc_reserved:u64 = bit.and(pc_bits_new,pc_badmask)

@@ -21,8 +21,13 @@ The mutable table capability must have **exactly 4096 bytes**.
 The reply capacity must be at least 16 bytes, containing status and value
 (u64 little endian). The native function checks the expected slot,
 that the proposed entry is present, limits the physical address to the
-observed MAXPHYADDR, refuses unsupported reserved PTE bits, refuses W+X
-and USER+GLOBAL, and requires active NXE/PGE where appropriate.
+observed MAXPHYADDR, and validates architectural 4KiB leaf PTE metadata:
+PWT/PCD (3-4), Accessed/Dirty (5-6), PAT (7), Global (8), software bits
+9-11 and upper software bits 52-58. Bits 59-62 remain conservatively
+rejected until protection-key capabilities and policies are modelled. It
+refuses W+X and USER+GLOBAL and requires active NXE/PGE where appropriate.
+The separately validated HIA leaf constructor currently emits a narrower
+subset; this commit path can preserve eligible caller-supplied metadata.
 
 The statuses are 0 (committed, reply value equals proposed PTE), 1 (short
 reply, no writes), 2 (bad request), 4 (wrong table capacity), 6 (invalid
