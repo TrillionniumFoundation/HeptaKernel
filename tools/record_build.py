@@ -207,6 +207,32 @@ def main():
             "smp_shootdown_verified": False,
         }
 
+        # Independent reproducibility and loaded-code identity of the native HIA
+        # exact-old RW->RO PTE downgrade; not yet a live MMU/TLB transition.
+        protect_source = Path("src/x86_pt_write_protect.hepta").read_bytes()
+        protect_object = Path("build/x86-pt-write-protect.o").read_bytes()
+        protect_rebuilt = subprocess.run([compiler], input=protect_source,
+                                       capture_output=True, timeout=20,
+                                       env={"PATH": ""})
+        if (protect_rebuilt.returncode or protect_rebuilt.stderr or
+                protect_rebuilt.stdout != protect_object):
+            raise ValueError("native HIA RW downgrade differs from empty-PATH rebuild")
+        if subprocess.check_output(["nm", "-u", "build/x86-pt-write-protect.o"],
+                                   text=True).strip():
+            raise ValueError("HIA RW downgrade has undefined symbols")
+        protect_text = Elf("build/x86-pt-write-protect.o").section_bytes(".text")
+        if Elf("build/x86-pt-write-protect.so").section_bytes(".text") != protect_text:
+            raise ValueError("HIA RW downgrade loaded .text differs from source object")
+        report["x86_pt_write_protect"] = {
+            "source_sha256": sha(protect_source),
+            "object_sha256": sha(protect_object),
+            "text_sha256": sha(protect_text),
+            "empty_path_recompiled": True,
+            "loaded_text_byte_identity": True,
+            "tlb_invalidation_emitted_by_hia": False,
+            "smp_atomicity_verified": False,
+        }
+
         pf_source = Path("src/x86_pf_gate.hepta").read_bytes()
         pf_object = Path("build/x86-pf-gate.o").read_bytes()
         pf_rebuilt = subprocess.run([compiler], input=pf_source,
