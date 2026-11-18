@@ -52,7 +52,7 @@ jobs:
           PYTHONPATH=.toolchain/hepta python3 - <<'PY'
           from pathlib import Path
           from hepta.hia_agent_assembly import assemble_program
-          for source in ("src/x86_access_gate.hepta", "tests/negative/x86_access_allow_all.hepta", "src/x86_walk4_physical.hepta", "src/x86_walk4_auto.hepta", "src/x86_walk4_huge.hepta", "tests/negative/walk4_huge_allow_all.hepta", "src/x86_walk4_indexed.hepta", "tests/negative/walk4_indexed_allow_all.hepta", "src/x86_walk4_entries.hepta", "tests/negative/walk4_allow_all.hepta", "src/x86_cr3_gate.hepta", "tests/negative/cr3_allow_all.hepta", "src/x86_upper_user_gate.hepta", "src/kernel.hepta", "src/e820_region.hepta", "src/arena_router.hepta", "src/owner_binding.hepta", "src/reservation_gate.hepta", "src/x86_pte_leaf.hepta", "src/x86_pt_commit.hepta", "src/x86_pde_2m.hepta", "src/x86_pf_gate.hepta", "src/x86_idt_gate.hepta", "src/x86_user_gdt.hepta", "src/x86_tss_gdt.hepta", "src/x86_tss_state.hepta", "tests/negative/e820_allow_all.hepta"):
+          for source in ("src/x86_pt_revoke.hepta", "tests/negative/x86_pt_revoke_allow_all.hepta", "src/x86_access_gate.hepta", "tests/negative/x86_access_allow_all.hepta", "src/x86_walk4_physical.hepta", "src/x86_walk4_auto.hepta", "src/x86_walk4_huge.hepta", "tests/negative/walk4_huge_allow_all.hepta", "src/x86_walk4_indexed.hepta", "tests/negative/walk4_indexed_allow_all.hepta", "src/x86_walk4_entries.hepta", "tests/negative/walk4_allow_all.hepta", "src/x86_cr3_gate.hepta", "tests/negative/cr3_allow_all.hepta", "src/x86_upper_user_gate.hepta", "src/kernel.hepta", "src/e820_region.hepta", "src/arena_router.hepta", "src/owner_binding.hepta", "src/reservation_gate.hepta", "src/x86_pte_leaf.hepta", "src/x86_pt_commit.hepta", "src/x86_pde_2m.hepta", "src/x86_pf_gate.hepta", "src/x86_idt_gate.hepta", "src/x86_user_gdt.hepta", "src/x86_tss_gdt.hepta", "src/x86_tss_state.hepta", "tests/negative/e820_allow_all.hepta"):
               checked = assemble_program(Path(source).read_bytes())
               print("Independent HIA Core syntax/semantics verification: PASS", source)
               print("Verified functions:", len(checked.as_dict()["functions"]))
@@ -122,6 +122,11 @@ jobs:
         shell: bash
         run: |
           make test-x86-walk4-auto HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
+      - name: Validate native HIA 4KiB PTE revocation and malicious control
+        shell: bash
+        run: |
+          make test-x86-pt-revoke HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
       - name: Verify HIA native x86 access permission admission and malicious grant control
         shell: bash
@@ -270,6 +275,11 @@ jobs:
             build/x86-walk4-physical-report.json
             build/x86-walk4-physical.o
             build/x86-walk4-physical.so
+            build/x86-pt-revoke-report.json
+            build/x86-pt-revoke.o
+            build/x86-pt-revoke.so
+            build/x86-pt-revoke-unsafe.o
+            build/x86-pt-revoke-unsafe.so
             build/x86-access-gate-report.json
             build/x86-access-gate.o
             build/x86-access-gate.so

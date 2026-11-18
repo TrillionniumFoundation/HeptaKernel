@@ -124,3 +124,9 @@ and SMAP snapshot profile. The independent native oracle and all-grant
 negative control check the *caller-supplied* snapshot. Hardware CPL,
 privileged CRx access, CPU-state provenance, coherent epochs and TLB/SMP
 remain open; this does not implement Linux user-mode memory isolation.
+
+Native HIA now has a restricted **leaf removal** primitive in
+`src/x86_pt_revoke.hepta`: exact-old Present entry check, zero replacement,
+quiescent single-owner write, independent native oracle and dishonest control.
+It does not prove hardware MMU revocation, TLB shootdown, concurrent atomicity
+or physical-frame recycling; see `docs/x86-pt-revoke.md`.
