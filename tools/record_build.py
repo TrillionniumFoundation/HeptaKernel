@@ -302,6 +302,26 @@ def main():
             "smp_atomicity_verified": False,
         }
 
+        us_source = Path("src/x86_pt_user_revoke.hepta").read_bytes()
+        us_object = Path("build/x86-pt-user-revoke.o").read_bytes()
+        us_rebuilt = subprocess.run([compiler], input=us_source, capture_output=True,
+                                    timeout=20, env={"PATH": ""})
+        if us_rebuilt.returncode or us_rebuilt.stderr or us_rebuilt.stdout != us_object:
+            raise ValueError("native HIA user-to-supervisor PTE revoke differs from empty-PATH rebuild")
+        if subprocess.check_output(["nm", "-u", "build/x86-pt-user-revoke.o"],
+                                   text=True).strip():
+            raise ValueError("native HIA U/S revoke has undefined symbols")
+        us_text = Elf("build/x86-pt-user-revoke.o").section_bytes(".text")
+        if Elf("build/x86-pt-user-revoke.so").section_bytes(".text") != us_text:
+            raise ValueError("native HIA U/S revoke loaded .text differs")
+        report["x86_pt_user_revoke"] = {
+            "source_sha256": sha(us_source), "object_sha256": sha(us_object),
+            "text_sha256": sha(us_text), "empty_path_recompiled": True,
+            "loaded_text_byte_identity": True, "hardware_cpl3_verified": False,
+            "tlb_invalidation_emitted_by_hia": False,
+            "smp_atomicity_verified": False,
+        }
+
         pf_source = Path("src/x86_pf_gate.hepta").read_bytes()
         pf_object = Path("build/x86-pf-gate.o").read_bytes()
         pf_rebuilt = subprocess.run([compiler], input=pf_source,
