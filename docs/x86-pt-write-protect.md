@@ -30,3 +30,30 @@ guarantee remote CPU visibility, enforce authority for page ownership,
 implement `mprotect`, or solve arbitrary Linux memory-management behavior.
 The existing non-HIA `INVLPG` and exception bridge remains explicitly
 outside HIA closure. All 17 gates and 422 syscall obligations stay open.
+
+## Isolated live MMU write-protection experiment
+
+The three additional QEMU boot images call the **same exact genuine HIA**
+RW->RO writer on the live 4 MiB page's 4 KiB PTE, *after* a successful
+supervisor write and read. The CPU can set Accessed and Dirty bits during the
+warm store; the request therefore captures the **actual** old PTE only after
+that access. The HIA transition clears RW and preserves every other PTE bit.
+The observer checks the returned HIA status and PTE readback, then invalidates
+the local TLB using expressly **non-HIA** `INVLPG` and checks that reads
+remain permitted.
+
+The positive image requires a hardware CPL0 write #PF with error code 3
+(P=1, W=1, U=0), exact CR2 and faulting RIP, and a frame on the separate
+TSS IST1 stack. This fault path is terminal; it cannot return to the write.
+The first negative control supplies a stale expected old PTE and requires
+code 9 with no PTE mutation. The second first makes the *real HIA* downgrade,
+then maliciously restores RW in the non-HIA observer and must successfully
+write and read back a distinct value. Outcomes have disjoint debug-exit codes
+and serial markers on PC/32 MiB and Q35/64 MiB.
+
+The build audit compares native `.text` from the original HIA object,
+symbol-renamed boot object and 64-bit/32-bit ELF images for all three tests.
+The experiments do not make CR2, `INVLPG`, exception entry or GDT/IDT
+privilege operations HIA-native; they do not implement concurrency,
+remote TLB shootdown, safe physical frame reclamation, or Linux `mprotect`.
+All 17 complete-kernel gates remain HOLD.

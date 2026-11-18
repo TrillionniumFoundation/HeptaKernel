@@ -30,6 +30,10 @@ ROUTER_MARKER = "HEPTAKERNEL HIA ARENA ROUTER VERIFIED"
 OWNER_MARKER = "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED"
 PTE_MARKER = "HEPTAKERNEL HIA LIVE PTE VERIFIED"
 PT_COMMIT_MARKER = "HEPTAKERNEL HIA PT COMMIT VERIFIED"
+PT_PROTECT_MARKER = "HEPTAKERNEL HIA LIVE PT WRITE PROTECT VERIFIED"
+PT_PROTECT_FAULT_MARKER = "HEPTAKERNEL HIA PT WRITE PROTECT HARDWARE FAULT VERIFIED"
+PT_PROTECT_STALE_MARKER = "HEPTAKERNEL HIA PT WRITE PROTECT STALE OLD REJECTED"
+PT_PROTECT_BYPASS_MARKER = "HEPTAKERNEL HIA PT WRITE PROTECT BYPASS STORED"
 PT_REVOKE_MARKER = "HEPTAKERNEL HIA LIVE PT REVOKE VERIFIED"
 PT_REVOKE_FAULT_MARKER = "HEPTAKERNEL HIA PT REVOKE HARDWARE FAULT VERIFIED"
 PT_REVOKE_STALE_MARKER = "HEPTAKERNEL HIA PT REVOKE STALE OLD REJECTED"
@@ -94,6 +98,14 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         pte_verified = p.stdout.count(PTE_MARKER) == 1
         pt_commit_verified = p.stdout.count(PT_COMMIT_MARKER) == 1
         record["native_hia_pt_commit_observed"] = pt_commit_verified
+        protect_verified = p.stdout.count(PT_PROTECT_MARKER) == 1
+        protect_fault = p.stdout.count(PT_PROTECT_FAULT_MARKER) == 1
+        protect_stale = p.stdout.count(PT_PROTECT_STALE_MARKER) == 1
+        protect_bypass = p.stdout.count(PT_PROTECT_BYPASS_MARKER) == 1
+        record["native_hia_pt_protect_observed"] = protect_verified
+        record["hardware_write_fault_after_hia_downgrade"] = protect_fault
+        record["native_hia_pt_protect_stale_refused"] = protect_stale
+        record["mutated_pt_protect_bypass_stored"] = protect_bypass
         revoke_verified = p.stdout.count(PT_REVOKE_MARKER) == 1
         revoke_fault = p.stdout.count(PT_REVOKE_FAULT_MARKER) == 1
         revoke_stale = p.stdout.count(PT_REVOKE_STALE_MARKER) == 1
@@ -213,6 +225,25 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         not owner_verified and not nx_fault_verified and
                         p.returncode == 35 and FAIL_MARKER in p.stdout and
                         PASS_MARKER not in p.stdout)
+        elif mode == "pt_protect_hardware_fault":
+            accepted = (map_verified and reservation_verified and pt_commit_verified
+                        and protect_verified and protect_fault and ist_fault_verified
+                        and not protect_stale and not protect_bypass and
+                        not pte_verified and not route_verified and not owner_verified
+                        and p.returncode == 55 and PASS_MARKER not in p.stdout
+                        and FAIL_MARKER not in p.stdout)
+        elif mode == "pt_protect_stale_rejected":
+            accepted = (map_verified and reservation_verified and pt_commit_verified
+                        and protect_stale and not protect_verified and not protect_fault
+                        and not protect_bypass and not pte_verified and not route_verified
+                        and p.returncode == 35 and FAIL_MARKER in p.stdout
+                        and PASS_MARKER not in p.stdout)
+        elif mode == "pt_protect_bypass_stored":
+            accepted = (map_verified and reservation_verified and pt_commit_verified
+                        and protect_verified and protect_bypass and not protect_fault
+                        and not protect_stale and not pte_verified and not route_verified
+                        and p.returncode == 57 and FAIL_MARKER not in p.stdout
+                        and PASS_MARKER not in p.stdout)
         elif mode == "pt_revoke_hardware_fault":
             accepted = (map_verified and reservation_verified and pt_commit_verified and
                         revoke_verified and revoke_fault and ist_fault_verified and
@@ -260,6 +291,11 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         p.stdout.count(PASS_MARKER) == 1 and FAIL_MARKER not in p.stdout)
         else:
             raise ValueError("unknown boot mode " + mode)
+        accepted = accepted and (protect_verified == (mode in
+                      {"pt_protect_hardware_fault", "pt_protect_bypass_stored"}))
+        accepted = accepted and (protect_fault == (mode == "pt_protect_hardware_fault"))
+        accepted = accepted and (protect_stale == (mode == "pt_protect_stale_rejected"))
+        accepted = accepted and (protect_bypass == (mode == "pt_protect_bypass_stored"))
         # Revoke-only markers must never appear on unrelated boot images.
         accepted = accepted and (revoke_verified == (mode in
                       {"pt_revoke_hardware_fault", "pt_revoke_bypass_read"}))
@@ -327,6 +363,11 @@ def main():
               "native_hia_reservation_object_sha256": digest("build/reservation-gate.o"),
               "native_hia_pte_object_sha256": digest("build/x86-pte.o"),
               "native_hia_pt_commit_object_sha256": digest("build/x86-pt-commit.o"),
+              "native_hia_pt_protect_object_sha256": digest("build/x86-pt-write-protect.o"),
+              "native_hia_pt_protect_boot_sha256": digest("build/pt-protect-boot.o"),
+              "pt_protect_fault_boot_sha256": digest("build/boot-pt-protect-fault.o"),
+              "pt_protect_stale_boot_sha256": digest("build/boot-pt-protect-stale.o"),
+              "pt_protect_bypass_boot_sha256": digest("build/boot-pt-protect-bypass.o"),
               "native_hia_pt_revoke_object_sha256": digest("build/x86-pt-revoke.o"),
               "native_hia_pt_revoke_boot_sha256": digest("build/pt-revoke-boot.o"),
               "pt_revoke_fault_boot_sha256": digest("build/boot-pt-revoke-fault.o"),
@@ -380,6 +421,13 @@ def main():
                                       machine, memory, mode="wp_hardware_fault"))
             report["runs"].append(run(args.qemu, Path("build/wp-bypass-multiboot.elf"),
                                       machine, memory, mode="wp_bypass_stored"))
+        for machine, memory in (("pc", "32"), ("q35", "64")):
+            report["runs"].append(run(args.qemu, Path("build/pt-protect-fault-multiboot.elf"),
+                                      machine, memory, mode="pt_protect_hardware_fault"))
+            report["runs"].append(run(args.qemu, Path("build/pt-protect-stale-multiboot.elf"),
+                                      machine, memory, mode="pt_protect_stale_rejected"))
+            report["runs"].append(run(args.qemu, Path("build/pt-protect-bypass-multiboot.elf"),
+                                      machine, memory, mode="pt_protect_bypass_stored"))
         for machine, memory in (("pc", "32"), ("q35", "64")):
             report["runs"].append(run(args.qemu, Path("build/pt-revoke-fault-multiboot.elf"),
                                       machine, memory, mode="pt_revoke_hardware_fault"))

@@ -223,6 +223,27 @@ def main():
         protect_text = Elf("build/x86-pt-write-protect.o").section_bytes(".text")
         if Elf("build/x86-pt-write-protect.so").section_bytes(".text") != protect_text:
             raise ValueError("HIA RW downgrade loaded .text differs from source object")
+        # Prove all three QEMU hardware experiments load precisely the
+        # same original selfhost-compiled native HIA .text, not a surrogate.
+        if Elf("build/pt-protect-boot.o").section_bytes(".text") != protect_text:
+            raise ValueError("HIA write-protect boot object .text diverges")
+        for stem in ("pt-protect-fault", "pt-protect-stale", "pt-protect-bypass"):
+            elf64 = Elf("build/" + stem + ".elf")
+            elf32 = Elf("build/" + stem + "-multiboot.elf")
+            entry = elf64.symbol("pt_protect_f0")
+            if (elf32.symbol("pt_protect_f0") != entry or
+                    elf64.text_at(entry, len(protect_text)) != protect_text or
+                    elf32.text_at(entry, len(protect_text)) != protect_text):
+                raise ValueError("HIA write-protect image .text diverges: " + stem)
+        report["x86_pt_write_protect_hardware"] = {
+            "observer_is_non_hia": True,
+            "native_hia_bytes_identical_in_three_images": True,
+            "boot_object_sha256": sha(Path("build/pt-protect-boot.o").read_bytes()),
+            "images_sha256": {
+                stem: sha(Path("build/" + stem + "-multiboot.elf").read_bytes())
+                for stem in ("pt-protect-fault", "pt-protect-stale", "pt-protect-bypass")
+            },
+        }
         report["x86_pt_write_protect"] = {
             "source_sha256": sha(protect_source),
             "object_sha256": sha(protect_object),
