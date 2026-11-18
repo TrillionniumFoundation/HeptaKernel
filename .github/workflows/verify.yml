@@ -296,13 +296,13 @@ jobs:
             build/x86-pt-revoke-unsafe.o
             build/x86-pt-revoke-unsafe.so
             build/pt-nx-boot.o
-          build/boot-pt-nx-fault.o
-          build/boot-pt-nx-stale.o
-          build/boot-pt-nx-bypass.o
-          build/pt-nx-fault-multiboot.elf
-          build/pt-nx-stale-multiboot.elf
-          build/pt-nx-bypass-multiboot.elf
-          build/pt-revoke-boot.o
+            build/boot-pt-nx-fault.o
+            build/boot-pt-nx-stale.o
+            build/boot-pt-nx-bypass.o
+            build/pt-nx-fault-multiboot.elf
+            build/pt-nx-stale-multiboot.elf
+            build/pt-nx-bypass-multiboot.elf
+            build/pt-revoke-boot.o
             build/boot-pt-revoke-fault.o
             build/boot-pt-revoke-stale.o
             build/boot-pt-revoke-bypass.o
