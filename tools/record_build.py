@@ -314,10 +314,48 @@ def main():
         us_text = Elf("build/x86-pt-user-revoke.o").section_bytes(".text")
         if Elf("build/x86-pt-user-revoke.so").section_bytes(".text") != us_text:
             raise ValueError("native HIA U/S revoke loaded .text differs")
+        # Independently compare original HIA bytes with every linked hardware
+        # observer, rather than accepting a substituted assembly surrogate.
+        if Elf("build/pt-us-boot.o").section_bytes(".text") != us_text:
+            raise ValueError("native HIA U/S revoke boot symbol changed .text")
+        for stem in ("us-fault", "us-stale", "us-bypass"):
+            elf64 = Elf("build/" + stem + ".elf")
+            elf32 = Elf("build/" + stem + "-multiboot.elf")
+            addr = elf64.symbol("pt_us_f0")
+            if (elf32.symbol("pt_us_f0") != addr or
+                    elf64.text_at(addr, len(us_text)) != us_text or
+                    elf32.text_at(addr, len(us_text)) != us_text):
+                raise ValueError(stem + " lacks exact native HIA U/S .text")
+        us_images = {stem: sha(Path("build/" + stem + "-multiboot.elf").read_bytes())
+                     for stem in ("us-fault", "us-stale", "us-bypass")}
+        if len(set(us_images.values())) != 3:
+            raise ValueError("fault/stale/bypass images not independent")
+        boot_report = json.loads(Path("build/boot-report.json").read_text())
+        if boot_report.get("status") != "PASS":
+            raise ValueError("CPL3 U/S experiments did not finish successfully")
+        required = {"us_revoke_hardware_fault", "us_revoke_stale_rejected",
+                    "us_revoke_bypass_executed"}
+        qualified = [row for row in boot_report["runs"] if row["mode"] in required]
+        if (len(qualified) != 6 or
+                {(row["mode"], row["machine"]) for row in qualified} !=
+                {(mode, machine) for mode in required for machine in ("pc", "q35")} or
+                any(row["status"] != "PASS" or
+                    row["image_sha256"] != us_images[row["image"].split("/")[-1].split("-multiboot")[0]]
+                    for row in qualified)):
+            raise ValueError("CPL3 results not bound to their exact images")
+        report["x86_pt_user_revoke_hardware"] = {
+            "observer_is_non_hia": True,
+            "native_hia_text_byte_identical": True,
+            "pc_q35_modes_passed": 6,
+            "images_sha256": us_images,
+            "privileged_invlpg_emitted_by_hia": False,
+            "atomicity_or_smp_verified": False,
+        }
+
         report["x86_pt_user_revoke"] = {
             "source_sha256": sha(us_source), "object_sha256": sha(us_object),
             "text_sha256": sha(us_text), "empty_path_recompiled": True,
-            "loaded_text_byte_identity": True, "hardware_cpl3_verified": False,
+            "loaded_text_byte_identity": True, "hardware_cpl3_verified": True,
             "tlb_invalidation_emitted_by_hia": False,
             "smp_atomicity_verified": False,
         }
