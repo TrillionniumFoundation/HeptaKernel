@@ -138,3 +138,10 @@ CR2/RIP, non-present-read error and IST1. Stale-old refusal and test-only
 restored-mapping bypass are independent controls. This does not deliver
 native HIA privilege/exception instructions, concurrent ownership,
 multi-CPU shootdown or safe frame recycling; see `docs/x86-pt-revoke.md`.
+
+A native HIA 4KiB RW->RO permission downgrade now preserves A/D, PAT,
+physical frame and all other entry bits, and refuses stale expected-old
+requests with an independent byte-level oracle and dishonest HIA control.
+It assumes exclusive quiescent ownership: no native HIA TLB flush, SMP
+shootdown, atomic 64-bit PTE CAS, or Linux mprotect is implemented; see
+`docs/x86-pt-write-protect.md`.
