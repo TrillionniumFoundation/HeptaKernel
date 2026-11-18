@@ -73,11 +73,13 @@ jobs:
           source_edges = (root / report["kconfig_source_edges_file"]).read_bytes()
           directories = (root / report["directory_objects_file"]).read_bytes()
           uapi = (root / report["uapi_entries_file"]).read_bytes()
+          syscall = (root / report["syscall_table_rows_file"]).read_bytes()
           assert hashlib.sha256(source).hexdigest() == report["source_paths_sha256"]
           assert hashlib.sha256(kconfig).hexdigest() == report["kconfig_declarations_sha256"]
           assert hashlib.sha256(source_edges).hexdigest() == report["kconfig_source_edges_sha256"]
           assert hashlib.sha256(directories).hexdigest() == report["directory_objects_sha256"]
           assert hashlib.sha256(uapi).hexdigest() == report["uapi_entries_sha256"]
+          assert hashlib.sha256(syscall).hexdigest() == report["syscall_table_rows_sha256"]
           rows = [json.loads(x) for x in source.splitlines()]
           paths = [base64.b64decode(x["path_b64"]) for x in rows]
           actual = subprocess.check_output([
@@ -111,6 +113,43 @@ jobs:
           for uapi_record in uapi_rows:
               assert by_path[base64.b64decode(uapi_record["path_b64"])] == uapi_record
           assert report["counts"]["kconfig_declarations"] > 0
+          # Independently enumerate every source row from immutable Git blobs.
+          ref_tables = [row for row in rows
+                        if (base64.b64decode(row["path_b64"]) == b"scripts/syscall.tbl"
+                            or (b"/syscalls/" in base64.b64decode(row["path_b64"])
+                                and base64.b64decode(row["path_b64"]).endswith(b".tbl")))]
+          assert len(ref_tables) == report["counts"]["syscall_table_files"]
+          actual_syscalls = [json.loads(x) for x in syscall.splitlines()]
+          expected_syscalls = []
+          unparsed_syscalls = 0
+          for ref in ref_tables:
+              path = base64.b64decode(ref["path_b64"])
+              if ref["mode"] not in ("100644", "100755"):
+                  continue
+              blob = subprocess.check_output([
+                  "git", "-C", ".upstream/linux", "cat-file", "blob", ref["oid"]
+              ])
+              assert len(blob) == ref["size"]
+              for lineno, raw in enumerate(blob.split(b"\n"), 1):
+                  source = raw.partition(b"#")[0].strip()
+                  if not source:
+                      continue
+                  fields = source.split()
+                  status = "LEXICAL_ROW" if len(fields) >= 3 else "UNPARSED"
+                  unparsed_syscalls += status == "UNPARSED"
+                  expected_syscalls.append((
+                      path, ref["oid"], lineno, raw, fields, status))
+          emitted_syscalls = [
+              (base64.b64decode(x["path_b64"]), x["blob_oid"], x["line"],
+               base64.b64decode(x["raw_b64"]),
+               [base64.b64decode(v) for v in x["columns_b64"]], x["status"])
+              for x in actual_syscalls]
+          assert emitted_syscalls == expected_syscalls, (
+              "missing/reordered/modified syscall table rows")
+          assert len(actual_syscalls) == report["counts"]["syscall_table_rows"]
+          assert unparsed_syscalls == report["counts"]["syscall_table_unparsed_rows"]
+          assert report["counts"]["unreadable_syscall_table_files"] == sum(
+              x["mode"] not in ("100644", "100755") for x in ref_tables)
           edges = [json.loads(x) for x in source_edges.splitlines()]
           assert len(edges) == report["counts"]["kconfig_source_edges"]
           source_kinds = ("source", "rsource", "osource", "orsource")
@@ -152,6 +191,8 @@ jobs:
           print("FULL_GIT_TREE_LOSSLESS_INVENTORY: PASS", len(rows))
           print("KCONFIG_DECLARATION_RECORDS:", report["counts"]["kconfig_declarations"])
           print("KCONFIG_SOURCE_EDGES:", report["counts"]["kconfig_source_edges"])
+          print("SYSCALL_TABLE_ROWS:", len(actual_syscalls))
+          print("UNPARSED_SYSCALL_ROWS:", unparsed_syscalls)
           print("FULL_LINUX_REWRITE: HOLD")
           PY
           set +e
@@ -174,5 +215,6 @@ jobs:
             build/linux-inventory/kconfig-source-edges.jsonl
             build/linux-inventory/directory-objects.jsonl
             build/linux-inventory/uapi-paths.jsonl
+            build/linux-inventory/syscall-table-rows.jsonl
             build/linux-inventory/report.json
             build/linux-inventory/closure-state.json
