@@ -41,18 +41,11 @@ block decode(pc_wire:readbuf,pc_output:mutbuf,pc_page:mutbuf)
 block validate(pc_valid_reply:mutbuf,pc_valid_page:mutbuf,pc_valid_slot:u64,pc_valid_old:u64,pc_valid_new:u64,pc_valid_caps:u64)
   pc_zero:u64 = const() {"value":0}
   pc_one:u64 = const() {"value":1}
-  pc_two:u64 = const() {"value":2}
-  pc_four:u64 = const() {"value":4}
-  pc_nine:u64 = const() {"value":256}
-  pc_sixteen:u64 = const() {"value":512}
   pc_page_limit:u64 = const() {"value":512}
   pc_cap_mask:u64 = const() {"value":1023}
   pc_width_mask:u64 = const() {"value":255}
   pc_min_width:u64 = const() {"value":32}
   pc_max_width:u64 = const() {"value":52}
-  pc_forbidden_mask:u64 = const() {"value":9218868437227409144}
-  pc_phys_mask:u64 = const() {"value":4503599627366400}
-  pc_nx_mask:u64 = const() {"value":9223372036854775808}
   pc_slot_ok:bool = compare.lt(pc_valid_slot,pc_page_limit)
   pc_caps_form:bool = compare.le(pc_valid_caps,pc_cap_mask)
   pc_width:u64 = bit.and(pc_valid_caps,pc_width_mask)
@@ -73,7 +66,39 @@ block check_bits(pc_bits_reply:mutbuf,pc_bits_page:mutbuf,pc_bits_slot:u64,pc_bi
   rv_present:bool = compare.eq(rv_old_present,rv_one)
   rv_zero_candidate:bool = compare.eq(pc_bits_new,rv_zero)
   rv_revoke:bool = bool.and(rv_present,rv_zero_candidate)
-  branch rv_revoke check_slot(pc_bits_reply,pc_bits_page,pc_bits_slot,pc_bits_old,pc_bits_new) bad_candidate(pc_bits_reply)
+  branch rv_revoke check_old_encoding(pc_bits_reply,pc_bits_page,pc_bits_slot,pc_bits_old,pc_bits_new,pc_bits_caps,pc_bits_width) bad_candidate(pc_bits_reply)
+block check_old_encoding(oe_reply:mutbuf,oe_page:mutbuf,oe_slot:u64,oe_old:u64,oe_new:u64,oe_caps:u64,oe_width:u64)
+  oe_zero:u64 = const() {"value":0}
+  oe_one:u64 = const() {"value":1}
+  oe_high_mask:u64 = const() {"value":9218868437227405312}
+  oe_pa_mask:u64 = const() {"value":4503599627366400}
+  oe_high:u64 = bit.and(oe_old,oe_high_mask)
+  oe_reserved_ok:bool = compare.eq(oe_high,oe_zero)
+  oe_physical:u64 = bit.and(oe_old,oe_pa_mask)
+  oe_limit:u64 = int.shl.checked(oe_one,oe_width)
+  oe_physical_ok:bool = compare.lt(oe_physical,oe_limit)
+  oe_valid:bool = bool.and(oe_reserved_ok,oe_physical_ok)
+  branch oe_valid check_old_caps(oe_reply,oe_page,oe_slot,oe_old,oe_new,oe_caps) bad_candidate(oe_reply)
+block check_old_caps(oc_reply:mutbuf,oc_page:mutbuf,oc_slot:u64,oc_old:u64,oc_new:u64,oc_caps:u64)
+  oc_zero:u64 = const() {"value":0}
+  oc_nx_mask:u64 = const() {"value":9223372036854775808}
+  oc_global_mask:u64 = const() {"value":256}
+  oc_nxe_mask:u64 = const() {"value":256}
+  oc_pge_mask:u64 = const() {"value":512}
+  oc_nx:u64 = bit.and(oc_old,oc_nx_mask)
+  oc_global:u64 = bit.and(oc_old,oc_global_mask)
+  oc_nxe:u64 = bit.and(oc_caps,oc_nxe_mask)
+  oc_pge:u64 = bit.and(oc_caps,oc_pge_mask)
+  oc_uses_nx:bool = compare.ne(oc_nx,oc_zero)
+  oc_uses_global:bool = compare.ne(oc_global,oc_zero)
+  oc_has_nxe:bool = compare.ne(oc_nxe,oc_zero)
+  oc_has_pge:bool = compare.ne(oc_pge,oc_zero)
+  oc_lacks_nxe:bool = bool.not(oc_has_nxe)
+  oc_lacks_pge:bool = bool.not(oc_has_pge)
+  oc_bad_nx:bool = bool.and(oc_uses_nx,oc_lacks_nxe)
+  oc_bad_global:bool = bool.and(oc_uses_global,oc_lacks_pge)
+  oc_unsupported:bool = bool.or(oc_bad_nx,oc_bad_global)
+  branch oc_unsupported bad_caps(oc_reply) check_slot(oc_reply,oc_page,oc_slot,oc_old,oc_new)
 block bad_candidate(pc_candidate_reply:mutbuf)
   pc_candidate_code:u32 = const() {"value":6}
   pc_candidate_zero:u64 = const() {"value":0}
