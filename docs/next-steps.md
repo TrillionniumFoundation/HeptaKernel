@@ -130,3 +130,11 @@ Native HIA now has a restricted **leaf removal** primitive in
 quiescent single-owner write, independent native oracle and dishonest control.
 It does not prove hardware MMU revocation, TLB shootdown, concurrent atomicity
 or physical-frame recycling; see `docs/x86-pt-revoke.md`.
+
+An isolated live MMU revocation experiment now calls native HIA
+`x86_pt_revoke` on the real 4 MiB PTE after warming its translation, then
+uses a clearly NON-HIA `invlpg` bridge. Hardware #PF must match exact
+CR2/RIP, non-present-read error and IST1. Stale-old refusal and test-only
+restored-mapping bypass are independent controls. This does not deliver
+native HIA privilege/exception instructions, concurrent ownership,
+multi-CPU shootdown or safe frame recycling; see `docs/x86-pt-revoke.md`.
