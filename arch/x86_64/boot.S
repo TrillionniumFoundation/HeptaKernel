@@ -545,10 +545,14 @@ hia_idt_next64:
     incq %r12
     cmpq $256, %r12
     jb hia_idt_next64
-#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS)
+#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS) || defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT)
     /* HIA also owns updating the #PF descriptor, conditional on old bytes. */
     movq $14, idt_gate_request(%rip)
+#ifdef HEPTAKERNEL_TEST_PT_REVOKE_FAULT
+    leaq pt_revoke_page_fault64(%rip), %rax
+#else
     leaq pte_page_fault64(%rip), %rax
+#endif
     movq %rax, idt_gate_request+8(%rip)
     movq idt64+224(%rip), %rax
     movq %rax, idt_gate_request+16(%rip)
@@ -859,6 +863,45 @@ fail64:
     call puts64
     movl $0x11, %eax              /* QEMU exit code 35 */
     jmp debug_exit64
+
+/* Isolated hardware observation after genuine native HIA clears live PTE.
+ * INVLPG/CR2/exception entry remain expressly non-HIA boot bridge. */
+#ifdef HEPTAKERNEL_TEST_PT_REVOKE_FAULT
+pt_revoke_page_fault64:
+    cli
+    leaq ist_stack_base(%rip), %rax
+    cmpq %rax, %rsp
+    jbe exception64
+    leaq ist_stack_top(%rip), %rax
+    cmpq %rax, %rsp
+    jae exception64
+    cmpq $0x52564f4b, pt_revoke_armed(%rip)
+    jne exception64
+    cmpq $0, (%rsp)                  /* #PF P=0, W/R=0, U/S=0 */
+    jne exception64
+    leaq pt_revoke_load_insn(%rip), %rax
+    cmpq %rax, 8(%rsp)               /* exact faulting RIP */
+    jne exception64
+    cmpq $0x08, 16(%rsp)             /* CPL0 CS */
+    jne exception64
+    movq %cr2, %rax
+    cmpq $ARENA_MIN, %rax
+    jne exception64
+    cmpq $0, page_table_4m(%rip)
+    jne exception64
+    cmpq $0, pt_revoke_reply(%rip)
+    jne exception64
+    cmpq $0, pt_revoke_reply+8(%rip)
+    jne exception64
+    leaq emergency_stack_top(%rip), %rsp
+    andq $-16, %rsp
+    leaq message_ist_verified(%rip), %rsi
+    call puts64
+    leaq message_pt_revoke_fault(%rip), %rsi
+    call puts64
+    movl $0x19, %eax                 /* debug exit 51 */
+    jmp debug_exit64
+#endif
 
 #if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS)
 pte_page_fault64:
@@ -1275,6 +1318,80 @@ pte_fill_4m:
     movq %rax, page_directory+16(%rip)
     movq %cr3, %rax
     movq %rax, %cr3
+#if defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT) || defined(HEPTAKERNEL_TEST_PT_REVOKE_STALE) || defined(HEPTAKERNEL_TEST_PT_REVOKE_BYPASS)
+    /* Read the actual mapping before invalidation; retain independent
+     * readback for the deliberately restored-mapping negative control. */
+    movq $ARENA_MIN, %rdi
+    movq (%rdi), %rax
+    movq %rax, pt_revoke_observed(%rip)
+    movq $0, pt_revoke_request(%rip)
+    movq page_table_4m(%rip), %rax
+    movq %rax, pt_revoke_request+8(%rip)
+#ifdef HEPTAKERNEL_TEST_PT_REVOKE_STALE
+    xorq $8, pt_revoke_request+8(%rip)
+#endif
+    movq $0, pt_revoke_request+16(%rip)
+    movl pte_caps(%rip), %eax
+    movq %rax, pt_revoke_request+24(%rip)
+    movq $-1, pt_revoke_reply(%rip)
+    movq $-1, pt_revoke_reply+8(%rip)
+    leaq pt_revoke_request(%rip), %rdi
+    movl $32, %esi
+    leaq pt_revoke_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq page_table_4m(%rip), %r8
+    movl $4096, %r9d
+    call pt_revoke_f0
+#ifdef HEPTAKERNEL_TEST_PT_REVOKE_STALE
+    cmpl $9, %eax
+    jne fail64
+    cmpq $9, pt_revoke_reply(%rip)
+    jne fail64
+    cmpq $0, pt_revoke_reply+8(%rip)
+    jne fail64
+    /* The CPU sets PTE.Accessed=1 during the warm read. Compare the actual
+     * captured old value (with that hardware side effect) rather than the
+     * earlier admission value returned by pt_commit_f0. */
+    movq pt_revoke_request+8(%rip), %rax
+    xorq $8, %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+    leaq message_pt_revoke_stale(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, pt_revoke_reply(%rip)
+    jne fail64
+    cmpq $0, pt_revoke_reply+8(%rip)
+    jne fail64
+    cmpq $0, page_table_4m(%rip)
+    jne fail64
+    leaq message_pt_revoke_pass(%rip), %rsi
+    call puts64
+    movq $ARENA_MIN, %rdi
+    invlpg (%rdi)                    /* NON-HIA CPL0 bridge */
+#ifdef HEPTAKERNEL_TEST_PT_REVOKE_BYPASS
+    /* Adversarial bridge restores PTE, flushes translation, and MUST read. */
+    movq pt_commit_reply+8(%rip), %rax
+    movq %rax, page_table_4m(%rip)
+    invlpg (%rdi)
+    movq (%rdi), %rax
+    cmpq pt_revoke_observed(%rip), %rax
+    jne fail64
+    leaq message_pt_revoke_bypass(%rip), %rsi
+    call puts64
+    movl $0x1a, %eax                 /* debug exit 53 */
+    jmp debug_exit64
+#else
+    movq $0x52564f4b, pt_revoke_armed(%rip)
+pt_revoke_load_insn:
+    movq (%rdi), %rax                /* must #PF, not return */
+    jmp fail64
+#endif
+#endif
+#endif
 #if defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS)
     /* A real HIA read-only PTE is installed; the negative mutant
      * changes only the PTE RW bit in this explicit non-HIA test bridge. */
@@ -1806,6 +1923,14 @@ message_reservation_pass:
     .asciz "HEPTAKERNEL HIA RESERVATIONS VERIFIED\r\n"
 message_pt_commit_pass:
     .asciz "HEPTAKERNEL HIA PT COMMIT VERIFIED\r\n"
+message_pt_revoke_pass:
+    .asciz "HEPTAKERNEL HIA LIVE PT REVOKE VERIFIED\r\n"
+message_pt_revoke_fault:
+    .asciz "HEPTAKERNEL HIA PT REVOKE HARDWARE FAULT VERIFIED\r\n"
+message_pt_revoke_stale:
+    .asciz "HEPTAKERNEL HIA PT REVOKE STALE OLD REJECTED\r\n"
+message_pt_revoke_bypass:
+    .asciz "HEPTAKERNEL HIA PT REVOKE BYPASS READ VERIFIED\r\n"
 message_pf_admission_pass:
     .asciz "HEPTAKERNEL HIA PF RECORD ADMITTED\r\n"
 message_pte_pass:
@@ -1969,6 +2094,10 @@ reservation_guard_after:  .skip 8
 reservation_unused:       .skip 16
 pt_commit_request: .skip 32
 pt_commit_reply:   .skip 16
+pt_revoke_request: .skip 32
+pt_revoke_reply:   .skip 16
+pt_revoke_observed: .skip 8
+pt_revoke_armed:    .skip 8
 pte_request:      .skip 32
 pte_guard_before: .skip 8
 pte_reply:        .skip 16

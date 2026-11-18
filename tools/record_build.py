@@ -167,6 +167,46 @@ def main():
             raise ValueError("native HIA leaf committer shared object differs")
         if Elf("build/pt-commit-boot.o").section_bytes(".text") != commit_text:
             raise ValueError("HIA leaf commit symbol rename modified machine code")
+        # The same genuine selfhost object used by the native byte-array
+        # oracle must appear in all three live hardware revocation images.
+        revoke_source = Path("src/x86_pt_revoke.hepta").read_bytes()
+        revoke_object = Path("build/x86-pt-revoke.o").read_bytes()
+        revoke_rebuilt = subprocess.run([compiler], input=revoke_source,
+                                        capture_output=True, timeout=20,
+                                        env={"PATH": ""})
+        if (revoke_rebuilt.returncode or revoke_rebuilt.stderr or
+                revoke_rebuilt.stdout != revoke_object):
+            raise ValueError("native HIA revoke differs from empty-PATH rebuild")
+        if subprocess.check_output(["nm", "-u", "build/x86-pt-revoke.o"], text=True).strip():
+            raise ValueError("HIA revoker has undefined symbols")
+        revoke_text = Elf("build/x86-pt-revoke.o").section_bytes(".text")
+        if Elf("build/x86-pt-revoke.so").section_bytes(".text") != revoke_text:
+            raise ValueError("HIA revoker shared object code differs")
+        if Elf("build/pt-revoke-boot.o").section_bytes(".text") != revoke_text:
+            raise ValueError("HIA revoker rename changed code")
+        for revoke_stem in ("pt-revoke-fault", "pt-revoke-stale", "pt-revoke-bypass"):
+            rev64 = Elf("build/" + revoke_stem + ".elf")
+            rev32 = Elf("build/" + revoke_stem + "-multiboot.elf")
+            rev_entry = rev64.symbol("pt_revoke_f0")
+            if (rev32.symbol("pt_revoke_f0") != rev_entry or
+                    rev64.text_at(rev_entry, len(revoke_text)) != revoke_text or
+                    rev32.text_at(rev_entry, len(revoke_text)) != revoke_text):
+                raise ValueError(revoke_stem + " lacks byte-exact native HIA revoker")
+        rev_hashes = {sha(Path("build/" + stem + "-multiboot.elf").read_bytes())
+                      for stem in ("pt-revoke-fault", "pt-revoke-stale", "pt-revoke-bypass")}
+        if len(rev_hashes) != 3:
+            raise ValueError("hardware revocation, stale and bypass images must differ")
+        report["x86_pt_revoke_hardware"] = {
+            "source_sha256": sha(revoke_source),
+            "object_sha256": sha(revoke_object),
+            "text_sha256": sha(revoke_text),
+            "empty_path_recompiled": True,
+            "boot_code_byte_identity": True,
+            "distinct_fault_stale_bypass_images": True,
+            "privileged_invlpg_emitted_by_hia": False,
+            "smp_shootdown_verified": False,
+        }
+
         pf_source = Path("src/x86_pf_gate.hepta").read_bytes()
         pf_object = Path("build/x86-pf-gate.o").read_bytes()
         pf_rebuilt = subprocess.run([compiler], input=pf_source,

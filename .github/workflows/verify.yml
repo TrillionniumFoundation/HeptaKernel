@@ -280,6 +280,16 @@ jobs:
             build/x86-pt-revoke.so
             build/x86-pt-revoke-unsafe.o
             build/x86-pt-revoke-unsafe.so
+            build/pt-revoke-boot.o
+            build/boot-pt-revoke-fault.o
+            build/boot-pt-revoke-stale.o
+            build/boot-pt-revoke-bypass.o
+            build/pt-revoke-fault.elf
+            build/pt-revoke-stale.elf
+            build/pt-revoke-bypass.elf
+            build/pt-revoke-fault-multiboot.elf
+            build/pt-revoke-stale-multiboot.elf
+            build/pt-revoke-bypass-multiboot.elf
             build/x86-access-gate-report.json
             build/x86-access-gate.o
             build/x86-access-gate.so
