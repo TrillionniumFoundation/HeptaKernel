@@ -157,3 +157,18 @@ stale-old refusal and restored-execution bypass. The non-HIA
 INVLPG/exception bridge remains; HIA privileged TLB invalidation,
 atomic PTE replacement, SMP shootdown, ownership provenance and Linux
 `mprotect` remain open.
+
+An isolated CPL3 x86-64 user-to-supervisor permission hardware experiment now
+uses the genuine original `src/x86_pt_user_revoke.hepta` native HIA .text on
+a real 4KiB PTE. A first user-mode #UD demonstrates that the original user
+RX page was executable; the explicitly non-HIA exception bridge calls HIA to
+clear only U/S, preserving the CPU-updated Accessed bit. After a non-HIA
+INVLPG and IRETQ to the **same user RIP**, the CPU must produce #PF with
+P=1, U=1 and I/D=1 on IST1, with exact CR2/RIP/CS/SS/user RSP.
+Two independent controls exercise a valid but stale expected-old value and a
+deliberate post-HIA regrant of U/S, which must permit the original user UD2
+to execute again rather than count a generic fault as success. Native HIA
+also commits the first 4KiB user RX leaf; the test-only bridge still handles
+parent-table pointers, privileged CR3/IDT/TSS, INVLPG and IRETQ. This is
+single-CPU QEMU evidence, not atomic PTE writes, SMP shootdown, Linux mprotect,
+or a fully HIA-native privilege/backend capability.
