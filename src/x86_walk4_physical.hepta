@@ -139,10 +139,10 @@ block level1(l1_reply:mutbuf,l1_pages:mutbuf,l1_va:u64,l1_bits:u64,l1_l4:u64,l1_
   l1_translation:u64 = call(l1_va,l1_l4,l1_l3,l1_l2,l1_entry,l1_bits) {"function":"walk4"}
   l1_status:u32 = call(l1_reply,l1_translation) {"function":"finish_translation"}
   ret(l1_status)
-block refuse_link(rl_reply:mutbuf)
+block refuse_link(rfl_reply:mutbuf)
   rl_code:u32 = const() {"value":5}
   rl_zero:u64 = const() {"value":0}
-  rl_status:u32 = call(rl_reply,rl_code,rl_zero) {"function":"write_reply"}
+  rl_status:u32 = call(rfl_reply,rl_code,rl_zero) {"function":"write_reply"}
   ret(rl_status)
 block refuse_invalid(ri_reply:mutbuf)
   ri_code:u32 = const() {"value":6}
