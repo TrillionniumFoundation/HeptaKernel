@@ -4,7 +4,7 @@ QEMU ?= qemu-system-x86_64
 PYTHON ?= python3
 COMPILER_SHA256 := 87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54
 
-.PHONY: test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-cr3-gate test-x86-upper-user all check-compiler test test-x86-pde-2m test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-x86-user-gdt test-x86-tss-gdt test-x86-tss-state test-closure test-linux-inventory record-build full-acceptance clean
+.PHONY: test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-cr3-gate test-x86-upper-user all check-compiler test test-x86-pde-2m test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pt-revoke test-x86-pf-gate test-x86-idt test-x86-user-gdt test-x86-tss-gdt test-x86-tss-state test-closure test-linux-inventory record-build full-acceptance clean
 
 all: build/kernel-multiboot.elf
 
@@ -621,3 +621,25 @@ build/x86-access-unsafe.so: build/x86-access-unsafe.o
 test-x86-access-gate: build/x86-access-gate.so build/x86-access-unsafe.so build/x86-walk4-physical.so
 	timeout 90 $(PYTHON) tests/test_x86_access_gate.py build/x86-access-gate.so --object build/x86-access-gate.o --walk-library build/x86-walk4-physical.so
 	$(PYTHON) tests/test_x86_access_gate.py build/x86-access-unsafe.so --expect-unsafe
+
+# Native HIA clears a single 4KiB leaf under a quiescent exclusive owner;
+# no hardware INVLPG, TLB shootdown or concurrent CAS is implemented.
+build/x86-pt-revoke.o: src/x86_pt_revoke.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.x86-pt-revoke.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/x86-pt-revoke.so: build/x86-pt-revoke.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/x86-pt-revoke-unsafe.o: tests/negative/x86_pt_revoke_allow_all.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.x86-pt-revoke-unsafe.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/x86-pt-revoke-unsafe.so: build/x86-pt-revoke-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+test-x86-pt-revoke: build/x86-pt-revoke.so build/x86-pt-revoke-unsafe.so
+	timeout 90 $(PYTHON) tests/test_x86_pt_revoke.py build/x86-pt-revoke.so
+	$(PYTHON) tests/test_x86_pt_revoke.py build/x86-pt-revoke-unsafe.so --expect-unsafe
