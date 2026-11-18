@@ -50,8 +50,8 @@ block validate(hp_valid_reply:mutbuf,hp_valid_page:mutbuf,hp_valid_slot:u64,hp_v
   hp_width_mask:u64 = const() {"value":255}
   hp_min_width:u64 = const() {"value":32}
   hp_max_width:u64 = const() {"value":52}
-  hp_forbidden_mask:u64 = const() {"value":9218868437229502072}
-  hp_phys_mask:u64 = const() {"value":4503599627366400}
+  hp_forbidden_mask:u64 = const() {"value":8646911284553441280}
+  hp_phys_mask:u64 = const() {"value":4503599625273344}
   hp_nx_mask:u64 = const() {"value":9223372036854775808}
   hp_slot_ok:bool = compare.lt(hp_valid_slot,hp_page_limit)
   hp_caps_form:bool = compare.le(hp_valid_caps,hp_cap_mask)
@@ -74,8 +74,8 @@ block check_bits(hp_bits_reply:mutbuf,hp_bits_page:mutbuf,hp_bits_slot:u64,hp_bi
   hp_bglobal:u64 = const() {"value":256}
   hp_bnxe:u64 = const() {"value":256}
   hp_bpge:u64 = const() {"value":512}
-  hp_badmask:u64 = const() {"value":9218868437229502072}
-  hp_pmask:u64 = const() {"value":4503599627366400}
+  hp_badmask:u64 = const() {"value":8646911284553441280}
+  hp_pmask:u64 = const() {"value":4503599625273344}
   hp_nx:u64 = const() {"value":9223372036854775808}
   hp_reserved:u64 = bit.and(hp_bits_new,hp_badmask)
   hp_reserved_ok:bool = compare.eq(hp_reserved,hp_bzero)

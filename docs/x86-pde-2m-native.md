@@ -15,8 +15,10 @@ observed MAXPHYADDR 32..52 (bits 0..7), active EFER.NXE (bit 8), and
 active CR4.PGE (bit 9).
 
 Admission requires a present 2 MiB PDE with PS=1, physical base aligned
-to 2 MiB and below MAXPHYADDR, no reserved address bits 12..20 or high
-bits 52..62, and no unsupported low flags. It enforces W^X,
+to 2 MiB and below MAXPHYADDR. The huge-leaf PAT bit 12, PWT/PCD,
+Accessed/Dirty, and software bits 9..11 and 52..58 are admitted and
+preserved; actual reserved address bits 13..20 and unsupported high-key
+bits 59..62 remain rejected. The existing policy enforces W^X,
 prohibits USER+GLOBAL, and refuses NX without NXE and GLOBAL without
 PGE. The requested slot must be <512; all bytes of the existing entry
 must equal `expected_old` before the first store. The successful
@@ -65,3 +67,14 @@ backend or Linux virtual memory manager. The HIA backend still lacks
 `mov cr*`, `invlpg`, `iretq`, exception entry, MMIO, atomics,
 ordering and general static linker facilities. The 17 complete Linux
 acceptance gates and 422 x86-64 syscall obligations remain HOLD.
+
+## Linux huge-page metadata admission (2026-11-18)
+
+The original 2MiB PDE mask incorrectly rejected architectural cache/A-D/PAT
+flags and Linux software bits. The native HIA guard now distinguishes the
+2MiB frame address (bits 21..51) from the huge-page PAT flag at bit 12.
+An independent byte-exact oracle probes every admitted flag, both reserved
+ranges, combined flags, full expected-old mismatch and denied capability
+combinations. Existing PC/Q35 hardware tests still exercise the actual HIA
+writer; they do not establish PAT/MTRR semantics, atomicity, TLB shootdown,
+SMP safety or general Linux huge-page compatibility.
