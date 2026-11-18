@@ -1343,28 +1343,17 @@ pte_fill_4m:
     movl $4096, %r9d
     call pt_revoke_f0
 #ifdef HEPTAKERNEL_TEST_PT_REVOKE_STALE
-    /* Temporary diagnostic until stale-old QEMU refusal passes. */
-    movq %rax, %r15
-    leaq message_pt_revoke_debug(%rip), %rsi
-    call puts64
-    movq %r15, %rax
-    call hex64
-    movq pt_revoke_reply(%rip), %rax
-    call hex64
-    movq pt_revoke_reply+8(%rip), %rax
-    call hex64
-    movq page_table_4m(%rip), %rax
-    call hex64
-    leaq message_newline(%rip), %rsi
-    call puts64
-    movq %r15, %rax
     cmpl $9, %eax
     jne fail64
     cmpq $9, pt_revoke_reply(%rip)
     jne fail64
     cmpq $0, pt_revoke_reply+8(%rip)
     jne fail64
-    movq pt_commit_reply+8(%rip), %rax
+    /* The CPU sets PTE.Accessed=1 during the warm read. Compare the actual
+     * captured old value (with that hardware side effect) rather than the
+     * earlier admission value returned by pt_commit_f0. */
+    movq pt_revoke_request+8(%rip), %rax
+    xorq $8, %rax
     cmpq %rax, page_table_4m(%rip)
     jne fail64
     leaq message_pt_revoke_stale(%rip), %rsi
@@ -1940,8 +1929,6 @@ message_pt_revoke_fault:
     .asciz "HEPTAKERNEL HIA PT REVOKE HARDWARE FAULT VERIFIED\r\n"
 message_pt_revoke_stale:
     .asciz "HEPTAKERNEL HIA PT REVOKE STALE OLD REJECTED\r\n"
-message_pt_revoke_debug:
-    .asciz "HEPTAKERNEL PT REVOKE DEBUG status-reply-value-pte: "
 message_pt_revoke_bypass:
     .asciz "HEPTAKERNEL HIA PT REVOKE BYPASS READ VERIFIED\r\n"
 message_pf_admission_pass:
