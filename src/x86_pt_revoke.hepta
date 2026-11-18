@@ -67,13 +67,13 @@ block bad_caps(pc_cap_reply:mutbuf)
   pc_cap_result:u32 = call(pc_cap_reply,pc_cap_code,pc_cap_zero) {"function":"write_reply"}
   ret(pc_cap_result)
 block check_bits(pc_bits_reply:mutbuf,pc_bits_page:mutbuf,pc_bits_slot:u64,pc_bits_old:u64,pc_bits_new:u64,pc_bits_caps:u64,pc_bits_width:u64)
-  pc_zero:u64 = const() {"value":0}
-  pc_one:u64 = const() {"value":1}
-  pc_old_present:u64 = bit.and(pc_bits_old,pc_one)
-  pc_present:bool = compare.eq(pc_old_present,pc_one)
-  pc_zero_candidate:bool = compare.eq(pc_bits_new,pc_zero)
-  pc_revoke:bool = bool.and(pc_present,pc_zero_candidate)
-  branch pc_revoke check_slot(pc_bits_reply,pc_bits_page,pc_bits_slot,pc_bits_old,pc_bits_new) bad_candidate(pc_bits_reply)
+  rv_zero:u64 = const() {"value":0}
+  rv_one:u64 = const() {"value":1}
+  rv_old_present:u64 = bit.and(pc_bits_old,rv_one)
+  rv_present:bool = compare.eq(rv_old_present,rv_one)
+  rv_zero_candidate:bool = compare.eq(pc_bits_new,rv_zero)
+  rv_revoke:bool = bool.and(rv_present,rv_zero_candidate)
+  branch rv_revoke check_slot(pc_bits_reply,pc_bits_page,pc_bits_slot,pc_bits_old,pc_bits_new) bad_candidate(pc_bits_reply)
 block bad_candidate(pc_candidate_reply:mutbuf)
   pc_candidate_code:u32 = const() {"value":6}
   pc_candidate_zero:u64 = const() {"value":0}
