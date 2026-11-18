@@ -19,7 +19,7 @@ NX = 1 << 63
 NXE = 1 << 8
 PGE = 1 << 9
 PA_MASK = ((1 << 52) - 1) & ~((1 << 21) - 1)
-ALLOWED = PA_MASK | 0x187 | NX
+ALLOWED = PA_MASK | 0x1fff | (0x7f << 52) | NX
 CAPS = 52 | NXE | PGE
 
 
@@ -122,6 +122,52 @@ def campaign(library: Path):
                            52 | PGE, 52, 64, 0, MASK64))
         expect = old if rng.randrange(4) else old ^ 1
         check(pack(slot, expect, proposed, caps), table)
+
+    # Per-bit architecture admission: 2MiB PAT lives at bit 12,
+    # not in the frame address; 59..62 are unsupported high-key bits.
+    for bit in (*range(3, 7), *range(9, 13), *range(52, 63)):
+        slot = (bit * 37) % 512
+        table = bytearray(rng.randbytes(PAGE))
+        old = 0x200081 | ((bit & 7) << 5)
+        struct.pack_into("<Q", table, slot * 8, old)
+        candidate = NX | 0x600081 | (1 << bit)
+        expected_status = 6 if bit >= 59 else 0
+        assert oracle(pack(slot, old, candidate), bytes(table))[0] == expected_status
+        check(pack(slot, old, candidate), bytes(table))
+        check(pack(slot, old ^ 1, candidate), bytes(table))
+
+    # Bits 13..20 remain reserved regardless of PAT or software metadata.
+    for bit in range(13, 21):
+        candidate = NX | 0x600081 | (1 << 12) | (1 << bit) | (1 << 58)
+        assert oracle(pack(0, 0, candidate), bytes(PAGE))[0] == 6
+        check(pack(0, 0, candidate), bytes(PAGE))
+
+    # Compound metadata and the complete 8-byte old-entry comparison.
+    for i in range(192):
+        slot = (i * 71) % 512
+        table = bytearray(rng.randbytes(PAGE))
+        old = 0x200081 | ((i & 31) << 5)
+        struct.pack_into("<Q", table, slot * 8, old)
+        low = (rng.getrandbits(4) << 3) | (rng.getrandbits(4) << 9)
+        software = rng.getrandbits(7) << 52
+        candidate = NX | 0x600081 | low | software
+        assert oracle(pack(slot, old, candidate), bytes(table))[0] == 0
+        check(pack(slot, old, candidate), bytes(table))
+        check(pack(slot, old ^ 1, candidate), bytes(table))
+
+    # New admissions do not relax policy or capability checks.
+    metadata = (1 << 12) | (1 << 9) | (1 << 52) | (1 << 58)
+    for candidate, caps, status in (
+        (0x600083 | metadata, CAPS, 6),
+        (NX | 0x600185 | metadata, CAPS, 6),
+        (NX | 0x600181 | metadata, 52 | NXE, 8),
+        (NX | 0x600081 | metadata, 52 | PGE, 8),
+        (NX | 0x600081 | metadata, CAPS, 0),
+        (NX | 0x600081 | metadata | (1 << 20), CAPS, 6),
+        (NX | 0x600081 | metadata | (1 << 59), CAPS, 6),
+    ):
+        assert oracle(pack(511, 0, candidate, caps), bytes(PAGE))[0] == status
+        check(pack(511, 0, candidate, caps), bytes(PAGE))
 
     seed = bytes(PAGE)
     for raw in (b"", b"\0" * 24, b"\0" * 31,
