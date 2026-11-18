@@ -20,8 +20,18 @@ mutable-buffer guards, against both the native HIA implementation and an
 intentionally dishonest always-success HIA implementation. Build provenance
 recompiles with empty PATH and checks HIA object against loaded .text bytes.
 
-**Not yet hardware accepted:** This is an exclusive-owner quiescent page-table
-update and its eight bytewise stores are not an atomic CPU CMPXCHG.
-Neither privileged INVLPG nor IPI TLB shootdown, coherent memory provenance,
-real CPU NX fault, concurrent safety, or Linux `mprotect` is implemented.
+**Live single-CPU QEMU experiment:** An isolated PC 32MiB and Q35 64MiB
+non-HIA bridge writes a RET opcode before HIA RX mapping, executes it,
+captures CPU-updated PTE.Accessed, calls original HIA RX->NX code, and
+compares the live PTE to the native reply. After a non-HIA INVLPG data reads
+still succeed but instruction fetch must produce a real #PF with error 0x11
+(P=1, W=0, U=0, I/D=1), exact CR2/RIP, and IST1 entry. Independent
+negative controls demand a stale-but-valid old value be refused with an
+unchanged PTE, and a deliberately restored RX PTE execute after INVLPG.
+All three images must contain byte-exact original HIA .text.
+
+This is still an exclusive-owner quiescent update, and its eight bytewise
+stores are not a CPU CMPXCHG. Privileged INVLPG, CR2, exception entry,
+and the initial test opcode writer remain non-HIA. SMP TLB shootdown,
+provenance, concurrent safety and Linux `mprotect` are not implemented.
 The non-HIA boot/exception bridge and all 17 Linux acceptance gates stay open.

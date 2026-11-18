@@ -226,13 +226,33 @@ def main():
         nx_text = Elf("build/x86-pt-nx-protect.o").section_bytes(".text")
         if Elf("build/x86-pt-nx-protect.so").section_bytes(".text") != nx_text:
             raise ValueError("HIA NX downgrade loaded .text differs")
+        if Elf("build/pt-nx-boot.o").section_bytes(".text") != nx_text:
+            raise ValueError("native HIA NX boot symbol rename changed machine code")
+        for stem in ("pt-nx-fault", "pt-nx-stale", "pt-nx-bypass"):
+            elf64 = Elf("build/" + stem + ".elf")
+            elf32 = Elf("build/" + stem + "-multiboot.elf")
+            entry = elf64.symbol("pt_nx_f0")
+            if (elf32.symbol("pt_nx_f0") != entry or
+                    elf64.text_at(entry, len(nx_text)) != nx_text or
+                    elf32.text_at(entry, len(nx_text)) != nx_text):
+                raise ValueError("live NX image differs from original HIA .text: " + stem)
+        report["x86_pt_nx_hardware"] = {
+            "observer_non_hia": True,
+            "boot_object_sha256": sha(Path("build/pt-nx-boot.o").read_bytes()),
+            "identical_native_code_in_three_boot_images": True,
+            "images_sha256": {
+                stem: sha(Path("build/" + stem + "-multiboot.elf").read_bytes())
+                for stem in ("pt-nx-fault", "pt-nx-stale", "pt-nx-bypass")
+            },
+        }
         report["x86_pt_nx_protect"] = {
             "source_sha256": sha(nx_source),
             "object_sha256": sha(nx_object),
             "text_sha256": sha(nx_text),
             "empty_path_recompiled": True,
             "loaded_text_byte_identity": True,
-            "hardware_instruction_fetch_checked": False,
+            "hardware_instruction_fetch_checked": True,
+            "hardware_observer_is_non_hia": True,
             "tlb_invalidation_emitted_by_hia": False,
             "smp_atomicity_verified": False,
         }
