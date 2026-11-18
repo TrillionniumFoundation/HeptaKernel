@@ -1,0 +1,7 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(x86_access_admit)
+fn x86_access_admit(mapping:u64,intent:u64,cr0:u64,cr4:u64,efer:u64) -> (u32) effects(trap) entry(start)
+block start(mapping:u64,intent:u64,cr0:u64,cr4:u64,efer:u64)
+  dishonest:u32 = const() {"value":0}
+  ret(dishonest)
+end

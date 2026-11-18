@@ -117,3 +117,10 @@ even when huge-page descendants are unused. This is native HIA selfhost code
 with an independent oracle and a dishonest HIA negative control, but does not
 authenticate actual physical RAM, CPU 1GiB/NXE capability, ownership, CR3,
 TLB/SMP synchronization or complete Linux compatibility.
+
+The real HIA scalar access policy in `src/x86_access_gate.hepta` now consumes
+HIA-translated page rights with an explicit CPL0/CPL3, AC, WP, NXE, SMEP
+and SMAP snapshot profile. The independent native oracle and all-grant
+negative control check the *caller-supplied* snapshot. Hardware CPL,
+privileged CRx access, CPU-state provenance, coherent epochs and TLB/SMP
+remain open; this does not implement Linux user-mode memory isolation.
