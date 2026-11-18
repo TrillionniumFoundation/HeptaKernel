@@ -35,15 +35,13 @@ def oracle(raw: bytes, table: bytes, reply_size: int = 16):
     width = caps & 255
     if caps & ~0x3ff or not 32 <= width <= 52:
         return 8, 0, original
-    present = bool(candidate & 1)
-    writable = bool(candidate & 2)
-    user = bool(candidate & 4)
-    global_page = bool(candidate & (1 << 8))
-    nx = bool(candidate & NX)
-    phys = candidate & PA_MASK
-    if candidate != 0 or not expected & 1:
+    # Examine the *old* present mapping, not the proposed zero entry.
+    # Software-defined upper bits are not reserved/rejected by this revoker.
+    phys = expected & PA_MASK
+    if candidate != 0 or not expected & 1 or phys >= (1 << width):
         return 6, 0, original
-    if (nx and not caps & NXE) or (global_page and not caps & PGE):
+    if ((expected & NX) and not (caps & NXE)) or (
+            (expected & (1 << 8)) and not (caps & PGE)):
         return 8, 0, original
     if slot >= 512:
         return 6, 0, original
@@ -122,16 +120,37 @@ def campaign(library: Path):
 
     # A positive lifecycle campaign: clear an existing present PTE, then
     # replay exactly the same expected-old request and reject stale reuse.
-    for _ in range(320):
+    for i in range(320):
         slot = rng.randrange(512)
         table = bytearray(rng.randbytes(PAGE))
-        old = rng.getrandbits(64) | 1
+        old = (rng.randrange(1, 1 << 20) << 12) | 1
+        old |= rng.choice((0, 2, 4, 0x60, 0x80, 0x100, 0x800, NX, NX | 0x160))
         struct.pack_into("<Q", table, slot * 8, old)
         payload = pack(slot, old, 0, CAPS)
         check(payload, bytes(table))
         updated = bytearray(table)
         struct.pack_into("<Q", updated, slot * 8, 0)
         check(payload, bytes(updated))
+
+    # Valid old leaf (including ignored software high bits), physical-width
+    # overflow, missing NXE/PGE and stale 64-bit old are separate paths.
+    for slot, old, caps, expected_status in (
+        (0, 0x400001, CAPS, 0),
+        (511, NX | 0x400061, CAPS, 0),
+        (256, 0x400101, CAPS, 0),
+        (0, (1 << 52) | 0x400001, CAPS, 0),
+        (0, (1 << 55) | 0x400001, CAPS, 0),
+        (0, (1 << 62) | 0x400001, CAPS, 0),
+        (0, 1 << 40 | 1, 32 | NXE | PGE, 6),
+        (0, NX | 0x400001, 52 | PGE, 8),
+        (0, 0x400101, 52 | NXE, 8),
+    ):
+        table = bytearray(PAGE)
+        struct.pack_into("<Q", table, slot * 8, old)
+        assert oracle(pack(slot, old, 0, caps), bytes(table))[0] == expected_status
+        check(pack(slot, old, 0, caps), bytes(table))
+        if expected_status == 0:
+            check(pack(slot, old ^ 0x20, 0, caps), bytes(table))
     seed = bytes(PAGE)
     for raw in (b"", b"\0" * 24, b"\0" * 31,
                 b"\0" * 33, pack(0, 0, 0x8000000000400003) + b"\0"):
