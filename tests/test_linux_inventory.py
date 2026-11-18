@@ -44,8 +44,17 @@ def fixture(root: Path) -> tuple[str, Path]:
         "# source \"ignored/Kconfig\"\n"
         "  source \"nested/with#symbol/Kconfig\"  \n")
     put(root, "arch/x86/Kconfig.extra", "  config SECOND\n")
-    put(root, "include/uapi/linux/demo.h", "int feature;\n")
-    put(root, "arch/x86/include/uapi/asm/unistd.h", "/* abi */\n")
+    put(root, "include/uapi/linux/demo.h",
+        "int feature;\n"
+        "#define UAPI_NUMBER 42\n"
+        " #  define UAPI_CALL(x) ((x) + 1) \\\n"
+        "    + 3\n"
+        "// #define COMMENTED 1\n"
+        "#if 0\n"
+        "#define INACTIVE 3\n"
+        "#endif\n")
+    put(root, "arch/x86/include/uapi/asm/unistd.h",
+        "/* abi */\n# define _NR_foo 7\n")
     put(root, "arch/x86/entry/syscalls/syscall_64.tbl", "0 common read sys_read\n"
         "1 common write sys_write # inline comment\n"
         "# 2 common ignored sys_ignored\n"
@@ -91,6 +100,19 @@ def inspect(report_dir: Path, commit: str) -> None:
             (report_dir / "uapi-paths.jsonl").read_text().splitlines()]
     syscall = [json.loads(line) for line in
                (report_dir / "syscall-table-rows.jsonl").read_text().splitlines()]
+    macros = [json.loads(line) for line in
+              (report_dir / "uapi-macro-rows.jsonl").read_text().splitlines()]
+    assert report["counts"]["uapi_header_files"] == 2
+    assert report["counts"]["unreadable_uapi_header_files"] == 0
+    assert report["counts"]["uapi_macro_rows"] == len(macros) == 4
+    assert [base64.b64decode(x["name_b64"]) for x in macros] == [
+        b"_NR_foo", b"UAPI_NUMBER", b"UAPI_CALL", b"INACTIVE"]
+    assert [x["line"] for x in macros] == [2, 2, 3, 7]
+    assert all(x["status"] == "LEXICAL_DEFINE" for x in macros)
+    assert all(x["blob_oid"] == next(p["oid"] for p in paths
+        if x["path_b64"] == p["path_b64"]) for x in macros)
+    assert base64.b64decode(macros[2]["raw_b64"]).startswith(b" #  define")
+    assert not any(base64.b64decode(x["name_b64"]) == b"COMMENTED" for x in macros)
     assert report["counts"]["syscall_table_files"] == 1
     assert report["counts"]["syscall_table_rows"] == len(syscall) == 4
     assert report["counts"]["syscall_table_unparsed_rows"] == 1
@@ -151,6 +173,7 @@ def inspect(report_dir: Path, commit: str) -> None:
                         ("kconfig-source-edges.jsonl", "kconfig_source_edges_sha256"),
                         ("directory-objects.jsonl", "directory_objects_sha256"),
                         ("uapi-paths.jsonl", "uapi_entries_sha256"),
+                        ("uapi-macro-rows.jsonl", "uapi_macro_rows_sha256"),
                         ("syscall-table-rows.jsonl", "syscall_table_rows_sha256")]:
         assert hashlib.sha256((report_dir / file).read_bytes()).hexdigest() == report[field]
 
@@ -171,6 +194,7 @@ def main() -> None:
         inventory.build(source, lock, second)
         for name in ("source-paths.jsonl", "kconfig-declarations.jsonl", "kconfig-source-edges.jsonl",
                      "directory-objects.jsonl", "uapi-paths.jsonl",
+                     "uapi-macro-rows.jsonl",
                      "syscall-table-rows.jsonl", "report.json"):
             assert (first / name).read_bytes() == (second / name).read_bytes()
         inspect(second, commit)
@@ -199,7 +223,8 @@ def main() -> None:
         "status": "PASS", "fixture_tracked_paths": 11,
         "fixture_kconfig_declarations": 4,
         "fixture_kconfig_source_edges": 5,
-        "fixture_syscall_table_rows": 4, "non_utf8_and_newline_paths": "PASS",
+        "fixture_syscall_table_rows": 4, "fixture_uapi_macro_rows": 4,
+        "non_utf8_and_newline_paths": "PASS",
         "symlink_and_gitlink": "PASS", "immutable_blob_read": "PASS",
         "deterministic_byte_replay": "PASS", "wrong_sha_fail_closed": "PASS",
         "linux_full_rewrite_complete": False,
