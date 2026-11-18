@@ -57,3 +57,16 @@ The experiments do not make CR2, `INVLPG`, exception entry or GDT/IDT
 privilege operations HIA-native; they do not implement concurrency,
 remote TLB shootdown, safe physical frame reclamation, or Linux `mprotect`.
 All 17 complete-kernel gates remain HOLD.
+
+## Single-byte HIA permission-store revision
+
+The HIA commit block now performs one native `buffer.store` of the low PTE
+byte after the complete 64-bit expected-old compare, instead of rewriting
+all eight bytes. The single byte clears RW and leaves seven other bytes
+untouched, including the high NX byte. The independent native oracle and QEMU
+hardware #PF controls must be rerun on the **changed object and image**.
+
+This avoids an eight-store PTE update for this restricted transition; it is
+**not** a 64-bit atomic compare-exchange, does not preclude the race between
+the full-word read and the byte write, and establishes neither a TLB-shootdown
+protocol nor SMP-safe Linux `mprotect`.
