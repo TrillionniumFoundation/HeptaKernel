@@ -61,11 +61,11 @@ def fixture(root: Path) -> tuple[str, Path]:
         "broken\n"
         "3 x32 mmap sys_mmap compat_sys_mmap\n")
     put(root, "drivers/net/demo.c",
-        "/* driver */\\n"
-        "MODULE_DEVICE_TABLE(pci, demo_ids);\\n"
-        "// MODULE_DEVICE_TABLE(usb, commented_ids);\\n"
-        "MODULE_DEVICE_TABLE(weird, );\\n"
-        "MODULE_DEVICE_TABLE (of, other_ids);\\n")
+        "/* driver */\n"
+        "MODULE_DEVICE_TABLE(pci, demo_ids);\n"
+        "// MODULE_DEVICE_TABLE(usb, commented_ids);\n"
+        "MODULE_DEVICE_TABLE(weird, );\n"
+        "MODULE_DEVICE_TABLE (of, other_ids);\n")
     put(root, "with\\backslash.c", "test\n")
     put(root, "line\nfeed.c", "test\n")
     (root / "alias").symlink_to("arch/x86/Kconfig")

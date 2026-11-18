@@ -262,7 +262,7 @@ jobs:
           ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
           assert listing.returncode in (0, 1), listing.stderr
           expected_device = []
-          for tagged in filter(None, listing.stdout.split(b"\\x00")):
+          for tagged in filter(None, listing.stdout.split(b"\x00")):
               assert tagged.startswith(commit.encode() + b":")
               path = tagged[41:]
               ref = by_path[path]
@@ -271,12 +271,12 @@ jobs:
                   "git", "-C", ".upstream/linux", "cat-file", "blob", ref["oid"]
               ])
               assert len(blob) == ref["size"]
-              for number, line in enumerate(blob.split(b"\\n"), 1):
-                  if not re.search(rb"MODULE_DEVICE_TABLE[ \\t]*\\(", line):
+              for number, line in enumerate(blob.split(b"\n"), 1):
+                  if not re.search(rb"MODULE_DEVICE_TABLE[ \t]*\(", line):
                       continue
                   match = re.search(
-                      rb"MODULE_DEVICE_TABLE[ \\t]*\\([ \\t]*([A-Za-z_][A-Za-z_0-9]*)"
-                      rb"[ \\t]*,[ \\t]*([A-Za-z_][A-Za-z_0-9]*)[ \\t]*\\)",
+                      rb"MODULE_DEVICE_TABLE[ \t]*\([ \t]*([A-Za-z_][A-Za-z_0-9]*)"
+                      rb"[ \t]*,[ \t]*([A-Za-z_][A-Za-z_0-9]*)[ \t]*\)",
                       line)
                   expected_device.append((path, ref["oid"], number, line,
                       "LEXICAL_ARGUMENTS" if match else "UNPARSED",
