@@ -19,7 +19,7 @@ NX = 1 << 63
 NXE = 1 << 8
 PGE = 1 << 9
 PA_MASK = ((1 << 52) - 1) & ~(PAGE - 1)
-ALLOWED = PA_MASK | 0x107 | NX
+ALLOWED = PA_MASK | 0xfff | (0x7f << 52) | NX
 CAPS = 52 | NXE | PGE
 
 
@@ -121,6 +121,47 @@ def campaign(library: Path):
                            52 | PGE, 52, 64, 0, MASK64))
         expect = old if rng.randrange(4) else old ^ 1
         check(pack(slot, expect, proposed, caps), table)
+
+    # A real 4KiB leaf accepts PWT/PCD, A/D, PAT and software bits 9-11,
+    # 52-58. With no PKU/PKS capability model, bits 59-62 remain denied.
+    # Check every bit independently against an explicit status expectation,
+    # with stale-old refusal and byte-exact readback on the same request.
+    for bit in (*range(3, 8), *range(9, 12), *range(52, 63)):
+        slot = (bit * 37) % 512
+        table = bytearray(rng.randbytes(PAGE))
+        old = 0x200001 | ((bit & 7) << 5)
+        struct.pack_into("<Q", table, slot * 8, old)
+        candidate = NX | 0x400001 | (1 << bit)
+        expected_status = 6 if bit >= 59 else 0
+        assert oracle(pack(slot, old, candidate), bytes(table))[0] == expected_status
+        check(pack(slot, old, candidate), bytes(table))
+        check(pack(slot, old ^ 1, candidate), bytes(table))
+
+    # Deterministically cover combined metadata, not just singleton bits.
+    # None of these reserved-bit-independent combinations is W+X or U+G.
+    for i in range(192):
+        slot = (i * 71) % 512
+        table = bytearray(rng.randbytes(PAGE))
+        old = 0x200001 | ((i & 31) << 5)
+        struct.pack_into("<Q", table, slot * 8, old)
+        flags = (rng.getrandbits(5) << 3) | (rng.getrandbits(3) << 9)
+        software = rng.getrandbits(7) << 52
+        candidate = NX | 0x400001 | flags | software
+        assert oracle(pack(slot, old, candidate), bytes(table))[0] == 0
+        check(pack(slot, old, candidate), bytes(table))
+        check(pack(slot, old ^ 1, candidate), bytes(table))
+
+    # Metadata acceptance does not relax existing W^X, USER+GLOBAL or PGE.
+    metadata = (1 << 7) | (1 << 9) | (1 << 52) | (1 << 58)
+    for candidate, caps, status in (
+        (0x400003 | metadata, CAPS, 6),
+        (NX | 0x400105 | metadata, CAPS, 6),
+        (NX | 0x400101 | metadata, 52 | NXE, 8),
+        (NX | 0x400101 | metadata, CAPS, 0),
+    ):
+        table = bytearray(PAGE)
+        assert oracle(pack(511, 0, candidate, caps), bytes(table))[0] == status
+        check(pack(511, 0, candidate, caps), bytes(table))
 
     seed = bytes(PAGE)
     for raw in (b"", b"\0" * 24, b"\0" * 31,
