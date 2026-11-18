@@ -145,3 +145,12 @@ requests with an independent byte-level oracle and dishonest HIA control.
 It assumes exclusive quiescent ownership: no native HIA TLB flush, SMP
 shootdown, atomic 64-bit PTE CAS, or Linux mprotect is implemented; see
 `docs/x86-pt-write-protect.md`.
+
+Native HIA now has an additional exact-old **RX to non-executable** 4 KiB
+PTE downgrade (`src/x86_pt_nx_protect.hepta`) preserving all other bits,
+including Accessed/Dirty and physical frame address. It requires quiescent
+exclusive ownership and an NXE-capable CPU profile. Native differential
+oracle, dishonest HIA negative control, and source/object/loaded-text
+binding cover this restricted transition. Hardware fetch-fault acceptance,
+HIA native privileged TLB invalidation, atomic PTE replacement, SMP
+shootdown, ownership provenance and Linux `mprotect` remain open.

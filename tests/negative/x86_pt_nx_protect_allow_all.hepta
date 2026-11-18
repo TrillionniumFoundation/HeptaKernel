@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn x86_pt_nx_protect(request:readbuf,reply:mutbuf,table:mutbuf) -> (u32) effects() entry(start)
+block start(request:readbuf,reply:mutbuf,table:mutbuf)
+  always:u32 = const() {"value":0}
+  ret(always)
+end
