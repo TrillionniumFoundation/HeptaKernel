@@ -419,7 +419,8 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         # An independent marker is mandatory on every execution that reaches
         # the native HIA table commit, including faults and dishonest controls.
         precommit = {"reserved_rejected", "nonvolatile_rejected", "protected_rejected",
-                     "pte_unsafe_rejected", "pt_commit_conflict_rejected"}
+                     "pte_unsafe_rejected", "pt_commit_conflict_rejected",
+                     "pdpt_1g_hardware", "pdpt_1g_stale", "pdpt_1g_decoy"}
         accepted = accepted and (pt_commit_verified == (mode not in precommit | {"user_gdt_conflict_rejected", "idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected", "rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected", "upper_user_stale_rejected"}))
         accepted = accepted and (upper_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"}))
         accepted = accepted and (upper_stale == (mode == "upper_user_stale_rejected"))
