@@ -1,0 +1,151 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(x86_access_admit)
+fn x86_access_admit(mapping:u64,intent:u64,cr0:u64,cr4:u64,efer:u64) -> (u32) effects(trap) entry(start)
+block start(mapping:u64,intent:u64,cr0:u64,cr4:u64,efer:u64)
+  a_success:u64 = const() {"value":9223372036854775808}
+  a_reserved:u64 = const() {"value":1148417904979476480}
+  a_zero:u64 = const() {"value":0}
+  a_tag:u64 = bit.and(mapping,a_success)
+  a_other:u64 = bit.and(mapping,a_reserved)
+  a_tag_ok:bool = compare.eq(a_tag,a_success)
+  a_bits_ok:bool = compare.eq(a_other,a_zero)
+  a_ok:bool = bool.and(a_tag_ok,a_bits_ok)
+  branch a_ok check_intent(mapping,intent,cr0,cr4,efer) bad_mapping()
+block bad_mapping()
+  am_code:u32 = const() {"value":1}
+  ret(am_code)
+block check_intent(i_mapping:u64,i_intent:u64,i_cr0:u64,i_cr4:u64,i_efer:u64)
+  i_mask:u64 = const() {"value":15}
+  i_write:u64 = const() {"value":2}
+  i_fetch:u64 = const() {"value":4}
+  i_zero:u64 = const() {"value":0}
+  i_allowed:u64 = bit.and(i_intent,i_mask)
+  i_good_bits:bool = compare.eq(i_allowed,i_intent)
+  i_w:u64 = bit.and(i_intent,i_write)
+  i_f:u64 = bit.and(i_intent,i_fetch)
+  i_is_w:bool = compare.ne(i_w,i_zero)
+  i_is_f:bool = compare.ne(i_f,i_zero)
+  i_both_modes:bool = bool.and(i_is_w,i_is_f)
+  i_separate:bool = bool.not(i_both_modes)
+  i_valid:bool = bool.and(i_good_bits,i_separate)
+  branch i_valid check_cpu(i_mapping,i_intent,i_cr0,i_cr4,i_efer) bad_intent()
+block bad_intent()
+  bi_code:u32 = const() {"value":2}
+  ret(bi_code)
+block check_cpu(c_mapping:u64,c_intent:u64,c_cr0:u64,c_cr4:u64,c_efer:u64)
+  c_cr0_long:u64 = const() {"value":2147483649}
+  c_cr4_pae:u64 = const() {"value":32}
+  c_efer_long:u64 = const() {"value":1280}
+  c_cr4_deny:u64 = const() {"value":135168}
+  c_zero:u64 = const() {"value":0}
+  c_c0:u64 = bit.and(c_cr0,c_cr0_long)
+  c_c4:u64 = bit.and(c_cr4,c_cr4_pae)
+  c_e:u64 = bit.and(c_efer,c_efer_long)
+  c_bad4:u64 = bit.and(c_cr4,c_cr4_deny)
+  c_ok0:bool = compare.eq(c_c0,c_cr0_long)
+  c_ok4:bool = compare.eq(c_c4,c_cr4_pae)
+  c_oke:bool = compare.eq(c_e,c_efer_long)
+  c_okprofile:bool = compare.eq(c_bad4,c_zero)
+  c_pair:bool = bool.and(c_ok0,c_ok4)
+  c_triplet:bool = bool.and(c_oke,c_okprofile)
+  c_valid:bool = bool.and(c_pair,c_triplet)
+  branch c_valid check_nxe(c_mapping,c_intent,c_cr0,c_cr4,c_efer) bad_cpu()
+block bad_cpu()
+  bc_code:u32 = const() {"value":3}
+  ret(bc_code)
+block check_nxe(n_mapping:u64,n_intent:u64,n_cr0:u64,n_cr4:u64,n_efer:u64)
+  n_xmask:u64 = const() {"value":1152921504606846976}
+  n_nxemask:u64 = const() {"value":2048}
+  n_zero:u64 = const() {"value":0}
+  n_x:u64 = bit.and(n_mapping,n_xmask)
+  n_nxe:u64 = bit.and(n_efer,n_nxemask)
+  n_not_x:bool = compare.eq(n_x,n_zero)
+  n_not_nxe:bool = compare.eq(n_nxe,n_zero)
+  n_incompatible:bool = bool.and(n_not_x,n_not_nxe)
+  branch n_incompatible bad_nxe() check_user(n_mapping,n_intent,n_cr0,n_cr4)
+block bad_nxe()
+  bn_code:u32 = const() {"value":9}
+  ret(bn_code)
+block check_user(u_mapping:u64,u_intent:u64,u_cr0:u64,u_cr4:u64)
+  u_user:u64 = const() {"value":1}
+  u_us_mask:u64 = const() {"value":2305843009213693952}
+  u_zero:u64 = const() {"value":0}
+  u_want:u64 = bit.and(u_intent,u_user)
+  u_can:u64 = bit.and(u_mapping,u_us_mask)
+  u_wants:bool = compare.ne(u_want,u_zero)
+  u_mapped:bool = compare.ne(u_can,u_zero)
+  u_no:bool = bool.not(u_mapped)
+  u_denied:bool = bool.and(u_wants,u_no)
+  branch u_denied bad_user() check_smap(u_mapping,u_intent,u_cr0,u_cr4,u_wants,u_mapped)
+block bad_user()
+  bu_code:u32 = const() {"value":4}
+  ret(bu_code)
+block check_smap(s_mapping:u64,s_intent:u64,s_cr0:u64,s_cr4:u64,s_user:bool,s_pageuser:bool)
+  s_smap_mask:u64 = const() {"value":2097152}
+  s_execute_mask:u64 = const() {"value":4}
+  s_ac_mask:u64 = const() {"value":8}
+  s_zero:u64 = const() {"value":0}
+  s_smap:u64 = bit.and(s_cr4,s_smap_mask)
+  s_exec:u64 = bit.and(s_intent,s_execute_mask)
+  s_ac:u64 = bit.and(s_intent,s_ac_mask)
+  s_active:bool = compare.ne(s_smap,s_zero)
+  s_is_exec:bool = compare.ne(s_exec,s_zero)
+  s_ac_set:bool = compare.ne(s_ac,s_zero)
+  s_super:bool = bool.not(s_user)
+  s_data:bool = bool.not(s_is_exec)
+  s_noac:bool = bool.not(s_ac_set)
+  s_super_page:bool = bool.and(s_super,s_pageuser)
+  s_guard1:bool = bool.and(s_active,s_data)
+  s_guard2:bool = bool.and(s_noac,s_super_page)
+  s_denied:bool = bool.and(s_guard1,s_guard2)
+  branch s_denied bad_smap() check_smep(s_mapping,s_intent,s_cr0,s_cr4,s_user,s_pageuser,s_is_exec)
+block bad_smap()
+  bs_code:u32 = const() {"value":8}
+  ret(bs_code)
+block check_smep(e_mapping:u64,e_intent:u64,e_cr0:u64,e_cr4:u64,e_user:bool,e_pageuser:bool,e_fetch:bool)
+  e_smep_mask:u64 = const() {"value":1048576}
+  e_zero:u64 = const() {"value":0}
+  e_on:u64 = bit.and(e_cr4,e_smep_mask)
+  e_enabled:bool = compare.ne(e_on,e_zero)
+  e_super:bool = bool.not(e_user)
+  e_super_page:bool = bool.and(e_super,e_pageuser)
+  e_fetch_on:bool = bool.and(e_fetch,e_enabled)
+  e_denied:bool = bool.and(e_fetch_on,e_super_page)
+  branch e_denied bad_smep() check_write(e_mapping,e_intent,e_cr0,e_fetch,e_user)
+block bad_smep()
+  be_code:u32 = const() {"value":7}
+  ret(be_code)
+block check_write(w_mapping:u64,w_intent:u64,w_cr0:u64,w_fetch:bool,w_user:bool)
+  w_intent_write:u64 = const() {"value":2}
+  w_rw_mask:u64 = const() {"value":4611686018427387904}
+  w_wp_mask:u64 = const() {"value":65536}
+  w_zero:u64 = const() {"value":0}
+  w_want:u64 = bit.and(w_intent,w_intent_write)
+  w_can:u64 = bit.and(w_mapping,w_rw_mask)
+  w_wp:u64 = bit.and(w_cr0,w_wp_mask)
+  w_requested:bool = compare.ne(w_want,w_zero)
+  w_writable:bool = compare.ne(w_can,w_zero)
+  w_wp_on:bool = compare.ne(w_wp,w_zero)
+  w_not_rw:bool = bool.not(w_writable)
+  w_restrict:bool = bool.or(w_user,w_wp_on)
+  w_forbidden:bool = bool.and(w_not_rw,w_restrict)
+  w_denied:bool = bool.and(w_requested,w_forbidden)
+  branch w_denied bad_write() check_exec(w_mapping,w_fetch)
+block bad_write()
+  bw_code:u32 = const() {"value":5}
+  ret(bw_code)
+block check_exec(x_mapping:u64,x_fetch:bool)
+  x_xmask:u64 = const() {"value":1152921504606846976}
+  x_zero:u64 = const() {"value":0}
+  x_has:u64 = bit.and(x_mapping,x_xmask)
+  x_allowed:bool = compare.ne(x_has,x_zero)
+  x_no:bool = bool.not(x_allowed)
+  x_denied:bool = bool.and(x_fetch,x_no)
+  branch x_denied bad_execute() allowed()
+block bad_execute()
+  bx_code:u32 = const() {"value":6}
+  ret(bx_code)
+block allowed()
+  ok_code:u32 = const() {"value":0}
+  ret(ok_code)
+end
