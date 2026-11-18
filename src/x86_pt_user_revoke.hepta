@@ -1,0 +1,221 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn x86_pt_user_revoke(request:readbuf,reply:mutbuf,table:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,table:mutbuf)
+  pc_reply_len:usize = buffer.len(reply)
+  pc_reply_min:usize = const() {"value":16}
+  pc_reply_ok:bool = compare.ge(pc_reply_len,pc_reply_min)
+  branch pc_reply_ok check_request(request,reply,table) short_reply()
+block short_reply()
+  pc_short:u32 = const() {"value":1}
+  ret(pc_short)
+block check_request(pc_req:readbuf,pc_reply:mutbuf,pc_table:mutbuf)
+  pc_req_len:usize = buffer.len(pc_req)
+  pc_req_expected:usize = const() {"value":32}
+  pc_req_ok:bool = compare.eq(pc_req_len,pc_req_expected)
+  branch pc_req_ok check_table(pc_req,pc_reply,pc_table) bad_request(pc_reply)
+block bad_request(pc_bad_reply:mutbuf)
+  pc_bad_code:u32 = const() {"value":2}
+  pc_bad_zero:u64 = const() {"value":0}
+  pc_bad_result:u32 = call(pc_bad_reply,pc_bad_code,pc_bad_zero) {"function":"write_reply"}
+  ret(pc_bad_result)
+block check_table(pc_table_req:readbuf,pc_table_reply:mutbuf,pc_table_state:mutbuf)
+  pc_table_len:usize = buffer.len(pc_table_state)
+  pc_table_expected:usize = const() {"value":4096}
+  pc_table_ok:bool = compare.eq(pc_table_len,pc_table_expected)
+  branch pc_table_ok decode(pc_table_req,pc_table_reply,pc_table_state) bad_table(pc_table_reply)
+block bad_table(pc_bad_table_reply:mutbuf)
+  pc_bad_table_code:u32 = const() {"value":4}
+  pc_bad_table_zero:u64 = const() {"value":0}
+  pc_bad_table_result:u32 = call(pc_bad_table_reply,pc_bad_table_code,pc_bad_table_zero) {"function":"write_reply"}
+  ret(pc_bad_table_result)
+block decode(pc_wire:readbuf,pc_output:mutbuf,pc_page:mutbuf)
+  pc_o0:usize = const() {"value":0}
+  pc_o8:usize = const() {"value":8}
+  pc_o16:usize = const() {"value":16}
+  pc_o24:usize = const() {"value":24}
+  pc_slot:u64 = call(pc_wire,pc_o0) {"function":"read_request_u64"}
+  pc_expected_old:u64 = call(pc_wire,pc_o8) {"function":"read_request_u64"}
+  pc_candidate:u64 = call(pc_wire,pc_o16) {"function":"read_request_u64"}
+  pc_caps:u64 = call(pc_wire,pc_o24) {"function":"read_request_u64"}
+  jump validate(pc_output,pc_page,pc_slot,pc_expected_old,pc_candidate,pc_caps)
+block validate(pc_valid_reply:mutbuf,pc_valid_page:mutbuf,pc_valid_slot:u64,pc_valid_old:u64,pc_valid_new:u64,pc_valid_caps:u64)
+  pc_zero:u64 = const() {"value":0}
+  pc_one:u64 = const() {"value":1}
+  pc_two:u64 = const() {"value":2}
+  pc_four:u64 = const() {"value":4}
+  pc_nine:u64 = const() {"value":256}
+  pc_sixteen:u64 = const() {"value":512}
+  pc_page_limit:u64 = const() {"value":512}
+  pc_cap_mask:u64 = const() {"value":1023}
+  pc_width_mask:u64 = const() {"value":255}
+  pc_min_width:u64 = const() {"value":32}
+  pc_max_width:u64 = const() {"value":52}
+  pc_forbidden_mask:u64 = const() {"value":9218868437227409144}
+  pc_phys_mask:u64 = const() {"value":4503599627366400}
+  pc_nx_mask:u64 = const() {"value":9223372036854775808}
+  pc_slot_ok:bool = compare.lt(pc_valid_slot,pc_page_limit)
+  pc_caps_form:bool = compare.le(pc_valid_caps,pc_cap_mask)
+  pc_width:u64 = bit.and(pc_valid_caps,pc_width_mask)
+  pc_width_min_ok:bool = compare.le(pc_min_width,pc_width)
+  pc_width_max_ok:bool = compare.le(pc_width,pc_max_width)
+  pc_width_range:bool = bool.and(pc_width_min_ok,pc_width_max_ok)
+  pc_caps_ok:bool = bool.and(pc_caps_form,pc_width_range)
+  branch pc_caps_ok check_bits(pc_valid_reply,pc_valid_page,pc_valid_slot,pc_valid_old,pc_valid_new,pc_valid_caps,pc_width) bad_caps(pc_valid_reply)
+block bad_caps(pc_cap_reply:mutbuf)
+  pc_cap_code:u32 = const() {"value":8}
+  pc_cap_zero:u64 = const() {"value":0}
+  pc_cap_result:u32 = call(pc_cap_reply,pc_cap_code,pc_cap_zero) {"function":"write_reply"}
+  ret(pc_cap_result)
+block check_bits(pc_bits_reply:mutbuf,pc_bits_page:mutbuf,pc_bits_slot:u64,pc_bits_old:u64,pc_bits_new:u64,pc_bits_caps:u64,pc_bits_width:u64)
+  pg_zero:u64 = const() {"value":0}
+  pg_one:u64 = const() {"value":1}
+  pg_wbit:u64 = const() {"value":2}
+  pg_ubit:u64 = const() {"value":4}
+  pg_gbit:u64 = const() {"value":256}
+  pg_nxbit:u64 = const() {"value":9223372036854775808}
+  pg_high_reserved:u64 = const() {"value":9218868437227405312}
+  pg_phys_mask:u64 = const() {"value":4503599627366400}
+  pg_present_value:u64 = bit.and(pc_bits_old,pg_one)
+  pg_present:bool = compare.eq(pg_present_value,pg_one)
+  pg_w_value:u64 = bit.and(pc_bits_old,pg_wbit)
+  pg_writable:bool = compare.eq(pg_w_value,pg_wbit)
+  pg_nx_value:u64 = bit.and(pc_bits_old,pg_nxbit)
+  pg_nx:bool = compare.eq(pg_nx_value,pg_nxbit)
+  pg_reserved_value:u64 = bit.and(pc_bits_old,pg_high_reserved)
+  pg_reserved_ok:bool = compare.eq(pg_reserved_value,pg_zero)
+  pg_phys:u64 = bit.and(pc_bits_old,pg_phys_mask)
+  pg_limit:u64 = int.shl.checked(pg_one,pc_bits_width)
+  pg_phys_ok:bool = compare.lt(pg_phys,pg_limit)
+  pg_u_value:u64 = bit.and(pc_bits_old,pg_ubit)
+  pg_user:bool = compare.ne(pg_u_value,pg_zero)
+  pg_g_value:u64 = bit.and(pc_bits_old,pg_gbit)
+  pg_global:bool = compare.ne(pg_g_value,pg_zero)
+  pg_user_global:bool = bool.and(pg_user,pg_global)
+  pg_not_user_global:bool = bool.not(pg_user_global)
+  pg_new_expected:u64 = int.sub.wrap(pc_bits_old,pg_ubit)
+  pg_new_exact:bool = compare.eq(pc_bits_new,pg_new_expected)
+  pg_a:bool = bool.and(pg_present,pg_user)
+  pg_b:bool = bool.and(pg_reserved_ok,pg_phys_ok)
+  pg_c:bool = bool.and(pg_not_user_global,pg_new_exact)
+  pg_d:bool = bool.and(pg_a,pg_b)
+  pg_allowed:bool = bool.and(pg_d,pg_c)
+  branch pg_allowed check_caps(pc_bits_reply,pc_bits_page,pc_bits_slot,pc_bits_old,pc_bits_new,pc_bits_caps,pg_nx,pg_global) bad_candidate(pc_bits_reply)
+block check_caps(pg_caps_reply:mutbuf,pg_caps_page:mutbuf,pg_caps_slot:u64,pg_caps_old:u64,pg_caps_new:u64,pg_caps_profile:u64,pg_caps_nx:bool,pg_caps_global:bool)
+  pg_caps_zero:u64 = const() {"value":0}
+  pg_caps_nxe_mask:u64 = const() {"value":256}
+  pg_caps_pge_mask:u64 = const() {"value":512}
+  pg_caps_nxe_value:u64 = bit.and(pg_caps_profile,pg_caps_nxe_mask)
+  pg_caps_pge_value:u64 = bit.and(pg_caps_profile,pg_caps_pge_mask)
+  pg_caps_nxe_ok:bool = compare.ne(pg_caps_nxe_value,pg_caps_zero)
+  pg_caps_pge_ok:bool = compare.ne(pg_caps_pge_value,pg_caps_zero)
+  pg_caps_missing_nxe:bool = bool.not(pg_caps_nxe_ok)
+  pg_caps_missing_pge:bool = bool.not(pg_caps_pge_ok)
+  pg_caps_illegal_nx:bool = bool.and(pg_caps_nx,pg_caps_missing_nxe)
+  pg_caps_illegal_global:bool = bool.and(pg_caps_global,pg_caps_missing_pge)
+  pg_caps_unsupported:bool = bool.or(pg_caps_illegal_nx,pg_caps_illegal_global)
+  branch pg_caps_unsupported bad_caps(pg_caps_reply) check_slot(pg_caps_reply,pg_caps_page,pg_caps_slot,pg_caps_old,pg_caps_new)
+block bad_candidate(pc_candidate_reply:mutbuf)
+  pc_candidate_code:u32 = const() {"value":6}
+  pc_candidate_zero:u64 = const() {"value":0}
+  pc_candidate_result:u32 = call(pc_candidate_reply,pc_candidate_code,pc_candidate_zero) {"function":"write_reply"}
+  ret(pc_candidate_result)
+block check_slot(pc_slot_reply:mutbuf,pc_slot_page:mutbuf,pc_slot_num:u64,pc_slot_old:u64,pc_slot_new:u64)
+  pc_slot_max:u64 = const() {"value":512}
+  pc_slot_inside:bool = compare.lt(pc_slot_num,pc_slot_max)
+  branch pc_slot_inside compare_old(pc_slot_reply,pc_slot_page,pc_slot_num,pc_slot_old,pc_slot_new) bad_candidate(pc_slot_reply)
+block compare_old(pc_compare_reply:mutbuf,pc_compare_page:mutbuf,pc_compare_index:u64,pc_compare_expected:u64,pc_compare_new:u64)
+  pc_eight:u64 = const() {"value":8}
+  pc_offset64:u64 = int.mul.wrap(pc_compare_index,pc_eight)
+  pc_offset:usize = int.cast(pc_offset64) {"mode":"wrap"}
+  pc_seen:u64 = call(pc_compare_page,pc_offset) {"function":"read_table_u64"}
+  pc_equal:bool = compare.eq(pc_seen,pc_compare_expected)
+  branch pc_equal commit(pc_compare_reply,pc_compare_page,pc_offset,pc_compare_new) mismatch(pc_compare_reply)
+block mismatch(pc_mismatch_reply:mutbuf)
+  pc_mismatch_code:u32 = const() {"value":9}
+  pc_mismatch_zero:u64 = const() {"value":0}
+  pc_mismatch_result:u32 = call(pc_mismatch_reply,pc_mismatch_code,pc_mismatch_zero) {"function":"write_reply"}
+  ret(pc_mismatch_result)
+block commit(pc_commit_reply:mutbuf,pc_commit_page:mutbuf,pc_commit_offset:usize,pc_commit_new:u64)
+  pc_commit_written:u32 = call(pc_commit_page,pc_commit_offset,pc_commit_new) {"function":"write_table_u64"}
+  pc_commit_ok:u32 = const() {"value":0}
+  pc_commit_result:u32 = call(pc_commit_reply,pc_commit_ok,pc_commit_new) {"function":"write_reply"}
+  ret(pc_commit_result)
+end
+fn read_request_u64(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
+  pc_rzero:u64 = const() {"value":0}
+  jump loop(bytes,offset,pc_rzero,pc_rzero)
+block loop(pc_rbytes:readbuf,pc_rbase:usize,pc_ri:u64,pc_racc:u64)
+  pc_rwidth:u64 = const() {"value":8}
+  pc_rmore:bool = compare.lt(pc_ri,pc_rwidth)
+  branch pc_rmore byte(pc_rbytes,pc_rbase,pc_ri,pc_racc) done(pc_racc)
+block byte(pc_rbbytes:readbuf,pc_rbbase:usize,pc_rbi:u64,pc_rbacc:u64)
+  pc_rbindex:usize = int.cast(pc_rbi) {"mode":"wrap"}
+  pc_rbaddress:usize = int.add.wrap(pc_rbbase,pc_rbindex)
+  pc_rboctet:u8 = buffer.load(pc_rbbytes,pc_rbaddress)
+  pc_rbwide:u64 = int.cast(pc_rboctet) {"mode":"wrap"}
+  pc_rbeight:u64 = const() {"value":8}
+  pc_rbshift:u64 = int.mul.wrap(pc_rbi,pc_rbeight)
+  pc_rbvalue:u64 = int.shl.checked(pc_rbwide,pc_rbshift)
+  pc_rbnext:u64 = bit.or(pc_rbacc,pc_rbvalue)
+  pc_rbone:u64 = const() {"value":1}
+  pc_rbinext:u64 = int.add.wrap(pc_rbi,pc_rbone)
+  jump loop(pc_rbbytes,pc_rbbase,pc_rbinext,pc_rbnext)
+block done(pc_rdone:u64)
+  ret(pc_rdone)
+end
+fn read_table_u64(bytes:mutbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:mutbuf,offset:usize)
+  pc_tzero:u64 = const() {"value":0}
+  jump loop(bytes,offset,pc_tzero,pc_tzero)
+block loop(pc_tbytes:mutbuf,pc_tbase:usize,pc_ti:u64,pc_tacc:u64)
+  pc_twidth:u64 = const() {"value":8}
+  pc_tmore:bool = compare.lt(pc_ti,pc_twidth)
+  branch pc_tmore byte(pc_tbytes,pc_tbase,pc_ti,pc_tacc) done(pc_tacc)
+block byte(pc_tbbytes:mutbuf,pc_tbbase:usize,pc_tbi:u64,pc_tbacc:u64)
+  pc_tbindex:usize = int.cast(pc_tbi) {"mode":"wrap"}
+  pc_tbaddress:usize = int.add.wrap(pc_tbbase,pc_tbindex)
+  pc_tboctet:u8 = buffer.load(pc_tbbytes,pc_tbaddress)
+  pc_tbwide:u64 = int.cast(pc_tboctet) {"mode":"wrap"}
+  pc_tbeight:u64 = const() {"value":8}
+  pc_tbshift:u64 = int.mul.wrap(pc_tbi,pc_tbeight)
+  pc_tbvalue:u64 = int.shl.checked(pc_tbwide,pc_tbshift)
+  pc_tbnext:u64 = bit.or(pc_tbacc,pc_tbvalue)
+  pc_tbone:u64 = const() {"value":1}
+  pc_tbinext:u64 = int.add.wrap(pc_tbi,pc_tbone)
+  jump loop(pc_tbbytes,pc_tbbase,pc_tbinext,pc_tbnext)
+block done(pc_tdone:u64)
+  ret(pc_tdone)
+end
+fn write_table_u64(bytes:mutbuf,offset:usize,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(bytes:mutbuf,offset:usize,value:u64)
+  pc_wzero:u64 = const() {"value":0}
+  jump loop(bytes,offset,value,pc_wzero)
+block loop(pc_wbytes:mutbuf,pc_wbase:usize,pc_word:u64,pc_wi:u64)
+  pc_wwidth:u64 = const() {"value":8}
+  pc_wmore:bool = compare.lt(pc_wi,pc_wwidth)
+  branch pc_wmore byte(pc_wbytes,pc_wbase,pc_word,pc_wi) done()
+block byte(pc_wbbytes:mutbuf,pc_wbbase:usize,pc_wbword:u64,pc_wbi:u64)
+  pc_wbindex:usize = int.cast(pc_wbi) {"mode":"wrap"}
+  pc_wbaddress:usize = int.add.wrap(pc_wbbase,pc_wbindex)
+  pc_wbeight:u64 = const() {"value":8}
+  pc_wbshift:u64 = int.mul.wrap(pc_wbi,pc_wbeight)
+  pc_wbvalue:u64 = int.shr.checked(pc_wbword,pc_wbshift)
+  pc_wboctet:u8 = int.cast(pc_wbvalue) {"mode":"wrap"}
+  _ = buffer.store(pc_wbbytes,pc_wbaddress,pc_wboctet)
+  pc_wbone:u64 = const() {"value":1}
+  pc_wbinext:u64 = int.add.wrap(pc_wbi,pc_wbone)
+  jump loop(pc_wbbytes,pc_wbbase,pc_wbword,pc_wbinext)
+block done()
+  pc_wdone:u32 = const() {"value":0}
+  ret(pc_wdone)
+end
+fn write_reply(reply:mutbuf,status:u32,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(reply:mutbuf,status:u32,value:u64)
+  pc_reply_off0:usize = const() {"value":0}
+  pc_reply_off8:usize = const() {"value":8}
+  pc_reply_status64:u64 = int.cast(status) {"mode":"wrap"}
+  pc_reply_a:u32 = call(reply,pc_reply_off0,pc_reply_status64) {"function":"write_table_u64"}
+  pc_reply_b:u32 = call(reply,pc_reply_off8,value) {"function":"write_table_u64"}
+  ret(status)
+end
