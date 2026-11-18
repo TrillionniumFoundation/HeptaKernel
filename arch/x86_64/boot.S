@@ -1377,7 +1377,10 @@ pte_fill_4m:
     movl pte_caps(%rip), %eax
     movq %rax, pt_protect_request+24(%rip)
 #ifdef HEPTAKERNEL_TEST_PT_PROTECT_STALE
+    /* The stale candidate must itself be a valid RW->RO transition:
+     * otherwise the HIA gate rejects format before comparing the old PTE. */
     xorq $8, pt_protect_request+8(%rip)
+    xorq $8, pt_protect_request+16(%rip)
 #endif
     movq $-1, pt_protect_reply(%rip)
     movq $-1, pt_protect_reply+8(%rip)
