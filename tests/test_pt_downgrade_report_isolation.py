@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 SCHEMA = "heptakernel.pt-native-downgrade.v1"
-CASES = 4016
+CASES = 4034
 CONFIG = {
     "RX_TO_NX": (
         Path("build/x86-pt-nx-protect-report.json"),
@@ -27,6 +27,11 @@ CONFIG = {
         Path("build/x86-pt-write-protect-report.json"),
         Path("src/x86_pt_write_protect.hepta"),
         Path("build/x86-pt-write-protect.so"),
+    ),
+    "USER_TO_SUPERVISOR": (
+        Path("build/x86-pt-user-revoke-report.json"),
+        Path("src/x86_pt_user_revoke.hepta"),
+        Path("build/x86-pt-user-revoke.so"),
     ),
 }
 
@@ -113,8 +118,8 @@ def main() -> None:
             "allowed": report["allowed"],
             "refused": report["refused"],
         }
-    require(data["RX_TO_NX"]["library_sha256"] != data["RW_TO_RO"]["library_sha256"],
-            "two native operations unexpectedly have identical shared-object identity")
+    require(len({row["library_sha256"] for row in data.values()}) == len(CONFIG),
+            "distinct native operations unexpectedly share a loaded-code identity")
     result = {
         "schema": "heptakernel.pt-downgrade-isolation.v1",
         "status": "PASS",

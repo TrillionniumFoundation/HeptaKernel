@@ -46,3 +46,18 @@ instruction-fetch #PF checks are required for the **new binary**.
 A single byte store is not a linearizable 64-bit CAS of the old PTE. The
 expected-old comparison still precedes the store without atomic linkage;
 TLB invalidation and multi-CPU shootdown remain external/unfinished.
+
+## Software-defined high PTE bits (native HIA)
+
+The old-entry admission now permits bits **52–58** (software-available
+metadata) and carries all of them unchanged through the exact-old permission
+downgrade. The implementation still rejects bits **59–62** until protection
+key controls and their CPU state have independent modeling and validation.
+The physical address width, complete 64-bit old-entry comparison, native
+one-byte permission store, and all other existing checks remain unchanged.
+The independent native differential oracle now enumerates each high bit,
+including stale-old rejection for the newly permitted values.
+
+This change does not implement protection keys, atomic 64-bit CAS, TLB
+invalidation, SMP shootdown, or Linux address-space management. Its verified
+scope remains exclusive-owner, quiescent 4 KiB PTE downgrades.

@@ -37,7 +37,7 @@ def oracle(raw: bytes, table: bytes, reply_size: int = 16):
     # A/D, PAT, software, cache and global bits must be preserved exactly.
     eligible = (
         (expected & 3) == 1 and not (expected & NX)
-        and not (expected & (((1 << 11) - 1) << 52))
+        and not (expected & (0xF << 59))
         and (expected & PA_MASK) < (1 << width)
         and not ((expected & 4) and (expected & 256))
         and candidate == (expected | NX)
@@ -106,6 +106,23 @@ def campaign(path: Path):
         downgraded = bytearray(table)
         struct.pack_into("<Q", downgraded, slot * 8, (old | NX))
         check(raw, bytes(downgraded))
+
+    # Carry OS software metadata 52..58 through the NX permission store.
+    # Reject protection-key positions 59..62 until PKU/PKE is modeled.
+    for bit in range(52, 63):
+        old = 0x400001 | (1 << bit)
+        new = old | (1 << 63)
+        page = bytearray(PAGE)
+        struct.pack_into("<Q", page, 511 * 8, old)
+        payload = pack(511, old, new)
+        permitted = bit < 59
+        assert oracle(payload, bytes(page))[0] == (0 if permitted else 6)
+        check(payload, bytes(page))
+        if permitted:
+            stale = bytearray(page)
+            struct.pack_into("<Q", stale, 511 * 8, new)
+            assert oracle(payload, bytes(stale))[0] == 9
+            check(payload, bytes(stale))
 
     # Mutation campaign varies present, NXE, PGE, RW, physical width, stale
     # old bytes, no-op requests, illegal upgrades and user/global aliasing.
