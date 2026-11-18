@@ -141,3 +141,36 @@ invocations and binary source files are not included. Resolving PCI/USB/ACPI/OF
 identifier values, generated aliases, Kconfig activation and device-driver
 behavior remains open. This addition neither changes `inventory_complete=false`
 nor closes any of the 17 Linux gates or 422 x86-64 syscall obligations.
+
+
+## Position-bound multiline device-table invocations
+
+The second output, **module-device-table-invocations.jsonl**, closes the
+same-line-only discovery gap in the earlier device-table index without
+reinterpreting or erasing its 10,106 baseline lexical rows. Every matching
+C/H/Rust source blob at the fixed Linux commit is searched for
+MODULE_DEVICE_TABLE followed by zero or more spaces, tabs or physical
+newlines and an opening parenthesis. Each retained record carries the
+original Git blob OID, raw-byte path, absolute start/end byte offsets
+(end exclusive), first/last physical source lines, exact source bytes
+(Base64), and parsed bus/table identifiers only where both arguments
+are plain identifiers.
+
+Calls with line-separated arguments are included. Incomplete or compound
+argument lists are explicitly UNPARSED; spans without a closing parenthesis
+in the next 4096 bytes are TRUNCATED, not silently discarded. Comments,
+preprocessor definitions and disabled branches are still lexical records,
+not evidence that the call is active. The bounded lexer does **not** expand
+macros, resolve includes or conditionals, interpret comments, prove C syntax,
+or infer PCI/USB/ACPI/OF IDs; nonwhitespace between the macro name and
+parenthesis and binary files are outside this lexer. Even a fully parsed token
+pair is only a reference, not an implemented or qualified driver.
+
+The new artifact, total/multiline/unparsed counts and SHA-256 are bound to
+the pinned source tree in report.json. CI independently reconstructs
+all byte spans from the immutable original Git blobs using a separate
+byte-scanning oracle, and a distinct fixture covers multiline, malformed,
+truncated, commented and invalid-UTF8/newline-path cases. The original
+same-line artifact is retained for comparability and tested unchanged.
+This is a source inventory improvement only: all 17 Linux acceptance gates,
+422 syscall obligations, and inventory_complete=false remain open.
