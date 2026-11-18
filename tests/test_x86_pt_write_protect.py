@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import hashlib
 import json
 import random
 import struct
@@ -144,6 +145,14 @@ def main():
             return
         raise SystemExit("dishonest RW downgrader unexpectedly passed")
     result = campaign(args.library)
+    # Bind every passing native oracle report to its own operation and inputs.
+    # A malicious candidate is never allowed to publish a passing report.
+    result.update(
+        schema="heptakernel.pt-native-downgrade.v1",
+        operation="RW_TO_RO",
+        source_sha256=hashlib.sha256(Path("src/x86_pt_write_protect.hepta").read_bytes()).hexdigest(),
+        library_sha256=hashlib.sha256(args.library.read_bytes()).hexdigest(),
+    )
     Path("build/x86-pt-write-protect-report.json").write_text(json.dumps(result, indent=2) + "\n")
     print("native HIA RW downgrade:", result)
 
