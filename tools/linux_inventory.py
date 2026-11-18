@@ -26,6 +26,12 @@ OID = re.compile(rb"^[0-9a-f]{40}$")
 UAPI_DEFINE = re.compile(
     rb"^[ \t]*#[ \t]*define[ \t]+([A-Za-z_][A-Za-z0-9_]*)\b"
 )
+# Lexical macro mentions only: this does not evaluate C preprocessing,
+# recover table elements, or attest to PCI/USB/OF/ACPI device IDs.
+DEVICE_TABLE = re.compile(
+    rb"MODULE_DEVICE_TABLE[ \t]*\([ \t]*([A-Za-z_][A-Za-z0-9_]*)"
+    rb"[ \t]*,[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*\)"
+)
 
 
 def git(repo: Path, *arguments: str) -> bytes:
@@ -138,6 +144,62 @@ def is_syscall_table(path: bytes) -> bool:
 
 def is_abi_source(path: bytes) -> bool:
     return is_syscall_table(path) or path == b"include/uapi/asm-generic/unistd.h"
+
+
+
+def enumerate_device_table_mentions(
+        repo: Path, commit: str, entries: list[tuple[bytes, dict]]) -> bytes:
+    """Find same-line MODULE_DEVICE_TABLE mentions in pinned C/H/Rust blobs.
+
+    Git grep reads the immutable commit tree, not a mutable worktree. Its
+    NUL-delimited path and line fields preserve newlines/non-UTF8 in names.
+    A match in a comment or inactive conditional is deliberately retained.
+    """
+    command = [
+        "git", "-C", str(repo), "grep", "--no-color", "-n", "-z",
+        "-I", "-E", r"MODULE_DEVICE_TABLE[[:space:]]*\(",
+        commit, "--", "*.c", "*.h", "*.rs",
+    ]
+    run = subprocess.run(command, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, check=False)
+    if run.returncode not in (0, 1):
+        raise RuntimeError("pinned device-table Git grep failed: " +
+                           run.stderr.decode("utf-8", "replace"))
+    by_path = {path: record for path, record in entries}
+    prefix = commit.encode("ascii") + b":"
+    records = []
+    offset = 0
+    while offset < len(run.stdout):
+        path_end = run.stdout.find(b"\x00", offset)
+        line_end = run.stdout.find(b"\x00", path_end + 1)
+        text_end = run.stdout.find(b"\n", line_end + 1)
+        if min(path_end, line_end, text_end) < 0:
+            raise ValueError("truncated NUL-delimited Git grep match")
+        tagged = run.stdout[offset:path_end]
+        number = run.stdout[path_end + 1:line_end]
+        raw = run.stdout[line_end + 1:text_end]
+        if not tagged.startswith(prefix) or not number.isdigit() or int(number) < 1:
+            raise ValueError("malformed immutable device-table match")
+        path = tagged[len(prefix):]
+        record = by_path.get(path)
+        if not record or record["mode"] not in ("100644", "100755"):
+            raise ValueError("device-table match absent from pinned regular blobs")
+        match = DEVICE_TABLE.search(raw)
+        records.append((path, int(number), {
+            **encode_path(path), "blob_oid": record["oid"],
+            "line": int(number),
+            "raw_b64": base64.b64encode(raw).decode("ascii"),
+            "status": "LEXICAL_ARGUMENTS" if match else "UNPARSED",
+            "bus_b64": (base64.b64encode(match.group(1)).decode("ascii")
+                        if match else None),
+            "symbol_b64": (base64.b64encode(match.group(2)).decode("ascii")
+                           if match else None),
+        }))
+        offset = text_end + 1
+    records.sort(key=lambda row: (row[0], row[1]))
+    if len({(p, line) for p, line, _ in records}) != len(records):
+        raise ValueError("duplicate device-table source line")
+    return b"".join(json_line(record) for _, _, record in records)
 
 
 def build(repo: Path, lock: Path, destination: Path) -> dict:
@@ -272,6 +334,8 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
     uapi_bytes = bytes(uapi_lines)
     uapi_macro_bytes = bytes(uapi_macros)
     syscall_bytes = bytes(syscall_rows)
+    device_table_bytes = enumerate_device_table_mentions(repo, pinned, entries)
+    device_rows = [json.loads(line) for line in device_table_bytes.splitlines()]
     report = {
         "schema": "heptakernel.pinned-linux-tree-inventory.v1",
         "status": "PARTIAL_SOURCE_INVENTORY_NOT_LINUX_IMPLEMENTATION",
@@ -291,6 +355,8 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
         "uapi_macro_rows_sha256": hashlib.sha256(uapi_macro_bytes).hexdigest(),
         "syscall_table_rows_file": "syscall-table-rows.jsonl",
         "syscall_table_rows_sha256": hashlib.sha256(syscall_bytes).hexdigest(),
+        "module_device_table_mentions_file": "module-device-table-mentions.jsonl",
+        "module_device_table_mentions_sha256": hashlib.sha256(device_table_bytes).hexdigest(),
         "counts": {
             **dict(sorted(path_counts.items())),
             "directory_tree_objects": len(directories),
@@ -308,6 +374,9 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
             "syscall_table_rows": syscall_table_rows,
             "syscall_table_unparsed_rows": syscall_table_unparsed_rows,
             "unreadable_syscall_table_files": len(unreadable_syscall_tables),
+            "module_device_table_mentions": len(device_rows),
+            "module_device_table_unparsed": sum(
+                row["status"] == "UNPARSED" for row in device_rows),
         },
         "unparsed_kconfig": kconfig_unreadable,
         "unreadable_syscall_tables": unreadable_syscall_tables,
@@ -320,6 +389,10 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
             "struct layouts or arch-generated header semantics. Syscall rows "
             "are lexical, not executable dispatch. Driver IDs and device "
             "mappings remain unqualified.",
+            "MODULE_DEVICE_TABLE mentions are lexical source references, not "
+            "resolved hardware IDs or proven active driver match tables; "
+            "same-line C/H/Rust text matches exclude binary blobs and "
+            "multi-line calls and retain comments/inactive conditions.",
             "Tracked blobs, symlinks and gitlinks are all included; generated "
             "files, external submodules, firmware and runtime behavior are not.",
             "The 17 full-acceptance gates and 422 x86-64 baseline syscall "
@@ -338,6 +411,7 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
     (destination / "uapi-paths.jsonl").write_bytes(uapi_bytes)
     (destination / "uapi-macro-rows.jsonl").write_bytes(uapi_macro_bytes)
     (destination / "syscall-table-rows.jsonl").write_bytes(syscall_bytes)
+    (destination / "module-device-table-mentions.jsonl").write_bytes(device_table_bytes)
     (destination / "report.json").write_bytes(
         json.dumps(report, ensure_ascii=True, sort_keys=True,
                    indent=2).encode("ascii") + b"\n"
@@ -365,6 +439,7 @@ def main() -> None:
         "uapi_entries_sha256": report["uapi_entries_sha256"],
         "uapi_macro_rows_sha256": report["uapi_macro_rows_sha256"],
         "syscall_table_rows_sha256": report["syscall_table_rows_sha256"],
+        "module_device_table_mentions_sha256": report["module_device_table_mentions_sha256"],
     }, sort_keys=True))
 
 

@@ -60,7 +60,12 @@ def fixture(root: Path) -> tuple[str, Path]:
         "# 2 common ignored sys_ignored\n"
         "broken\n"
         "3 x32 mmap sys_mmap compat_sys_mmap\n")
-    put(root, "drivers/net/demo.c", "/* driver */\n")
+    put(root, "drivers/net/demo.c",
+        "/* driver */\n"
+        "MODULE_DEVICE_TABLE(pci, demo_ids);\n"
+        "// MODULE_DEVICE_TABLE(usb, commented_ids);\n"
+        "MODULE_DEVICE_TABLE(weird, );\n"
+        "MODULE_DEVICE_TABLE (of, other_ids);\n")
     put(root, "with\\backslash.c", "test\n")
     put(root, "line\nfeed.c", "test\n")
     (root / "alias").symlink_to("arch/x86/Kconfig")
@@ -102,6 +107,18 @@ def inspect(report_dir: Path, commit: str) -> None:
                (report_dir / "syscall-table-rows.jsonl").read_text().splitlines()]
     macros = [json.loads(line) for line in
               (report_dir / "uapi-macro-rows.jsonl").read_text().splitlines()]
+    device = [json.loads(line) for line in
+              (report_dir / "module-device-table-mentions.jsonl").read_text().splitlines()]
+    assert report["counts"]["module_device_table_mentions"] == len(device) == 4
+    assert report["counts"]["module_device_table_unparsed"] == 1
+    assert [x["line"] for x in device] == [2, 3, 4, 5]
+    assert [x["status"] for x in device] == [
+        "LEXICAL_ARGUMENTS", "LEXICAL_ARGUMENTS", "UNPARSED", "LEXICAL_ARGUMENTS"]
+    assert [base64.b64decode(x["bus_b64"]) if x["bus_b64"] else None
+            for x in device] == [b"pci", b"usb", None, b"of"]
+    assert all(x["blob_oid"] == next(p["oid"] for p in
+        [json.loads(v) for v in (report_dir / "source-paths.jsonl").read_text().splitlines()]
+        if p["path"] == "drivers/net/demo.c") for x in device)
     assert report["counts"]["uapi_header_files"] == 2
     assert report["counts"]["unreadable_uapi_header_files"] == 0
     assert report["counts"]["uapi_macro_rows"] == len(macros) == 4
@@ -174,7 +191,8 @@ def inspect(report_dir: Path, commit: str) -> None:
                         ("directory-objects.jsonl", "directory_objects_sha256"),
                         ("uapi-paths.jsonl", "uapi_entries_sha256"),
                         ("uapi-macro-rows.jsonl", "uapi_macro_rows_sha256"),
-                        ("syscall-table-rows.jsonl", "syscall_table_rows_sha256")]:
+                        ("syscall-table-rows.jsonl", "syscall_table_rows_sha256"),
+                        ("module-device-table-mentions.jsonl", "module_device_table_mentions_sha256")]:
         assert hashlib.sha256((report_dir / file).read_bytes()).hexdigest() == report[field]
 
 
@@ -195,7 +213,8 @@ def main() -> None:
         for name in ("source-paths.jsonl", "kconfig-declarations.jsonl", "kconfig-source-edges.jsonl",
                      "directory-objects.jsonl", "uapi-paths.jsonl",
                      "uapi-macro-rows.jsonl",
-                     "syscall-table-rows.jsonl", "report.json"):
+                     "syscall-table-rows.jsonl", "module-device-table-mentions.jsonl",
+                     "report.json"):
             assert (first / name).read_bytes() == (second / name).read_bytes()
         inspect(second, commit)
 
@@ -224,6 +243,7 @@ def main() -> None:
         "fixture_kconfig_declarations": 4,
         "fixture_kconfig_source_edges": 5,
         "fixture_syscall_table_rows": 4, "fixture_uapi_macro_rows": 4,
+        "fixture_device_table_mentions": 4,
         "non_utf8_and_newline_paths": "PASS",
         "symlink_and_gitlink": "PASS", "immutable_blob_read": "PASS",
         "deterministic_byte_replay": "PASS", "wrong_sha_fail_closed": "PASS",

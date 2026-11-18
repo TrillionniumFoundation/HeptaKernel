@@ -75,6 +75,7 @@ jobs:
           uapi = (root / report["uapi_entries_file"]).read_bytes()
           syscall = (root / report["syscall_table_rows_file"]).read_bytes()
           uapi_macros = (root / report["uapi_macro_rows_file"]).read_bytes()
+          device_tables = (root / report["module_device_table_mentions_file"]).read_bytes()
           assert hashlib.sha256(source).hexdigest() == report["source_paths_sha256"]
           assert hashlib.sha256(kconfig).hexdigest() == report["kconfig_declarations_sha256"]
           assert hashlib.sha256(source_edges).hexdigest() == report["kconfig_source_edges_sha256"]
@@ -82,6 +83,7 @@ jobs:
           assert hashlib.sha256(uapi).hexdigest() == report["uapi_entries_sha256"]
           assert hashlib.sha256(syscall).hexdigest() == report["syscall_table_rows_sha256"]
           assert hashlib.sha256(uapi_macros).hexdigest() == report["uapi_macro_rows_sha256"]
+          assert hashlib.sha256(device_tables).hexdigest() == report["module_device_table_mentions_sha256"]
           rows = [json.loads(x) for x in source.splitlines()]
           paths = [base64.b64decode(x["path_b64"]) for x in rows]
           actual = subprocess.check_output([
@@ -250,6 +252,47 @@ jobs:
           print("KCONFIG_DECLARATION_RECORDS:", report["counts"]["kconfig_declarations"])
           print("KCONFIG_SOURCE_EDGES:", report["counts"]["kconfig_source_edges"])
           print("SYSCALL_TABLE_ROWS:", len(actual_syscalls))
+          # Independent whole-commit literal search locates candidate blobs;
+          # independently inspect their original Git objects line by line.
+          # Comments and inactive branches deliberately remain lexical only.
+          import re
+          listing = subprocess.run([
+              "git", "-C", ".upstream/linux", "grep", "-l", "-z", "-I",
+              "-F", "MODULE_DEVICE_TABLE", commit, "--", "*.c", "*.h", "*.rs"
+          ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+          assert listing.returncode in (0, 1), listing.stderr
+          expected_device = []
+          for tagged in filter(None, listing.stdout.split(b"\x00")):
+              assert tagged.startswith(commit.encode() + b":")
+              path = tagged[41:]
+              ref = by_path[path]
+              assert ref["mode"] in ("100644", "100755")
+              blob = subprocess.check_output([
+                  "git", "-C", ".upstream/linux", "cat-file", "blob", ref["oid"]
+              ])
+              assert len(blob) == ref["size"]
+              for number, line in enumerate(blob.split(b"\n"), 1):
+                  if not re.search(rb"MODULE_DEVICE_TABLE[ \t]*\(", line):
+                      continue
+                  match = re.search(
+                      rb"MODULE_DEVICE_TABLE[ \t]*\([ \t]*([A-Za-z_][A-Za-z_0-9]*)"
+                      rb"[ \t]*,[ \t]*([A-Za-z_][A-Za-z_0-9]*)[ \t]*\)",
+                      line)
+                  expected_device.append((path, ref["oid"], number, line,
+                      "LEXICAL_ARGUMENTS" if match else "UNPARSED",
+                      match.group(1) if match else None,
+                      match.group(2) if match else None))
+          actual_device = [(base64.b64decode(x["path_b64"]), x["blob_oid"],
+                            x["line"], base64.b64decode(x["raw_b64"]), x["status"],
+                            base64.b64decode(x["bus_b64"]) if x["bus_b64"] else None,
+                            base64.b64decode(x["symbol_b64"]) if x["symbol_b64"] else None)
+                           for x in map(json.loads, device_tables.splitlines())]
+          assert actual_device == sorted(expected_device, key=lambda x: (x[0], x[2])), (
+              "missing/reordered/modified pinned driver macro source rows")
+          assert report["counts"]["module_device_table_mentions"] == len(actual_device)
+          assert report["counts"]["module_device_table_unparsed"] == sum(
+              x[4] == "UNPARSED" for x in actual_device)
+          print("MODULE_DEVICE_TABLE_LEXICAL_ROWS:", len(actual_device))
           print("UAPI_MACRO_SOURCE_ROWS:", len(actual_macros))
           print("UNPARSED_SYSCALL_ROWS:", unparsed_syscalls)
           print("FULL_LINUX_REWRITE: HOLD")
@@ -276,5 +319,6 @@ jobs:
             build/linux-inventory/uapi-paths.jsonl
             build/linux-inventory/uapi-macro-rows.jsonl
             build/linux-inventory/syscall-table-rows.jsonl
+            build/linux-inventory/module-device-table-mentions.jsonl
             build/linux-inventory/report.json
             build/linux-inventory/closure-state.json
