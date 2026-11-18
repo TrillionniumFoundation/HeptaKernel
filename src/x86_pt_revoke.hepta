@@ -68,17 +68,12 @@ block check_bits(pc_bits_reply:mutbuf,pc_bits_page:mutbuf,pc_bits_slot:u64,pc_bi
   rv_revoke:bool = bool.and(rv_present,rv_zero_candidate)
   branch rv_revoke check_old_encoding(pc_bits_reply,pc_bits_page,pc_bits_slot,pc_bits_old,pc_bits_new,pc_bits_caps,pc_bits_width) bad_candidate(pc_bits_reply)
 block check_old_encoding(oe_reply:mutbuf,oe_page:mutbuf,oe_slot:u64,oe_old:u64,oe_new:u64,oe_caps:u64,oe_width:u64)
-  oe_zero:u64 = const() {"value":0}
   oe_one:u64 = const() {"value":1}
-  oe_high_mask:u64 = const() {"value":9218868437227405312}
   oe_pa_mask:u64 = const() {"value":4503599627366400}
-  oe_high:u64 = bit.and(oe_old,oe_high_mask)
-  oe_reserved_ok:bool = compare.eq(oe_high,oe_zero)
   oe_physical:u64 = bit.and(oe_old,oe_pa_mask)
   oe_limit:u64 = int.shl.checked(oe_one,oe_width)
   oe_physical_ok:bool = compare.lt(oe_physical,oe_limit)
-  oe_valid:bool = bool.and(oe_reserved_ok,oe_physical_ok)
-  branch oe_valid check_old_caps(oe_reply,oe_page,oe_slot,oe_old,oe_new,oe_caps) bad_candidate(oe_reply)
+  branch oe_physical_ok check_old_caps(oe_reply,oe_page,oe_slot,oe_old,oe_new,oe_caps) bad_candidate(oe_reply)
 block check_old_caps(oc_reply:mutbuf,oc_page:mutbuf,oc_slot:u64,oc_old:u64,oc_new:u64,oc_caps:u64)
   oc_zero:u64 = const() {"value":0}
   oc_nx_mask:u64 = const() {"value":9223372036854775808}

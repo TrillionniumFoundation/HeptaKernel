@@ -36,10 +36,9 @@ def oracle(raw: bytes, table: bytes, reply_size: int = 16):
     if caps & ~0x3ff or not 32 <= width <= 52:
         return 8, 0, original
     # Examine the *old* present mapping, not the proposed zero entry.
-    # Bits 52..62 are reserved in this pinned 4K leaf profile.
-    reserved = expected & (((1 << 63) - 1) ^ ((1 << 52) - 1))
+    # Software-defined upper bits are not reserved/rejected by this revoker.
     phys = expected & PA_MASK
-    if candidate != 0 or not expected & 1 or reserved or phys >= (1 << width):
+    if candidate != 0 or not expected & 1 or phys >= (1 << width):
         return 6, 0, original
     if ((expected & NX) and not (caps & NXE)) or (
             (expected & (1 << 8)) and not (caps & PGE)):
@@ -133,14 +132,15 @@ def campaign(library: Path):
         struct.pack_into("<Q", updated, slot * 8, 0)
         check(payload, bytes(updated))
 
-    # Valid full-width old leaf, reserved high bits, physical-width overflow,
-    # missing NXE/PGE, and a stale 64-bit old word are separate refusal paths.
+    # Valid old leaf (including ignored software high bits), physical-width
+    # overflow, missing NXE/PGE and stale 64-bit old are separate paths.
     for slot, old, caps, expected_status in (
         (0, 0x400001, CAPS, 0),
         (511, NX | 0x400061, CAPS, 0),
         (256, 0x400101, CAPS, 0),
-        (0, (1 << 52) | 0x400001, CAPS, 6),
-        (0, (1 << 62) | 0x400001, CAPS, 6),
+        (0, (1 << 52) | 0x400001, CAPS, 0),
+        (0, (1 << 55) | 0x400001, CAPS, 0),
+        (0, (1 << 62) | 0x400001, CAPS, 0),
         (0, 1 << 40 | 1, 32 | NXE | PGE, 6),
         (0, NX | 0x400001, 52 | PGE, 8),
         (0, 0x400101, 52 | NXE, 8),
