@@ -46,7 +46,11 @@ def fixture(root: Path) -> tuple[str, Path]:
     put(root, "arch/x86/Kconfig.extra", "  config SECOND\n")
     put(root, "include/uapi/linux/demo.h", "int feature;\n")
     put(root, "arch/x86/include/uapi/asm/unistd.h", "/* abi */\n")
-    put(root, "arch/x86/entry/syscalls/syscall_64.tbl", "0 common read sys_read\n")
+    put(root, "arch/x86/entry/syscalls/syscall_64.tbl", "0 common read sys_read\n"
+        "1 common write sys_write # inline comment\n"
+        "# 2 common ignored sys_ignored\n"
+        "broken\n"
+        "3 x32 mmap sys_mmap compat_sys_mmap\n")
     put(root, "drivers/net/demo.c", "/* driver */\n")
     put(root, "with\\backslash.c", "test\n")
     put(root, "line\nfeed.c", "test\n")
@@ -85,6 +89,27 @@ def inspect(report_dir: Path, commit: str) -> None:
                     (report_dir / "kconfig-source-edges.jsonl").read_text().splitlines()]
     uapi = [json.loads(line) for line in
             (report_dir / "uapi-paths.jsonl").read_text().splitlines()]
+    syscall = [json.loads(line) for line in
+               (report_dir / "syscall-table-rows.jsonl").read_text().splitlines()]
+    assert report["counts"]["syscall_table_files"] == 1
+    assert report["counts"]["syscall_table_rows"] == len(syscall) == 4
+    assert report["counts"]["syscall_table_unparsed_rows"] == 1
+    assert report["counts"]["unreadable_syscall_table_files"] == 0
+    assert [r["line"] for r in syscall] == [1, 2, 4, 5]
+    assert [r["status"] for r in syscall] == [
+        "LEXICAL_ROW", "LEXICAL_ROW", "UNPARSED", "LEXICAL_ROW"]
+    assert [base64.b64decode(r["raw_b64"]) for r in syscall] == [
+        b"0 common read sys_read", b"1 common write sys_write # inline comment",
+        b"broken", b"3 x32 mmap sys_mmap compat_sys_mmap"]
+    assert [tuple(base64.b64decode(v) for v in r["columns_b64"])
+            for r in syscall] == [
+        (b"0", b"common", b"read", b"sys_read"),
+        (b"1", b"common", b"write", b"sys_write"),
+        (b"broken",),
+        (b"3", b"x32", b"mmap", b"sys_mmap", b"compat_sys_mmap")]
+    assert all(r["blob_oid"] == next(
+        x["oid"] for x in paths if x["path"] ==
+        "arch/x86/entry/syscalls/syscall_64.tbl") for r in syscall)
     assert len(paths) == report["counts"]["tracked_paths"] == 11
     assert len(declarations) == report["counts"]["kconfig_declarations"] == 4
     assert len(source_edges) == report["counts"]["kconfig_source_edges"] == 5
@@ -125,7 +150,8 @@ def inspect(report_dir: Path, commit: str) -> None:
                         ("kconfig-declarations.jsonl", "kconfig_declarations_sha256"),
                         ("kconfig-source-edges.jsonl", "kconfig_source_edges_sha256"),
                         ("directory-objects.jsonl", "directory_objects_sha256"),
-                        ("uapi-paths.jsonl", "uapi_entries_sha256")]:
+                        ("uapi-paths.jsonl", "uapi_entries_sha256"),
+                        ("syscall-table-rows.jsonl", "syscall_table_rows_sha256")]:
         assert hashlib.sha256((report_dir / file).read_bytes()).hexdigest() == report[field]
 
 
@@ -144,7 +170,8 @@ def main() -> None:
         second = parent / "second"
         inventory.build(source, lock, second)
         for name in ("source-paths.jsonl", "kconfig-declarations.jsonl", "kconfig-source-edges.jsonl",
-                     "directory-objects.jsonl", "uapi-paths.jsonl", "report.json"):
+                     "directory-objects.jsonl", "uapi-paths.jsonl",
+                     "syscall-table-rows.jsonl", "report.json"):
             assert (first / name).read_bytes() == (second / name).read_bytes()
         inspect(second, commit)
 
@@ -171,7 +198,8 @@ def main() -> None:
     print(json.dumps({
         "status": "PASS", "fixture_tracked_paths": 11,
         "fixture_kconfig_declarations": 4,
-        "fixture_kconfig_source_edges": 5, "non_utf8_and_newline_paths": "PASS",
+        "fixture_kconfig_source_edges": 5,
+        "fixture_syscall_table_rows": 4, "non_utf8_and_newline_paths": "PASS",
         "symlink_and_gitlink": "PASS", "immutable_blob_read": "PASS",
         "deterministic_byte_replay": "PASS", "wrong_sha_fail_closed": "PASS",
         "linux_full_rewrite_complete": False,

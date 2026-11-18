@@ -87,3 +87,20 @@ This is **not** expanded include resolution or a Kconfig dependency graph:
 variables, relative-path semantics, optional includes and conditionals still
 require an exact environment-sensitive parser. The full inventory and 17
 Linux rewrite gates remain open.
+
+## Lossless syscall-table source rows
+
+The pinned-source inventory now emits `syscall-table-rows.jsonl`, one
+record per nonblank, noncomment active line of every tracked
+`scripts/syscall.tbl` or `*/syscalls/*.tbl` blob. Each binds the exact
+Git object ID, raw-byte path, original line number and source bytes, lexical
+columns, and an explicit `LEXICAL_ROW` or `UNPARSED` status. Unexpected
+active formats remain visible instead of disappearing. A separate CI oracle
+reads the original immutable Git objects and checks identity, completeness,
+order and SHA-256, including an adversarial intentionally unparsed fixture.
+
+This is an **upstream declaration inventory**, not syscall implementation or
+behavioral qualification. It does not establish unique numbers across ABI
+personalities, kernel dispatch, errno, compatible layouts or userspace
+correctness. All 422 x86-64 syscall obligations and 17 full-acceptance gates
+remain open, and `make full-acceptance` must remain HOLD.
