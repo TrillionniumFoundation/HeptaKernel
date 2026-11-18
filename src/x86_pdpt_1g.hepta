@@ -67,6 +67,52 @@ block bad_caps(hp_cap_reply:mutbuf)
   hp_cap_result:u32 = call(hp_cap_reply,hp_cap_code,hp_cap_zero) {"function":"write_reply"}
   ret(hp_cap_result)
 block check_bits(hp_bits_reply:mutbuf,hp_bits_page:mutbuf,hp_bits_slot:u64,hp_bits_old:u64,hp_bits_new:u64,hp_bits_caps:u64,hp_bits_width:u64)
+  hp_revoke_zero:u64 = const() {"value":0}
+  hp_is_unmap:bool = compare.eq(hp_bits_new,hp_revoke_zero)
+  branch hp_is_unmap check_unmap_old(hp_bits_reply,hp_bits_page,hp_bits_slot,hp_bits_old,hp_bits_new,hp_bits_caps,hp_bits_width) check_new_bits(hp_bits_reply,hp_bits_page,hp_bits_slot,hp_bits_old,hp_bits_new,hp_bits_caps,hp_bits_width)
+block check_unmap_old(ur_reply:mutbuf,ur_page:mutbuf,ur_slot:u64,ur_old:u64,ur_new:u64,ur_caps:u64,ur_width:u64)
+  ur_zero:u64 = const() {"value":0}
+  ur_present:u64 = const() {"value":1}
+  ur_ps:u64 = const() {"value":128}
+  ur_forbidden:u64 = const() {"value":8646911285625085952}
+  ur_pa_mask:u64 = const() {"value":4503598553628672}
+  ur_p:u64 = bit.and(ur_old,ur_present)
+  ur_h:u64 = bit.and(ur_old,ur_ps)
+  ur_p_ok:bool = compare.eq(ur_p,ur_present)
+  ur_h_ok:bool = compare.eq(ur_h,ur_ps)
+  ur_res:u64 = bit.and(ur_old,ur_forbidden)
+  ur_res_ok:bool = compare.eq(ur_res,ur_zero)
+  ur_phys:u64 = bit.and(ur_old,ur_pa_mask)
+  ur_one:u64 = const() {"value":1}
+  ur_limit:u64 = int.shl.checked(ur_one,ur_width)
+  ur_phys_ok:bool = compare.lt(ur_phys,ur_limit)
+  ur_ph:bool = bool.and(ur_p_ok,ur_h_ok)
+  ur_rp:bool = bool.and(ur_res_ok,ur_phys_ok)
+  ur_legal:bool = bool.and(ur_ph,ur_rp)
+  branch ur_legal check_unmap_caps(ur_reply,ur_page,ur_slot,ur_old,ur_new,ur_caps) bad_candidate(ur_reply)
+block check_unmap_caps(uc_reply:mutbuf,uc_page:mutbuf,uc_slot:u64,uc_old:u64,uc_new:u64,uc_caps:u64)
+  uc_zero:u64 = const() {"value":0}
+  uc_nx:u64 = const() {"value":9223372036854775808}
+  uc_global:u64 = const() {"value":256}
+  uc_nxe:u64 = const() {"value":256}
+  uc_pge:u64 = const() {"value":512}
+  uc_1g:u64 = const() {"value":1024}
+  uc_old_nx:u64 = bit.and(uc_old,uc_nx)
+  uc_old_global:u64 = bit.and(uc_old,uc_global)
+  uc_has_nxe:u64 = bit.and(uc_caps,uc_nxe)
+  uc_has_pge:u64 = bit.and(uc_caps,uc_pge)
+  uc_has_1g:u64 = bit.and(uc_caps,uc_1g)
+  uc_uses_nx:bool = compare.ne(uc_old_nx,uc_zero)
+  uc_uses_global:bool = compare.ne(uc_old_global,uc_zero)
+  uc_missing_nxe:bool = compare.eq(uc_has_nxe,uc_zero)
+  uc_missing_pge:bool = compare.eq(uc_has_pge,uc_zero)
+  uc_missing_1g:bool = compare.eq(uc_has_1g,uc_zero)
+  uc_bad_nx:bool = bool.and(uc_uses_nx,uc_missing_nxe)
+  uc_bad_global:bool = bool.and(uc_uses_global,uc_missing_pge)
+  uc_bad_legacy:bool = bool.or(uc_bad_nx,uc_bad_global)
+  uc_unsupported:bool = bool.or(uc_bad_legacy,uc_missing_1g)
+  branch uc_unsupported bad_caps(uc_reply) check_slot(uc_reply,uc_page,uc_slot,uc_old,uc_new)
+block check_new_bits(nb_reply:mutbuf,nb_page:mutbuf,nb_slot:u64,nb_old:u64,nb_new:u64,nb_caps:u64,nb_width:u64)
   hp_bzero:u64 = const() {"value":0}
   hp_bone:u64 = const() {"value":1}
   hp_bwrite:u64 = const() {"value":2}
@@ -77,34 +123,34 @@ block check_bits(hp_bits_reply:mutbuf,hp_bits_page:mutbuf,hp_bits_slot:u64,hp_bi
   hp_badmask:u64 = const() {"value":8646911285625085952}
   hp_pmask:u64 = const() {"value":4503598553628672}
   hp_nx:u64 = const() {"value":9223372036854775808}
-  hp_reserved:u64 = bit.and(hp_bits_new,hp_badmask)
+  hp_reserved:u64 = bit.and(nb_new,hp_badmask)
   hp_reserved_ok:bool = compare.eq(hp_reserved,hp_bzero)
-  hp_present_bit:u64 = bit.and(hp_bits_new,hp_bone)
+  hp_present_bit:u64 = bit.and(nb_new,hp_bone)
   hp_present_ok:bool = compare.ne(hp_present_bit,hp_bzero)
   hp_huge_bit:u64 = const() {"value":128}
-  hp_huge_set:u64 = bit.and(hp_bits_new,hp_huge_bit)
+  hp_huge_set:u64 = bit.and(nb_new,hp_huge_bit)
   hp_is_huge:bool = compare.ne(hp_huge_set,hp_bzero)
-  hp_wval:u64 = bit.and(hp_bits_new,hp_bwrite)
+  hp_wval:u64 = bit.and(nb_new,hp_bwrite)
   hp_w:bool = compare.ne(hp_wval,hp_bzero)
-  hp_uval:u64 = bit.and(hp_bits_new,hp_buser)
+  hp_uval:u64 = bit.and(nb_new,hp_buser)
   hp_u:bool = compare.ne(hp_uval,hp_bzero)
-  hp_gval:u64 = bit.and(hp_bits_new,hp_bglobal)
+  hp_gval:u64 = bit.and(nb_new,hp_bglobal)
   hp_g:bool = compare.ne(hp_gval,hp_bzero)
-  hp_nxval:u64 = bit.and(hp_bits_new,hp_nx)
+  hp_nxval:u64 = bit.and(nb_new,hp_nx)
   hp_n:bool = compare.ne(hp_nxval,hp_bzero)
   hp_x:bool = bool.not(hp_n)
   hp_wx:bool = bool.and(hp_w,hp_x)
   hp_ug:bool = bool.and(hp_u,hp_g)
   hp_unsafe:bool = bool.or(hp_wx,hp_ug)
-  hp_phys:u64 = bit.and(hp_bits_new,hp_pmask)
-  hp_limit:u64 = int.shl.checked(hp_bone,hp_bits_width)
+  hp_phys:u64 = bit.and(nb_new,hp_pmask)
+  hp_limit:u64 = int.shl.checked(hp_bone,nb_width)
   hp_phys_ok:bool = compare.lt(hp_phys,hp_limit)
   hp_not_unsafe:bool = bool.not(hp_unsafe)
   hp_base_ok:bool = bool.and(hp_reserved_ok,hp_present_ok)
   hp_huge_base_ok:bool = bool.and(hp_base_ok,hp_is_huge)
   hp_policy_ok:bool = bool.and(hp_not_unsafe,hp_phys_ok)
   hp_pte_ok:bool = bool.and(hp_huge_base_ok,hp_policy_ok)
-  branch hp_pte_ok check_caps(hp_bits_reply,hp_bits_page,hp_bits_slot,hp_bits_old,hp_bits_new,hp_bits_caps,hp_n,hp_g) bad_candidate(hp_bits_reply)
+  branch hp_pte_ok check_caps(nb_reply,nb_page,nb_slot,nb_old,nb_new,nb_caps,hp_n,hp_g) bad_candidate(nb_reply)
 block bad_candidate(hp_candidate_reply:mutbuf)
   hp_candidate_code:u32 = const() {"value":6}
   hp_candidate_zero:u64 = const() {"value":0}

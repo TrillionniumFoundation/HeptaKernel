@@ -39,16 +39,29 @@ def oracle(request: bytes, table: bytes, reply_size: int = 16):
     width = caps & 255
     if caps & ~0x7ff or not 32 <= width <= 52:
         return 8, 0, unchanged
-    physical = candidate & PHYS
-    if (candidate & ~ALLOWED or not candidate & 1 or not candidate & 128
-            or (candidate & 2 and not candidate & NX)
-            or (candidate & 4 and candidate & 256)
-            or physical >= 1 << width):
-        return 6, 0, unchanged
-    if (not caps & PDPE1GB or
-            (candidate & NX and not caps & NXE) or
-            (candidate & 256 and not caps & PGE)):
-        return 8, 0, unchanged
+    # A zero replacement removes an existing 1GiB leaf; validate the OLD
+    # hardware entry, including reserved bits and CPU capabilities, before
+    # the same full-word stale comparison used for ordinary commits.
+    if candidate == 0:
+        physical = old & PHYS
+        if (not old & 1 or not old & 128 or old & ~ALLOWED
+                or physical >= 1 << width):
+            return 6, 0, unchanged
+        if (not caps & PDPE1GB or
+                (old & NX and not caps & NXE) or
+                (old & 256 and not caps & PGE)):
+            return 8, 0, unchanged
+    else:
+        physical = candidate & PHYS
+        if (candidate & ~ALLOWED or not candidate & 1 or not candidate & 128
+                or (candidate & 2 and not candidate & NX)
+                or (candidate & 4 and candidate & 256)
+                or physical >= 1 << width):
+            return 6, 0, unchanged
+        if (not caps & PDPE1GB or
+                (candidate & NX and not caps & NXE) or
+                (candidate & 256 and not caps & PGE)):
+            return 8, 0, unchanged
     if slot >= 512:
         return 6, 0, unchanged
     if struct.unpack_from("<Q", unchanged, slot * 8)[0] != old:
@@ -132,6 +145,41 @@ def campaign(library: Path):
                            CAPS & ~PGE, 52, 31 | NXE | PDPE1GB,
                            32 | NXE | PGE | PDPE1GB, 2048, MASK64))
         check(pack(slot, old if rng.randrange(5) else old ^ 1, candidate, caps), bytes(data))
+    # 1GiB unmap/old-word-replay cases: a successful unmap must clear
+    # exactly the selected PDPTE; the identical old word must then fail.
+    for i in range(320):
+        slot = rng.randrange(512)
+        data = bytearray(rng.randbytes(PAGE))
+        phys = rng.randrange(1, 1 << 17) << 30
+        flags = rng.choice((0, 0x20, 0x40, 0x100, 0x1000,
+                            (1 << 52), (1 << 55), 0x160))
+        old = NX | phys | 0x81 | flags
+        struct.pack_into("<Q", data, slot * 8, old)
+        request = pack(slot, old, 0)
+        assert oracle(request, bytes(data))[0] == 0
+        check(request, bytes(data))
+        struct.pack_into("<Q", data, slot * 8, 0)
+        assert oracle(request, bytes(data))[0] == 9
+        check(request, bytes(data))
+
+    # Refuse non-huge, absent, reserved, too-wide and CPU-incompatible old
+    # 1GiB leaves. These are distinct from stale-old mismatch.
+    for old, caps, expected_status in (
+        ((1 << 30) | 1, CAPS, 6),                 # missing PS
+        ((1 << 30) | 128, CAPS, 6),               # missing Present
+        ((1 << 30) | 0x81 | (1 << 13), CAPS, 6), # reserved address bit
+        ((1 << 30) | 0x81 | (1 << 61), CAPS, 6), # unmodelled protection key
+        ((1 << 40) | 0x81, 32 | NXE | PGE | PDPE1GB, 6),
+        ((1 << 30) | 0x81, CAPS & ~PDPE1GB, 8),
+        (NX | (1 << 30) | 0x81, CAPS & ~NXE, 8),
+        ((1 << 30) | 0x181, CAPS & ~PGE, 8),
+    ):
+        data = bytearray(PAGE)
+        struct.pack_into("<Q", data, 0, old)
+        req = pack(0, old, 0, caps)
+        assert oracle(req, bytes(data))[0] == expected_status
+        check(req, bytes(data))
+
     for raw in (b"", b"\0" * 24, b"\0" * 31, b"\0" * 33):
         check(raw, bytes(PAGE))
     for length in (0, 1, 4095, 4096, 4097):
@@ -142,7 +190,7 @@ def campaign(library: Path):
     return {"schema": "heptakernel.x86-pdpt-1g.v1", "status": "PASS",
             "cases": count, "commits": passed, "refusals": refused,
             "independent_oracle": True, "native_hia": True,
-            "smp_atomicity_verified": False, "qemu_hardware_tested": False}
+            "smp_atomicity_verified": False, "qemu_hardware_tested": False, "unmap_hardware_tested": False}
 
 
 def main():

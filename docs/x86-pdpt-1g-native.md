@@ -15,7 +15,7 @@ NXE enabled (bit 8), PGE enabled (bit 9), and CPUID PDPE1GB supported
 the requested entry does not set NX. The caller must bind these bits to
 actual CPU state; this primitive does not read CPUID, CRx or MSRs.
 
-A new entry must have Present and PS set. The base address uses bits
+For a new mapping, the entry must have Present and PS set. The base address uses bits
 30..51 (1GiB alignment); bit 12 is PAT, **not** a frame-address bit.
 Bits 13..29 and 59..62 are rejected. Low architecture flags and software
 bits 52..58 are preserved. The admission also enforces W^X, disallows
@@ -48,3 +48,21 @@ restricted 1GiB hardware translation, **not** real-CPU qualification, HIA
 CR3/privilege support, arbitrary firmware RAM access, physical ownership,
 atomic CAS, SMP shootdown or frame reclamation. The 17 Linux full-acceptance
 gates remain open.
+
+## Exact-old 1GiB leaf removal (isolated native path)
+
+A zero `new_entry` now selects a separate real-HIA admission path that
+requires the **existing** PDPTE to be Present and PS=1, checks its 1GiB
+physical address against MAXPHYADDR, refuses reserved address bits 13–29 and
+unmodeled 59–62, and validates the *old* NX/PGE and PDPE1GB capabilities.
+The complete old 64-bit PDPTE is re-read before the quiescent single-owner
+write of zero. A stale second request must fail without changing memory.
+The independent native byte-array oracle checks 320 removal/replay pairs and
+negative old-entry/capability cases, plus the existing hostile all-accept
+native control; the locked self-hosted compiler builds the production code.
+
+This extends the bytewise owner-local PDPTE primitive; it **does not**
+perform a native HIA INVLPG/CR3 reload, synchronized shootdown, 64-bit
+atomic CAS, or safely release a physical 1GiB frame. The QEMU hardware
+experiments above cover *mapping* only; 1GiB removal hardware fault behavior
+has not been independently exercised and stays open.
