@@ -30,6 +30,10 @@ ROUTER_MARKER = "HEPTAKERNEL HIA ARENA ROUTER VERIFIED"
 OWNER_MARKER = "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED"
 PTE_MARKER = "HEPTAKERNEL HIA LIVE PTE VERIFIED"
 PT_COMMIT_MARKER = "HEPTAKERNEL HIA PT COMMIT VERIFIED"
+PT_NX_MARKER = "HEPTAKERNEL HIA LIVE PT NX PROTECT VERIFIED"
+PT_NX_FAULT_MARKER = "HEPTAKERNEL HIA PT NX HARDWARE FETCH FAULT VERIFIED"
+PT_NX_STALE_MARKER = "HEPTAKERNEL HIA PT NX STALE OLD REJECTED"
+PT_NX_BYPASS_MARKER = "HEPTAKERNEL HIA PT NX BYPASS EXECUTED"
 PT_PROTECT_MARKER = "HEPTAKERNEL HIA LIVE PT WRITE PROTECT VERIFIED"
 PT_PROTECT_FAULT_MARKER = "HEPTAKERNEL HIA PT WRITE PROTECT HARDWARE FAULT VERIFIED"
 PT_PROTECT_STALE_MARKER = "HEPTAKERNEL HIA PT WRITE PROTECT STALE OLD REJECTED"
@@ -98,6 +102,14 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         pte_verified = p.stdout.count(PTE_MARKER) == 1
         pt_commit_verified = p.stdout.count(PT_COMMIT_MARKER) == 1
         record["native_hia_pt_commit_observed"] = pt_commit_verified
+        nx_protect_verified = p.stdout.count(PT_NX_MARKER) == 1
+        nx_protect_fault = p.stdout.count(PT_NX_FAULT_MARKER) == 1
+        nx_protect_stale = p.stdout.count(PT_NX_STALE_MARKER) == 1
+        nx_protect_bypass = p.stdout.count(PT_NX_BYPASS_MARKER) == 1
+        record["native_hia_pt_nx_observed"] = nx_protect_verified
+        record["hardware_nx_fault_after_hia_downgrade"] = nx_protect_fault
+        record["native_hia_pt_nx_stale_refused"] = nx_protect_stale
+        record["mutated_pt_nx_bypass_executed"] = nx_protect_bypass
         protect_verified = p.stdout.count(PT_PROTECT_MARKER) == 1
         protect_fault = p.stdout.count(PT_PROTECT_FAULT_MARKER) == 1
         protect_stale = p.stdout.count(PT_PROTECT_STALE_MARKER) == 1
@@ -225,6 +237,25 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         not owner_verified and not nx_fault_verified and
                         p.returncode == 35 and FAIL_MARKER in p.stdout and
                         PASS_MARKER not in p.stdout)
+        elif mode == "pt_nx_hardware_fault":
+            accepted = (map_verified and reservation_verified and pt_commit_verified and
+                        nx_protect_verified and nx_protect_fault and ist_fault_verified and
+                        not nx_protect_stale and not nx_protect_bypass and
+                        not pte_verified and not route_verified and not owner_verified and
+                        p.returncode == 59 and PASS_MARKER not in p.stdout and
+                        FAIL_MARKER not in p.stdout)
+        elif mode == "pt_nx_stale_rejected":
+            accepted = (map_verified and reservation_verified and pt_commit_verified and
+                        nx_protect_stale and not nx_protect_verified and not nx_protect_fault and
+                        not nx_protect_bypass and not pte_verified and not route_verified and
+                        p.returncode == 35 and FAIL_MARKER in p.stdout and
+                        PASS_MARKER not in p.stdout)
+        elif mode == "pt_nx_bypass_executed":
+            accepted = (map_verified and reservation_verified and pt_commit_verified and
+                        nx_protect_verified and nx_protect_bypass and not nx_protect_fault and
+                        not nx_protect_stale and not pte_verified and not route_verified and
+                        p.returncode == 61 and FAIL_MARKER not in p.stdout and
+                        PASS_MARKER not in p.stdout)
         elif mode == "pt_protect_hardware_fault":
             accepted = (map_verified and reservation_verified and pt_commit_verified
                         and protect_verified and protect_fault and ist_fault_verified
@@ -291,6 +322,11 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         p.stdout.count(PASS_MARKER) == 1 and FAIL_MARKER not in p.stdout)
         else:
             raise ValueError("unknown boot mode " + mode)
+        accepted = accepted and (nx_protect_verified == (mode in
+                      {"pt_nx_hardware_fault", "pt_nx_bypass_executed"}))
+        accepted = accepted and (nx_protect_fault == (mode == "pt_nx_hardware_fault"))
+        accepted = accepted and (nx_protect_stale == (mode == "pt_nx_stale_rejected"))
+        accepted = accepted and (nx_protect_bypass == (mode == "pt_nx_bypass_executed"))
         accepted = accepted and (protect_verified == (mode in
                       {"pt_protect_hardware_fault", "pt_protect_bypass_stored"}))
         accepted = accepted and (protect_fault == (mode == "pt_protect_hardware_fault"))
@@ -363,7 +399,12 @@ def main():
               "native_hia_reservation_object_sha256": digest("build/reservation-gate.o"),
               "native_hia_pte_object_sha256": digest("build/x86-pte.o"),
               "native_hia_pt_commit_object_sha256": digest("build/x86-pt-commit.o"),
-              "native_hia_pt_protect_object_sha256": digest("build/x86-pt-write-protect.o"),
+              "native_hia_pt_nx_object_sha256": digest("build/x86-pt-nx-protect.o"),
+               "native_hia_pt_nx_boot_sha256": digest("build/pt-nx-boot.o"),
+               "pt_nx_fault_boot_sha256": digest("build/boot-pt-nx-fault.o"),
+               "pt_nx_stale_boot_sha256": digest("build/boot-pt-nx-stale.o"),
+               "pt_nx_bypass_boot_sha256": digest("build/boot-pt-nx-bypass.o"),
+               "native_hia_pt_protect_object_sha256": digest("build/x86-pt-write-protect.o"),
               "native_hia_pt_protect_boot_sha256": digest("build/pt-protect-boot.o"),
               "pt_protect_fault_boot_sha256": digest("build/boot-pt-protect-fault.o"),
               "pt_protect_stale_boot_sha256": digest("build/boot-pt-protect-stale.o"),
@@ -421,6 +462,13 @@ def main():
                                       machine, memory, mode="wp_hardware_fault"))
             report["runs"].append(run(args.qemu, Path("build/wp-bypass-multiboot.elf"),
                                       machine, memory, mode="wp_bypass_stored"))
+        for machine, memory in (("pc", "32"), ("q35", "64")):
+            report["runs"].append(run(args.qemu, Path("build/pt-nx-fault-multiboot.elf"),
+                                       machine, memory, mode="pt_nx_hardware_fault"))
+            report["runs"].append(run(args.qemu, Path("build/pt-nx-stale-multiboot.elf"),
+                                       machine, memory, mode="pt_nx_stale_rejected"))
+            report["runs"].append(run(args.qemu, Path("build/pt-nx-bypass-multiboot.elf"),
+                                       machine, memory, mode="pt_nx_bypass_executed"))
         for machine, memory in (("pc", "32"), ("q35", "64")):
             report["runs"].append(run(args.qemu, Path("build/pt-protect-fault-multiboot.elf"),
                                       machine, memory, mode="pt_protect_hardware_fault"))

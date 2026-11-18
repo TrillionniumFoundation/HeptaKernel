@@ -545,10 +545,12 @@ hia_idt_next64:
     incq %r12
     cmpq $256, %r12
     jb hia_idt_next64
-#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS) || defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT) || defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT)
+#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS) || defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT) || defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT) || defined(HEPTAKERNEL_TEST_PT_NX_FAULT)
     /* HIA also owns updating the #PF descriptor, conditional on old bytes. */
     movq $14, idt_gate_request(%rip)
-#ifdef HEPTAKERNEL_TEST_PT_PROTECT_FAULT
+#ifdef HEPTAKERNEL_TEST_PT_NX_FAULT
+    leaq pt_nx_page_fault64(%rip), %rax
+#elif defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT)
     leaq pt_protect_page_fault64(%rip), %rax
 #elif defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT)
     leaq pt_revoke_page_fault64(%rip), %rax
@@ -865,6 +867,48 @@ fail64:
     call puts64
     movl $0x11, %eax              /* QEMU exit code 35 */
     jmp debug_exit64
+
+/* Isolated hardware instruction-fetch #PF after authentic HIA RX->NX update. */
+#ifdef HEPTAKERNEL_TEST_PT_NX_FAULT
+pt_nx_page_fault64:
+    cli
+    leaq ist_stack_base(%rip), %rax
+    cmpq %rax, %rsp
+    jbe exception64
+    leaq ist_stack_top(%rip), %rax
+    cmpq %rax, %rsp
+    jae exception64
+    cmpq $0x4e585052, pt_nx_armed(%rip)
+    jne exception64
+    cmpq $0x11, (%rsp)             /* #PF P=1 W=0 U=0 I/D=1 */
+    jne exception64
+    cmpq $ARENA_MIN, 8(%rsp)       /* exact faulting fetch RIP */
+    jne exception64
+    cmpq $0x08, 16(%rsp)
+    jne exception64
+    movq %cr2, %rax
+    cmpq $ARENA_MIN, %rax
+    jne exception64
+    movq pt_nx_request+16(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne exception64
+    cmpq $0, pt_nx_reply(%rip)
+    jne exception64
+    cmpq %rax, pt_nx_reply+8(%rip)
+    jne exception64
+    movl $0xc0000080, %ecx       /* real CPU EFER.NXE */
+    rdmsr
+    testl $0x800, %eax
+    jz exception64
+    leaq emergency_stack_top(%rip), %rsp
+    andq $-16, %rsp
+    leaq message_ist_verified(%rip), %rsi
+    call puts64
+    leaq message_pt_nx_fault(%rip), %rsi
+    call puts64
+    movl $0x1d, %eax             /* QEMU debug exit 59 */
+    jmp debug_exit64
+#endif
 
 /* Independent MMU observer for a real native HIA RW->RO downgrade.
  * CPU exception entry, CR2 and INVLPG remain non-HIA boot bridge. */
@@ -1265,6 +1309,11 @@ debug_exit64:
 /* One active 4KiB PTE is native HIA generated. The parent PDE and other
  * leaves remain in the explicitly non-HIA test bridge. */
 pte_live_exercise64:
+#if defined(HEPTAKERNEL_TEST_PT_NX_FAULT) || defined(HEPTAKERNEL_TEST_PT_NX_STALE) || defined(HEPTAKERNEL_TEST_PT_NX_BYPASS)
+    /* Seed an original RET instruction while the old 2MiB RW map is live. */
+    movq $ARENA_MIN, %rdi
+    movb $0xc3, (%rdi)
+#endif
     movabsq $0xa55aa55a5aa55aa5, %r10
     movq %r10, pte_guard_before(%rip)
     movq %r10, pte_guard_after(%rip)
@@ -1276,6 +1325,8 @@ pte_live_exercise64:
     movq $7, pte_request+16(%rip) /* illegal W+X, must be refused */
 #elif defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS)
     movq $1, pte_request+16(%rip) /* HIA read-only + NX */
+#elif defined(HEPTAKERNEL_TEST_PT_NX_FAULT) || defined(HEPTAKERNEL_TEST_PT_NX_STALE) || defined(HEPTAKERNEL_TEST_PT_NX_BYPASS)
+    movq $5, pte_request+16(%rip) /* HIA read-only + executable */
 #else
     movq $3, pte_request+16(%rip) /* R+W, NX */
 #endif
@@ -1296,6 +1347,8 @@ pte_live_exercise64:
     jne fail64
 #if defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS)
     movabsq $0x8000000000400001, %r10
+#elif defined(HEPTAKERNEL_TEST_PT_NX_FAULT) || defined(HEPTAKERNEL_TEST_PT_NX_STALE) || defined(HEPTAKERNEL_TEST_PT_NX_BYPASS)
+    movabsq $0x0000000000400001, %r10
 #else
     movabsq $0x8000000000400003, %r10
 #endif
@@ -1360,6 +1413,82 @@ pte_fill_4m:
     movq %rax, page_directory+16(%rip)
     movq %cr3, %rax
     movq %rax, %cr3
+#if defined(HEPTAKERNEL_TEST_PT_NX_FAULT) || defined(HEPTAKERNEL_TEST_PT_NX_STALE) || defined(HEPTAKERNEL_TEST_PT_NX_BYPASS)
+    /* Execute the genuine RX mapping before downgrading. The CPU may set
+     * Accessed, hence capture the expected old leaf only after this fetch. */
+    movq $ARENA_MIN, %rax
+    call *%rax
+    movq $ARENA_MIN, %rdi
+    cmpb $0xc3, (%rdi)
+    jne fail64
+    movq $0, pt_nx_request(%rip)
+    movq page_table_4m(%rip), %rax
+    movq %rax, pt_nx_observed(%rip)
+    movq %rax, pt_nx_request+8(%rip)
+    btsq $63, %rax
+    movq %rax, pt_nx_request+16(%rip)
+    movl pte_caps(%rip), %eax
+    movq %rax, pt_nx_request+24(%rip)
+#ifdef HEPTAKERNEL_TEST_PT_NX_STALE
+    /* Valid candidate with mismatched old value, not a malformed request. */
+    xorq $8, pt_nx_request+8(%rip)
+    xorq $8, pt_nx_request+16(%rip)
+#endif
+    movq $-1, pt_nx_reply(%rip)
+    movq $-1, pt_nx_reply+8(%rip)
+    leaq pt_nx_request(%rip), %rdi
+    movl $32, %esi
+    leaq pt_nx_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq page_table_4m(%rip), %r8
+    movl $4096, %r9d
+    call pt_nx_f0                   /* selfhost HIA .text, not opaque bytes */
+#ifdef HEPTAKERNEL_TEST_PT_NX_STALE
+    cmpl $9, %eax
+    jne fail64
+    cmpq $9, pt_nx_reply(%rip)
+    jne fail64
+    cmpq $0, pt_nx_reply+8(%rip)
+    jne fail64
+    movq pt_nx_observed(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+    leaq message_pt_nx_stale(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, pt_nx_reply(%rip)
+    jne fail64
+    movq pt_nx_request+16(%rip), %rax
+    cmpq %rax, pt_nx_reply+8(%rip)
+    jne fail64
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+    leaq message_pt_nx_pass(%rip), %rsi
+    call puts64
+    movq $ARENA_MIN, %rdi
+    invlpg (%rdi)                   /* NON-HIA TLB test bridge */
+    cmpb $0xc3, (%rdi)              /* data read is still allowed */
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_PT_NX_BYPASS
+    btrq $63, page_table_4m(%rip)   /* deliberate NON-HIA restoration */
+    invlpg (%rdi)
+    movq $ARENA_MIN, %rax
+    call *%rax                      /* bypass must be executable */
+    leaq message_pt_nx_bypass(%rip), %rsi
+    call puts64
+    movl $0x1e, %eax                /* QEMU exit 61 */
+    jmp debug_exit64
+#else
+    movq $0x4e585052, pt_nx_armed(%rip)
+    movq $ARENA_MIN, %rax
+    call *%rax                      /* must #PF, never return */
+    jmp fail64
+#endif
+#endif
+#endif
 #if defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT) || defined(HEPTAKERNEL_TEST_PT_PROTECT_STALE) || defined(HEPTAKERNEL_TEST_PT_PROTECT_BYPASS)
     /* First warm the real leaf with a write and read. Hardware may set
      * Accessed and Dirty: exact old must be read after warming. */
@@ -2046,6 +2175,14 @@ message_reservation_pass:
     .asciz "HEPTAKERNEL HIA RESERVATIONS VERIFIED\r\n"
 message_pt_commit_pass:
     .asciz "HEPTAKERNEL HIA PT COMMIT VERIFIED\r\n"
+message_pt_nx_pass:
+    .asciz "HEPTAKERNEL HIA LIVE PT NX PROTECT VERIFIED\r\n"
+message_pt_nx_fault:
+    .asciz "HEPTAKERNEL HIA PT NX HARDWARE FETCH FAULT VERIFIED\r\n"
+message_pt_nx_stale:
+    .asciz "HEPTAKERNEL HIA PT NX STALE OLD REJECTED\r\n"
+message_pt_nx_bypass:
+    .asciz "HEPTAKERNEL HIA PT NX BYPASS EXECUTED\r\n"
 message_pt_protect_pass:
     .asciz "HEPTAKERNEL HIA LIVE PT WRITE PROTECT VERIFIED\r\n"
 message_pt_protect_fault:
@@ -2225,6 +2362,10 @@ reservation_guard_after:  .skip 8
 reservation_unused:       .skip 16
 pt_commit_request: .skip 32
 pt_commit_reply:   .skip 16
+pt_nx_request:       .skip 32
+pt_nx_reply:         .skip 16
+pt_nx_observed:      .skip 8
+pt_nx_armed:         .skip 8
 pt_protect_request:  .skip 32
 pt_protect_reply:    .skip 16
 pt_protect_observed: .skip 8

@@ -151,6 +151,9 @@ PTE downgrade (`src/x86_pt_nx_protect.hepta`) preserving all other bits,
 including Accessed/Dirty and physical frame address. It requires quiescent
 exclusive ownership and an NXE-capable CPU profile. Native differential
 oracle, dishonest HIA negative control, and source/object/loaded-text
-binding cover this restricted transition. Hardware fetch-fault acceptance,
-HIA native privileged TLB invalidation, atomic PTE replacement, SMP
-shootdown, ownership provenance and Linux `mprotect` remain open.
+binding cover this restricted transition. Hardware fetch-fault observation now exercises original HIA RX->NX
+machine code on PC/Q35, verifying exact #PF error/CR2/RIP/IST1,
+stale-old refusal and restored-execution bypass. The non-HIA
+INVLPG/exception bridge remains; HIA privileged TLB invalidation,
+atomic PTE replacement, SMP shootdown, ownership provenance and Linux
+`mprotect` remain open.
