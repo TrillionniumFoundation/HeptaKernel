@@ -545,10 +545,12 @@ hia_idt_next64:
     incq %r12
     cmpq $256, %r12
     jb hia_idt_next64
-#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS) || defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT) || defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT) || defined(HEPTAKERNEL_TEST_PT_NX_FAULT)
+#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS) || defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT) || defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT) || defined(HEPTAKERNEL_TEST_PT_NX_FAULT) || defined(HEPTAKERNEL_TEST_US_FAULT)
     /* HIA also owns updating the #PF descriptor, conditional on old bytes. */
     movq $14, idt_gate_request(%rip)
-#ifdef HEPTAKERNEL_TEST_PT_NX_FAULT
+#ifdef HEPTAKERNEL_TEST_US_FAULT
+    leaq us_page_fault64(%rip), %rax
+#elif defined(HEPTAKERNEL_TEST_PT_NX_FAULT)
     leaq pt_nx_page_fault64(%rip), %rax
 #elif defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT)
     leaq pt_protect_page_fault64(%rip), %rax
@@ -586,9 +588,13 @@ hia_idt_next64:
 #endif
     /* Test-only CPL3 #UD: real HIA builds vector 6 with IST0.
      * IRET/exception entry and ring3 selectors remain NON-HIA test bridge. */
-#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE)
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
     movq $6, idt_gate_request(%rip)
+#if defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
+    leaq us_ring3_fault64(%rip), %rax
+#else
     leaq rsp0_ring3_fault64(%rip), %rax
+#endif
     movq %rax, idt_gate_request+8(%rip)
     movq idt64+96(%rip), %rax
     movq %rax, idt_gate_request+16(%rip)
@@ -647,7 +653,7 @@ hia_idt_next64:
     call reservation_admit64
     leaq message_reservation_pass(%rip), %rsi
     call puts64
-#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE)
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
     /* After native E820/reservation admission: terminal ring3 observer. */
     call rsp0_ring3_exercise64
     jmp fail64
@@ -912,6 +918,47 @@ pt_nx_page_fault64:
 
 /* Independent MMU observer for a real native HIA RW->RO downgrade.
  * CPU exception entry, CR2 and INVLPG remain non-HIA boot bridge. */
+#ifdef HEPTAKERNEL_TEST_US_FAULT
+/* CPL3 fetch must hardware-fault on supervisor PTE after genuine HIA U/S
+ * revocation. IST1 and CR2/IRET remain independently observed in assembly. */
+us_page_fault64:
+    cli
+    cmpq $1, us_stage(%rip)
+    jne exception64
+    leaq ist_stack_top(%rip), %rdx
+    leaq -48(%rdx), %rax           /* error code and CPL3 five-word frame */
+    cmpq %rax, %rsp
+    jne exception64
+    cmpq $0x15, (%rsp)            /* P=1,U=1,I/D=1, W=0 */
+    jne exception64
+    cmpq $ARENA_MIN, 8(%rsp)
+    jne exception64
+    cmpq $0x33, 16(%rsp)
+    jne exception64
+    cmpq $0x602000, 32(%rsp)
+    jne exception64
+    cmpq $0x3b, 40(%rsp)
+    jne exception64
+    movq %cr2, %rax
+    cmpq $ARENA_MIN, %rax
+    jne exception64
+    movq us_request+16(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne exception64
+    cmpq $0, us_reply(%rip)
+    jne exception64
+    cmpq %rax, us_reply+8(%rip)
+    jne exception64
+    leaq emergency_stack_top(%rip), %rsp
+    andq $-16, %rsp
+    leaq message_ist_verified(%rip), %rsi
+    call puts64
+    leaq message_us_fault(%rip), %rsi
+    call puts64
+    movl $0x21, %eax              /* QEMU exit 67 */
+    jmp debug_exit64
+#endif
+
 #ifdef HEPTAKERNEL_TEST_PT_PROTECT_FAULT
 pt_protect_page_fault64:
     cli
@@ -1091,7 +1138,7 @@ pte_page_fault64:
     jmp debug_exit64
 #endif
 
-#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE)
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
 /* Test-only NON-HIA CPL3 harness for native HIA-configured TSS and IDT.
  * E820/reservation already admitted both physical test regions. The 4MiB
  * huge page is user RX; 6MiB is user RW/NX. Kernel pages remain U/S=0.
@@ -1233,6 +1280,35 @@ rsp0_ring3_exercise64:
     jne fail64
     leaq message_pde_2m_pass(%rip), %rsi
     call puts64
+#if defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
+    /* Native HIA installs a user/RX 4KiB leaf; the parent pointer,
+     * CR3 and privilege state remain the non-HIA test-only bridge. */
+    movq $0, pt_commit_request(%rip)
+    movq $0, pt_commit_request+8(%rip)
+    movq $0x400005, pt_commit_request+16(%rip)
+    movl pte_caps(%rip), %eax
+    movq %rax, pt_commit_request+24(%rip)
+    leaq pt_commit_request(%rip), %rdi
+    movl $32, %esi
+    leaq pt_commit_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq page_table_4m(%rip), %r8
+    movl $4096, %r9d
+    call pt_commit_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, pt_commit_reply(%rip)
+    jne fail64
+    cmpq $0x400005, pt_commit_reply+8(%rip)
+    jne fail64
+    cmpq $0x400005, page_table_4m(%rip)
+    jne fail64
+    leaq page_table_4m(%rip), %rax
+    orq $7, %rax                    /* present/RW/user upper entry */
+    movq %rax, page_directory+16(%rip)
+    leaq message_pt_commit_pass(%rip), %rsi
+    call puts64
+#endif
     movq %cr3, %rax
     movq %rax, %cr3
     leaq stack_top(%rip), %rax
@@ -1286,6 +1362,121 @@ rsp0_ring3_fault64:
     call puts64
     movl $0x16, %eax                 /* QEMU exit 45 */
     jmp debug_exit64
+#endif
+
+#if defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
+/* Hardware CPL3 UD2 proves executable user mapping before the HIA downgrade. */
+us_ring3_fault64:
+    cli
+    movw %cs, %ax
+    cmpw $0x08, %ax
+    jne fail64
+    leaq stack_top(%rip), %rdx
+    leaq -40(%rdx), %rax
+    cmpq %rax, %rsp
+    jne fail64
+    cmpq $ARENA_MIN, 0(%rsp)
+    jne fail64
+    cmpq $0x33, 8(%rsp)
+    jne fail64
+    cmpq $0x602000, 24(%rsp)
+    jne fail64
+    cmpq $0x3b, 32(%rsp)
+    jne fail64
+    cmpq $0, us_stage(%rip)
+    jne us_second_ud64
+    /* The CPU sets PTE.Accessed: capture exact old bytes after CPL3 fetch. */
+    movq $0, us_request(%rip)
+    movq page_table_4m(%rip), %rax
+    testq $4, %rax
+    jz fail64
+    movq %rax, us_request+8(%rip)
+    btrq $2, %rax
+    movq %rax, us_request+16(%rip)
+    movl pte_caps(%rip), %eax
+    movq %rax, us_request+24(%rip)
+#ifdef HEPTAKERNEL_TEST_US_STALE
+    /* A well-formed stale expected-old, not an invalid candidate. */
+    xorq $8, us_request+8(%rip)
+    xorq $8, us_request+16(%rip)
+#endif
+    movq $-1, us_reply(%rip)
+    movq $-1, us_reply+8(%rip)
+    leaq us_request(%rip), %rdi
+    movl $32, %esi
+    leaq us_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq page_table_4m(%rip), %r8
+    movl $4096, %r9d
+    /* The IRET frame remains on the RSP0 stack; align the HIA call. */
+    subq $8, %rsp
+    call pt_us_f0
+    addq $8, %rsp
+#ifdef HEPTAKERNEL_TEST_US_STALE
+    cmpl $9, %eax
+    jne fail64
+    cmpq $9, us_reply(%rip)
+    jne fail64
+    cmpq $0, us_reply+8(%rip)
+    jne fail64
+    movq us_request+8(%rip), %rax
+    xorq $8, %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+    leaq emergency_stack_top(%rip), %rsp
+    andq $-16, %rsp
+    leaq message_us_initial(%rip), %rsi
+    call puts64
+    leaq message_us_stale(%rip), %rsi
+    call puts64
+    movl $0x24, %eax                /* QEMU exit 73 */
+    jmp debug_exit64
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, us_reply(%rip)
+    jne fail64
+    movq us_request+16(%rip), %rax
+    cmpq %rax, us_reply+8(%rip)
+    jne fail64
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+    testq $4, %rax
+    jnz fail64
+    movq $1, us_stage(%rip)
+    leaq message_us_initial(%rip), %rsi
+    call puts64
+    leaq message_us_live(%rip), %rsi
+    call puts64
+#ifdef HEPTAKERNEL_TEST_US_BYPASS
+    /* Deliberately restore permission after successful native HIA revoke. */
+    btsq $2, page_table_4m(%rip)
+    movq us_request+8(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+#endif
+    movq $ARENA_MIN, %rax
+    invlpg (%rax)                  /* NON-HIA privilege bridge */
+    iretq                          /* return to exact original user RIP */
+    jmp fail64
+#endif
+
+us_second_ud64:
+#ifdef HEPTAKERNEL_TEST_US_BYPASS
+    cmpq $1, us_stage(%rip)
+    jne fail64
+    movq us_request+8(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+    leaq emergency_stack_top(%rip), %rsp
+    andq $-16, %rsp
+    leaq message_us_bypass(%rip), %rsi
+    call puts64
+    movl $0x22, %eax                /* QEMU exit 69 */
+    jmp debug_exit64
+#else
+    jmp fail64
+#endif
 #endif
 #endif
 
@@ -2145,6 +2336,16 @@ message_tss_rsp0_stale:
     .asciz "HEPTAKERNEL HIA TSS RSP0 STALE WORD REJECTED\r\n"
 message_rsp0_switch:
     .asciz "HEPTAKERNEL HIA TSS RSP0 CPL3 HARDWARE SWITCH VERIFIED\r\n"
+message_us_initial:
+    .asciz "HEPTAKERNEL HIA CPL3 USER FETCH BEFORE REVOKE VERIFIED\r\n"
+message_us_live:
+    .asciz "HEPTAKERNEL HIA LIVE PT USER REVOKE VERIFIED\r\n"
+message_us_fault:
+    .asciz "HEPTAKERNEL HIA PT USER REVOKE CPL3 FAULT VERIFIED\r\n"
+message_us_stale:
+    .asciz "HEPTAKERNEL HIA PT USER REVOKE STALE REJECTED\r\n"
+message_us_bypass:
+    .asciz "HEPTAKERNEL HIA PT USER REVOKE BYPASS EXECUTED\r\n"
 message_rsp0_decoy:
     .asciz "HEPTAKERNEL HIA TSS RSP0 DECOY STACK DETECTED\r\n"
 message_upper_pass:
@@ -2374,6 +2575,9 @@ pt_revoke_request: .skip 32
 pt_revoke_reply:   .skip 16
 pt_revoke_observed: .skip 8
 pt_revoke_armed:    .skip 8
+us_request:      .skip 32
+us_reply:        .skip 16
+us_stage:        .skip 8
 pte_request:      .skip 32
 pte_guard_before: .skip 8
 pte_reply:        .skip 16
