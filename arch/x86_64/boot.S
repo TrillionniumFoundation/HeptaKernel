@@ -545,10 +545,12 @@ hia_idt_next64:
     incq %r12
     cmpq $256, %r12
     jb hia_idt_next64
-#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS) || defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT)
+#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS) || defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT) || defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT)
     /* HIA also owns updating the #PF descriptor, conditional on old bytes. */
     movq $14, idt_gate_request(%rip)
-#ifdef HEPTAKERNEL_TEST_PT_REVOKE_FAULT
+#ifdef HEPTAKERNEL_TEST_PT_PROTECT_FAULT
+    leaq pt_protect_page_fault64(%rip), %rax
+#elif defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT)
     leaq pt_revoke_page_fault64(%rip), %rax
 #else
     leaq pte_page_fault64(%rip), %rax
@@ -863,6 +865,46 @@ fail64:
     call puts64
     movl $0x11, %eax              /* QEMU exit code 35 */
     jmp debug_exit64
+
+/* Independent MMU observer for a real native HIA RW->RO downgrade.
+ * CPU exception entry, CR2 and INVLPG remain non-HIA boot bridge. */
+#ifdef HEPTAKERNEL_TEST_PT_PROTECT_FAULT
+pt_protect_page_fault64:
+    cli
+    leaq ist_stack_base(%rip), %rax
+    cmpq %rax, %rsp
+    jbe exception64
+    leaq ist_stack_top(%rip), %rax
+    cmpq %rax, %rsp
+    jae exception64
+    cmpq $0x50524f54, pt_protect_armed(%rip)
+    jne exception64
+    cmpq $3, (%rsp)              /* #PF: P=1, W=1, U=0 */
+    jne exception64
+    leaq pt_protect_store_insn(%rip), %rax
+    cmpq %rax, 8(%rsp)            /* exact faulting RIP */
+    jne exception64
+    cmpq $0x08, 16(%rsp)          /* CPL0 CS */
+    jne exception64
+    movq %cr2, %rax
+    cmpq $ARENA_MIN, %rax
+    jne exception64
+    movq pt_protect_request+16(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne exception64
+    cmpq $0, pt_protect_reply(%rip)
+    jne exception64
+    cmpq %rax, pt_protect_reply+8(%rip)
+    jne exception64
+    leaq emergency_stack_top(%rip), %rsp
+    andq $-16, %rsp
+    leaq message_ist_verified(%rip), %rsi
+    call puts64
+    leaq message_pt_protect_fault(%rip), %rsi
+    call puts64
+    movl $0x1b, %eax             /* QEMU exit 55 */
+    jmp debug_exit64
+#endif
 
 /* Isolated hardware observation after genuine native HIA clears live PTE.
  * INVLPG/CR2/exception entry remain expressly non-HIA boot bridge. */
@@ -1318,6 +1360,84 @@ pte_fill_4m:
     movq %rax, page_directory+16(%rip)
     movq %cr3, %rax
     movq %rax, %cr3
+#if defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT) || defined(HEPTAKERNEL_TEST_PT_PROTECT_STALE) || defined(HEPTAKERNEL_TEST_PT_PROTECT_BYPASS)
+    /* First warm the real leaf with a write and read. Hardware may set
+     * Accessed and Dirty: exact old must be read after warming. */
+    movq $ARENA_MIN, %rdi
+    movabsq $0x1122334455667788, %r10
+    movq %r10, (%rdi)
+    cmpq %r10, (%rdi)
+    jne fail64
+    movq $0, pt_protect_request(%rip)
+    movq page_table_4m(%rip), %rax
+    movq %rax, pt_protect_observed(%rip)
+    movq %rax, pt_protect_request+8(%rip)
+    andq $-3, %rax
+    movq %rax, pt_protect_request+16(%rip)
+    movl pte_caps(%rip), %eax
+    movq %rax, pt_protect_request+24(%rip)
+#ifdef HEPTAKERNEL_TEST_PT_PROTECT_STALE
+    xorq $8, pt_protect_request+8(%rip)
+#endif
+    movq $-1, pt_protect_reply(%rip)
+    movq $-1, pt_protect_reply+8(%rip)
+    leaq pt_protect_request(%rip), %rdi
+    movl $32, %esi
+    leaq pt_protect_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq page_table_4m(%rip), %r8
+    movl $4096, %r9d
+    call pt_protect_f0            /* pinned selfhost HIA native object */
+#ifdef HEPTAKERNEL_TEST_PT_PROTECT_STALE
+    cmpl $9, %eax
+    jne fail64
+    cmpq $9, pt_protect_reply(%rip)
+    jne fail64
+    cmpq $0, pt_protect_reply+8(%rip)
+    jne fail64
+    movq pt_protect_observed(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+    leaq message_pt_protect_stale(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, pt_protect_reply(%rip)
+    jne fail64
+    movq pt_protect_request+16(%rip), %rax
+    cmpq %rax, pt_protect_reply+8(%rip)
+    jne fail64
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+    leaq message_pt_protect_pass(%rip), %rsi
+    call puts64
+    movq $ARENA_MIN, %rdi
+    invlpg (%rdi)                 /* NON-HIA CPL0 TLB bridge */
+    movabsq $0x1122334455667788, %r10
+    cmpq %r10, (%rdi)            /* read stays permitted */
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_PT_PROTECT_BYPASS
+    btsq $1, page_table_4m(%rip) /* deliberately restore RW outside HIA */
+    invlpg (%rdi)
+    movabsq $0x8899aabbccddeeff, %r10
+    movq %r10, (%rdi)
+    cmpq %r10, (%rdi)
+    jne fail64
+    leaq message_pt_protect_bypass(%rip), %rsi
+    call puts64
+    movl $0x1c, %eax            /* QEMU exit 57 */
+    jmp debug_exit64
+#else
+    movq $0x50524f54, pt_protect_armed(%rip)
+    movabsq $0x8899aabbccddeeff, %r10
+pt_protect_store_insn:
+    movq %r10, (%rdi)           /* must fault with P=1/W=1 */
+    jmp fail64
+#endif
+#endif
+#endif
 #if defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT) || defined(HEPTAKERNEL_TEST_PT_REVOKE_STALE) || defined(HEPTAKERNEL_TEST_PT_REVOKE_BYPASS)
     /* Read the actual mapping before invalidation; retain independent
      * readback for the deliberately restored-mapping negative control. */
@@ -1923,6 +2043,14 @@ message_reservation_pass:
     .asciz "HEPTAKERNEL HIA RESERVATIONS VERIFIED\r\n"
 message_pt_commit_pass:
     .asciz "HEPTAKERNEL HIA PT COMMIT VERIFIED\r\n"
+message_pt_protect_pass:
+    .asciz "HEPTAKERNEL HIA LIVE PT WRITE PROTECT VERIFIED\r\n"
+message_pt_protect_fault:
+    .asciz "HEPTAKERNEL HIA PT WRITE PROTECT HARDWARE FAULT VERIFIED\r\n"
+message_pt_protect_stale:
+    .asciz "HEPTAKERNEL HIA PT WRITE PROTECT STALE OLD REJECTED\r\n"
+message_pt_protect_bypass:
+    .asciz "HEPTAKERNEL HIA PT WRITE PROTECT BYPASS STORED\r\n"
 message_pt_revoke_pass:
     .asciz "HEPTAKERNEL HIA LIVE PT REVOKE VERIFIED\r\n"
 message_pt_revoke_fault:
@@ -2094,6 +2222,10 @@ reservation_guard_after:  .skip 8
 reservation_unused:       .skip 16
 pt_commit_request: .skip 32
 pt_commit_reply:   .skip 16
+pt_protect_request:  .skip 32
+pt_protect_reply:    .skip 16
+pt_protect_observed: .skip 8
+pt_protect_armed:    .skip 8
 pt_revoke_request: .skip 32
 pt_revoke_reply:   .skip 16
 pt_revoke_observed: .skip 8
