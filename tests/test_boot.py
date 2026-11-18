@@ -34,6 +34,11 @@ PT_NX_MARKER = "HEPTAKERNEL HIA LIVE PT NX PROTECT VERIFIED"
 PT_NX_FAULT_MARKER = "HEPTAKERNEL HIA PT NX HARDWARE FETCH FAULT VERIFIED"
 PT_NX_STALE_MARKER = "HEPTAKERNEL HIA PT NX STALE OLD REJECTED"
 PT_NX_BYPASS_MARKER = "HEPTAKERNEL HIA PT NX BYPASS EXECUTED"
+US_INITIAL_MARKER = "HEPTAKERNEL HIA CPL3 USER FETCH BEFORE REVOKE VERIFIED"
+US_LIVE_MARKER = "HEPTAKERNEL HIA LIVE PT USER REVOKE VERIFIED"
+US_FAULT_MARKER = "HEPTAKERNEL HIA PT USER REVOKE CPL3 FAULT VERIFIED"
+US_STALE_MARKER = "HEPTAKERNEL HIA PT USER REVOKE STALE REJECTED"
+US_BYPASS_MARKER = "HEPTAKERNEL HIA PT USER REVOKE BYPASS EXECUTED"
 PT_PROTECT_MARKER = "HEPTAKERNEL HIA LIVE PT WRITE PROTECT VERIFIED"
 PT_PROTECT_FAULT_MARKER = "HEPTAKERNEL HIA PT WRITE PROTECT HARDWARE FAULT VERIFIED"
 PT_PROTECT_STALE_MARKER = "HEPTAKERNEL HIA PT WRITE PROTECT STALE OLD REJECTED"
@@ -106,6 +111,16 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         nx_protect_fault = p.stdout.count(PT_NX_FAULT_MARKER) == 1
         nx_protect_stale = p.stdout.count(PT_NX_STALE_MARKER) == 1
         nx_protect_bypass = p.stdout.count(PT_NX_BYPASS_MARKER) == 1
+        us_initial = p.stdout.count(US_INITIAL_MARKER) == 1
+        us_live = p.stdout.count(US_LIVE_MARKER) == 1
+        us_fault = p.stdout.count(US_FAULT_MARKER) == 1
+        us_stale = p.stdout.count(US_STALE_MARKER) == 1
+        us_bypass = p.stdout.count(US_BYPASS_MARKER) == 1
+        record["hardware_cpl3_user_fetch_before_revoke"] = us_initial
+        record["native_hia_user_revoke_live"] = us_live
+        record["hardware_cpl3_fault_after_user_revoke"] = us_fault
+        record["native_hia_user_revoke_stale_rejected"] = us_stale
+        record["mutated_user_revoke_bypass_executed"] = us_bypass
         record["native_hia_pt_nx_observed"] = nx_protect_verified
         record["hardware_nx_fault_after_hia_downgrade"] = nx_protect_fault
         record["native_hia_pt_nx_stale_refused"] = nx_protect_stale
@@ -161,6 +176,30 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         not decoy_observed and not pte_verified and
                         not route_verified and p.returncode == 35 and
                         PASS_MARKER not in p.stdout and FAIL_MARKER in p.stdout)
+        elif mode == "us_revoke_hardware_fault":
+            accepted = (state_verified and user_gdt_verified and tss_verified and
+                        idt_verified and map_verified and reservation_verified and
+                        upper_verified and pde_verified and pt_commit_verified and
+                        us_initial and us_live and us_fault and ist_fault_verified and
+                        not us_stale and not us_bypass and not ring3_observed and
+                        not pte_verified and p.returncode == 67 and
+                        PASS_MARKER not in p.stdout and FAIL_MARKER not in p.stdout)
+        elif mode == "us_revoke_stale_rejected":
+            accepted = (state_verified and user_gdt_verified and tss_verified and
+                        idt_verified and map_verified and reservation_verified and
+                        upper_verified and pde_verified and pt_commit_verified and
+                        us_initial and us_stale and not us_live and not us_fault and
+                        not us_bypass and not ist_fault_verified and not ring3_observed and
+                        not pte_verified and p.returncode == 73 and
+                        PASS_MARKER not in p.stdout and FAIL_MARKER not in p.stdout)
+        elif mode == "us_revoke_bypass_executed":
+            accepted = (state_verified and user_gdt_verified and tss_verified and
+                        idt_verified and map_verified and reservation_verified and
+                        upper_verified and pde_verified and pt_commit_verified and
+                        us_initial and us_live and us_bypass and not us_fault and
+                        not us_stale and not ist_fault_verified and not ring3_observed and
+                        not pte_verified and p.returncode == 69 and
+                        PASS_MARKER not in p.stdout and FAIL_MARKER not in p.stdout)
         elif mode == "rsp0_ring3_hardware":
             accepted = (state_verified and tss_verified and idt_verified
                         and map_verified and reservation_verified and ring3_observed
@@ -322,6 +361,11 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         p.stdout.count(PASS_MARKER) == 1 and FAIL_MARKER not in p.stdout)
         else:
             raise ValueError("unknown boot mode " + mode)
+        accepted = accepted and (us_initial == (mode in {"us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"}))
+        accepted = accepted and (us_live == (mode in {"us_revoke_hardware_fault", "us_revoke_bypass_executed"}))
+        accepted = accepted and (us_fault == (mode == "us_revoke_hardware_fault"))
+        accepted = accepted and (us_stale == (mode == "us_revoke_stale_rejected"))
+        accepted = accepted and (us_bypass == (mode == "us_revoke_bypass_executed"))
         accepted = accepted and (nx_protect_verified == (mode in
                       {"pt_nx_hardware_fault", "pt_nx_bypass_executed"}))
         accepted = accepted and (nx_protect_fault == (mode == "pt_nx_hardware_fault"))
@@ -343,9 +387,9 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         precommit = {"reserved_rejected", "nonvolatile_rejected", "protected_rejected",
                      "pte_unsafe_rejected", "pt_commit_conflict_rejected"}
         accepted = accepted and (pt_commit_verified == (mode not in precommit | {"user_gdt_conflict_rejected", "idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected", "rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected", "upper_user_stale_rejected"}))
-        accepted = accepted and (upper_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected"}))
+        accepted = accepted and (upper_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"}))
         accepted = accepted and (upper_stale == (mode == "upper_user_stale_rejected"))
-        accepted = accepted and (pde_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected"}))
+        accepted = accepted and (pde_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"}))
         accepted = accepted and (pde_stale == (mode == "pde_2m_stale_rejected"))
         accepted = accepted and (state_verified == (mode not in {"tss_state_conflict_rejected", "tss_rsp0_conflict_rejected"}))
         accepted = accepted and (state_stale == (mode == "tss_state_conflict_rejected"))
@@ -399,6 +443,11 @@ def main():
               "native_hia_reservation_object_sha256": digest("build/reservation-gate.o"),
               "native_hia_pte_object_sha256": digest("build/x86-pte.o"),
               "native_hia_pt_commit_object_sha256": digest("build/x86-pt-commit.o"),
+              "native_hia_pt_user_revoke_object_sha256": digest("build/x86-pt-user-revoke.o"),
+              "native_hia_pt_user_revoke_boot_sha256": digest("build/pt-us-boot.o"),
+              "us_fault_boot_sha256": digest("build/boot-us-fault.o"),
+              "us_stale_boot_sha256": digest("build/boot-us-stale.o"),
+              "us_bypass_boot_sha256": digest("build/boot-us-bypass.o"),
               "native_hia_pt_nx_object_sha256": digest("build/x86-pt-nx-protect.o"),
                "native_hia_pt_nx_boot_sha256": digest("build/pt-nx-boot.o"),
                "pt_nx_fault_boot_sha256": digest("build/boot-pt-nx-fault.o"),
@@ -462,6 +511,13 @@ def main():
                                       machine, memory, mode="wp_hardware_fault"))
             report["runs"].append(run(args.qemu, Path("build/wp-bypass-multiboot.elf"),
                                       machine, memory, mode="wp_bypass_stored"))
+        for machine, memory in (("pc", "32"), ("q35", "64")):
+            report["runs"].append(run(args.qemu, Path("build/us-fault-multiboot.elf"),
+                                      machine, memory, mode="us_revoke_hardware_fault"))
+            report["runs"].append(run(args.qemu, Path("build/us-stale-multiboot.elf"),
+                                      machine, memory, mode="us_revoke_stale_rejected"))
+            report["runs"].append(run(args.qemu, Path("build/us-bypass-multiboot.elf"),
+                                      machine, memory, mode="us_revoke_bypass_executed"))
         for machine, memory in (("pc", "32"), ("q35", "64")):
             report["runs"].append(run(args.qemu, Path("build/pt-nx-fault-multiboot.elf"),
                                        machine, memory, mode="pt_nx_hardware_fault"))
