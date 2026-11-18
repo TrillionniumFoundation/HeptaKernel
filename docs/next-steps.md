@@ -172,3 +172,11 @@ also commits the first 4KiB user RX leaf; the test-only bridge still handles
 parent-table pointers, privileged CR3/IDT/TSS, INVLPG and IRETQ. This is
 single-CPU QEMU evidence, not atomic PTE writes, SMP shootdown, Linux mprotect,
 or a fully HIA-native privilege/backend capability.
+
+A native HIA 1GiB PDPTE admission/write primitive in `src/x86_pdpt_1g.hepta`
+checks the caller-supplied CPUID PDPE1GB capability, 1GiB physical alignment,
+reserved bits 13–29, PAT bit 12, NXE/PGE, physical width, W^X, USER+GLOBAL,
+and exact-old comparison. It has a separate byte-array oracle, dishonest-control
+test and empty-PATH native byte identity, but no 1GiB CPU hardware execution
+test, privileged CRx/invalidation, atomic CAS, SMP ownership or TLB shootdown.
+The full 17-gate closure remains HOLD.
