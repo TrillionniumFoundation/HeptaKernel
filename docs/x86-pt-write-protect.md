@@ -14,7 +14,7 @@ the leaf RW bit is cleared, and *every other bit* (frame address, user,
 cache, Accessed/Dirty, PAT, global, software flags, NX) is preserved.
 High reserved bits, out-of-profile physical addresses, user/global conflict
 and unsupported NXE/PGE are refused. The existing live old entry must
-match all 64 expected bits before the eight-byte modification.
+match all 64 expected bits before the single-byte low-flag update.
 
 Statuses: 1 short reply, 2 wrong request length, 4 invalid table length,
 6 invalid transition/index/PTE, 8 invalid CPU capability profile, 9 stale
@@ -24,8 +24,8 @@ upgrades, malformed caps, exact-old stale replay and buffer guards. A second
 genuine-HIA implementation that dishonestly returns 0 without writing
 must be rejected by the same oracle.
 
-**Scope:** only single-owner, quiescent mapping downgrade; writes are
-bytewise and not atomic 64-bit CAS. This does not invalidate TLB entries,
+**Scope:** only single-owner, quiescent mapping downgrade; the one-byte
+HIA store does not make the preceding full-word comparison an atomic CAS. This does not invalidate TLB entries,
 guarantee remote CPU visibility, enforce authority for page ownership,
 implement `mprotect`, or solve arbitrary Linux memory-management behavior.
 The existing non-HIA `INVLPG` and exception bridge remains explicitly
