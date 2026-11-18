@@ -1,0 +1,539 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn f0(request:readbuf,reply:mutbuf,pages:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,pages:mutbuf)
+  a_len:usize = buffer.len(reply)
+  a_min:usize = const() {"value":16}
+  a_ok:bool = compare.ge(a_len,a_min)
+  branch a_ok request_length(request,reply,pages) no_reply()
+block no_reply()
+  nr_one:u32 = const() {"value":1}
+  ret(nr_one)
+block request_length(rl_request:readbuf,rl_reply:mutbuf,rl_pages:mutbuf)
+  rl_len:usize = buffer.len(rl_request)
+  rl_expected:usize = const() {"value":32}
+  rl_ok:bool = compare.eq(rl_len,rl_expected)
+  branch rl_ok pages_length(rl_request,rl_reply,rl_pages) refuse_request(rl_reply)
+block refuse_request(rr_reply:mutbuf)
+  rr_two:u32 = const() {"value":2}
+  rr_zero:u64 = const() {"value":0}
+  rr_status:u32 = call(rr_reply,rr_two,rr_zero) {"function":"write_reply"}
+  ret(rr_status)
+block pages_length(pl_request:readbuf,pl_reply:mutbuf,pl_pages:mutbuf)
+  pl_len:usize = buffer.len(pl_pages)
+  pl_expected:usize = const() {"value":16384}
+  pl_ok:bool = compare.eq(pl_len,pl_expected)
+  branch pl_ok metadata(pl_request,pl_reply,pl_pages) refuse_pages(pl_reply)
+block refuse_pages(rp_reply:mutbuf)
+  rp_three:u32 = const() {"value":3}
+  rp_zero:u64 = const() {"value":0}
+  rp_status:u32 = call(rp_reply,rp_three,rp_zero) {"function":"write_reply"}
+  ret(rp_status)
+block metadata(m_request:readbuf,m_reply:mutbuf,m_pages:mutbuf)
+  m_o0:usize = const() {"value":0}
+  m_o8:usize = const() {"value":8}
+  m_o16:usize = const() {"value":16}
+  m_o24:usize = const() {"value":24}
+  m_va:u64 = call(m_request,m_o0) {"function":"read_request"}
+  m_bits:u64 = call(m_request,m_o8) {"function":"read_request"}
+  m_cr3:u64 = call(m_request,m_o16) {"function":"read_request"}
+  m_base:u64 = call(m_request,m_o24) {"function":"read_request"}
+  m_min:u64 = const() {"value":32}
+  m_max:u64 = const() {"value":52}
+  m_lower:bool = compare.ge(m_bits,m_min)
+  m_upper:bool = compare.le(m_bits,m_max)
+  m_width_ok:bool = bool.and(m_lower,m_upper)
+  branch m_width_ok validate_metadata(m_reply,m_pages,m_va,m_bits,m_cr3,m_base) refuse_metadata(m_reply)
+block validate_metadata(v_reply:mutbuf,v_pages:mutbuf,v_va:u64,v_bits:u64,v_cr3:u64,v_base:u64)
+  v_one:u64 = const() {"value":1}
+  v_limit:u64 = int.shl.checked(v_one,v_bits)
+  v_addr_mask:u64 = const() {"value":4503599627366400}
+  v_low_mask:u64 = const() {"value":4095}
+  v_allowed:u64 = const() {"value":24}
+  v_size:u64 = const() {"value":16384}
+  v_zero:u64 = const() {"value":0}
+  v_root:u64 = bit.and(v_cr3,v_addr_mask)
+  v_cr3_low:u64 = bit.and(v_cr3,v_low_mask)
+  v_cr3_legal:u64 = bit.and(v_cr3_low,v_allowed)
+  v_low_ok:bool = compare.eq(v_cr3_low,v_cr3_legal)
+  v_base_low:u64 = bit.and(v_base,v_low_mask)
+  v_base_aligned:bool = compare.eq(v_base_low,v_zero)
+  v_base_nonzero:bool = compare.ne(v_base,v_zero)
+  v_root_nonzero:bool = compare.ne(v_root,v_zero)
+  v_cr3_in:bool = compare.lt(v_cr3,v_limit)
+  v_base_in:bool = compare.lt(v_base,v_limit)
+  v_end:u64 = int.add.wrap(v_base,v_size)
+  v_end_after:bool = compare.gt(v_end,v_base)
+  v_end_in:bool = compare.le(v_end,v_limit)
+  v_ok1:bool = bool.and(v_low_ok,v_base_aligned)
+  v_ok2:bool = bool.and(v_base_nonzero,v_root_nonzero)
+  v_ok3:bool = bool.and(v_cr3_in,v_base_in)
+  v_ok4:bool = bool.and(v_end_after,v_end_in)
+  v_ok5:bool = bool.and(v_ok1,v_ok2)
+  v_ok6:bool = bool.and(v_ok3,v_ok4)
+  v_ok:bool = bool.and(v_ok5,v_ok6)
+  branch v_ok root_lookup(v_reply,v_pages,v_va,v_bits,v_root,v_base,v_end) refuse_metadata(v_reply)
+block refuse_metadata(rm_reply:mutbuf)
+  rm_four:u32 = const() {"value":4}
+  rm_zero:u64 = const() {"value":0}
+  rm_status:u32 = call(rm_reply,rm_four,rm_zero) {"function":"write_reply"}
+  ret(rm_status)
+block root_lookup(k_reply:mutbuf,k_pages:mutbuf,k_va:u64,k_bits:u64,k_root:u64,k_base:u64,k_end:u64)
+  k_inside:bool = call(k_root,k_base,k_end) {"function":"in_region"}
+  branch k_inside level4(k_reply,k_pages,k_va,k_bits,k_root,k_base,k_end) refuse_link(k_reply)
+block level4(l4_reply:mutbuf,l4_pages:mutbuf,l4_va:u64,l4_bits:u64,l4_root:u64,l4_base:u64,l4_end:u64)
+  l4_shift:u64 = const() {"value":39}
+  l4_entry:u64 = call(l4_pages,l4_root,l4_base,l4_va,l4_shift) {"function":"read_slot"}
+  l4_parent:bool = call(l4_entry) {"function":"is_parent"}
+  branch l4_parent l4_follow(l4_reply,l4_pages,l4_va,l4_bits,l4_entry,l4_base,l4_end) refuse_invalid(l4_reply)
+block l4_follow(f4_reply:mutbuf,f4_pages:mutbuf,f4_va:u64,f4_bits:u64,f4_entry:u64,f4_base:u64,f4_end:u64)
+  f4_mask:u64 = const() {"value":4503599627366400}
+  f4_next:u64 = bit.and(f4_entry,f4_mask)
+  f4_inside:bool = call(f4_next,f4_base,f4_end) {"function":"in_region"}
+  branch f4_inside level3(f4_reply,f4_pages,f4_va,f4_bits,f4_entry,f4_next,f4_base,f4_end) refuse_link(f4_reply)
+block level3(l3_reply:mutbuf,l3_pages:mutbuf,l3_va:u64,l3_bits:u64,l3_l4:u64,l3_addr:u64,l3_base:u64,l3_end:u64)
+  l3_shift:u64 = const() {"value":30}
+  l3_entry:u64 = call(l3_pages,l3_addr,l3_base,l3_va,l3_shift) {"function":"read_slot"}
+  l3_ps_mask:u64 = const() {"value":128}
+  l3_zero:u64 = const() {"value":0}
+  l3_ps:u64 = bit.and(l3_entry,l3_ps_mask)
+  l3_huge:bool = compare.ne(l3_ps,l3_zero)
+  branch l3_huge finish_1g(l3_reply,l3_va,l3_bits,l3_l4,l3_entry) l3_parent(l3_reply,l3_pages,l3_va,l3_bits,l3_l4,l3_entry,l3_base,l3_end)
+block finish_1g(g_reply:mutbuf,g_va:u64,g_bits:u64,g_l4:u64,g_l3:u64)
+  g_zero:u64 = const() {"value":0}
+  g_shift:u64 = const() {"value":30}
+  g_translation:u64 = call(g_va,g_l4,g_l3,g_zero,g_bits,g_shift) {"function":"walk4_huge"}
+  g_status:u32 = call(g_reply,g_translation) {"function":"finish_translation"}
+  ret(g_status)
+block l3_parent(p3_reply:mutbuf,p3_pages:mutbuf,p3_va:u64,p3_bits:u64,p3_l4:u64,p3_l3:u64,p3_base:u64,p3_end:u64)
+  p3_valid:bool = call(p3_l3) {"function":"is_parent"}
+  branch p3_valid l3_follow(p3_reply,p3_pages,p3_va,p3_bits,p3_l4,p3_l3,p3_base,p3_end) refuse_invalid(p3_reply)
+block l3_follow(f3_reply:mutbuf,f3_pages:mutbuf,f3_va:u64,f3_bits:u64,f3_l4:u64,f3_l3:u64,f3_base:u64,f3_end:u64)
+  f3_mask:u64 = const() {"value":4503599627366400}
+  f3_next:u64 = bit.and(f3_l3,f3_mask)
+  f3_inside:bool = call(f3_next,f3_base,f3_end) {"function":"in_region"}
+  branch f3_inside level2(f3_reply,f3_pages,f3_va,f3_bits,f3_l4,f3_l3,f3_next,f3_base,f3_end) refuse_link(f3_reply)
+block level2(l2_reply:mutbuf,l2_pages:mutbuf,l2_va:u64,l2_bits:u64,l2_l4:u64,l2_l3:u64,l2_addr:u64,l2_base:u64,l2_end:u64)
+  l2_shift:u64 = const() {"value":21}
+  l2_entry:u64 = call(l2_pages,l2_addr,l2_base,l2_va,l2_shift) {"function":"read_slot"}
+  l2_ps_mask:u64 = const() {"value":128}
+  l2_zero:u64 = const() {"value":0}
+  l2_ps:u64 = bit.and(l2_entry,l2_ps_mask)
+  l2_huge:bool = compare.ne(l2_ps,l2_zero)
+  branch l2_huge finish_2m(l2_reply,l2_va,l2_bits,l2_l4,l2_l3,l2_entry) l2_parent(l2_reply,l2_pages,l2_va,l2_bits,l2_l4,l2_l3,l2_entry,l2_base,l2_end)
+block finish_2m(h_reply:mutbuf,h_va:u64,h_bits:u64,h_l4:u64,h_l3:u64,h_l2:u64)
+  h_shift:u64 = const() {"value":21}
+  h_translation:u64 = call(h_va,h_l4,h_l3,h_l2,h_bits,h_shift) {"function":"walk4_huge"}
+  h_status:u32 = call(h_reply,h_translation) {"function":"finish_translation"}
+  ret(h_status)
+block l2_parent(p2_reply:mutbuf,p2_pages:mutbuf,p2_va:u64,p2_bits:u64,p2_l4:u64,p2_l3:u64,p2_l2:u64,p2_base:u64,p2_end:u64)
+  p2_valid:bool = call(p2_l2) {"function":"is_parent"}
+  branch p2_valid l2_follow(p2_reply,p2_pages,p2_va,p2_bits,p2_l4,p2_l3,p2_l2,p2_base,p2_end) refuse_invalid(p2_reply)
+block l2_follow(f2_reply:mutbuf,f2_pages:mutbuf,f2_va:u64,f2_bits:u64,f2_l4:u64,f2_l3:u64,f2_l2:u64,f2_base:u64,f2_end:u64)
+  f2_mask:u64 = const() {"value":4503599627366400}
+  f2_next:u64 = bit.and(f2_l2,f2_mask)
+  f2_inside:bool = call(f2_next,f2_base,f2_end) {"function":"in_region"}
+  branch f2_inside level1(f2_reply,f2_pages,f2_va,f2_bits,f2_l4,f2_l3,f2_l2,f2_next,f2_base) refuse_link(f2_reply)
+block level1(l1_reply:mutbuf,l1_pages:mutbuf,l1_va:u64,l1_bits:u64,l1_l4:u64,l1_l3:u64,l1_l2:u64,l1_addr:u64,l1_base:u64)
+  l1_shift:u64 = const() {"value":12}
+  l1_entry:u64 = call(l1_pages,l1_addr,l1_base,l1_va,l1_shift) {"function":"read_slot"}
+  l1_translation:u64 = call(l1_va,l1_l4,l1_l3,l1_l2,l1_entry,l1_bits) {"function":"walk4"}
+  l1_status:u32 = call(l1_reply,l1_translation) {"function":"finish_translation"}
+  ret(l1_status)
+block refuse_link(rl_reply:mutbuf)
+  rl_code:u32 = const() {"value":5}
+  rl_zero:u64 = const() {"value":0}
+  rl_status:u32 = call(rl_reply,rl_code,rl_zero) {"function":"write_reply"}
+  ret(rl_status)
+block refuse_invalid(ri_reply:mutbuf)
+  ri_code:u32 = const() {"value":6}
+  ri_zero:u64 = const() {"value":0}
+  ri_status:u32 = call(ri_reply,ri_code,ri_zero) {"function":"write_reply"}
+  ret(ri_status)
+end
+fn in_region(addr:u64,base:u64,limit:u64) -> (bool) effects() entry(start)
+block start(addr:u64,base:u64,limit:u64)
+  ir_lo:bool = compare.ge(addr,base)
+  ir_hi:bool = compare.lt(addr,limit)
+  ir_mask:u64 = const() {"value":4095}
+  ir_zero:u64 = const() {"value":0}
+  ir_bits:u64 = bit.and(addr,ir_mask)
+  ir_aligned:bool = compare.eq(ir_bits,ir_zero)
+  ir_pair:bool = bool.and(ir_lo,ir_hi)
+  ir_valid:bool = bool.and(ir_pair,ir_aligned)
+  ret(ir_valid)
+end
+fn is_parent(entry:u64) -> (bool) effects() entry(start)
+block start(entry:u64)
+  ip_present_mask:u64 = const() {"value":1}
+  ip_bad_mask:u64 = const() {"value":384}
+  ip_high_mask:u64 = const() {"value":9218868437227405312}
+  ip_address_mask:u64 = const() {"value":4503599627366400}
+  ip_zero:u64 = const() {"value":0}
+  ip_one:u64 = const() {"value":1}
+  ip_present:u64 = bit.and(entry,ip_present_mask)
+  ip_bad:u64 = bit.and(entry,ip_bad_mask)
+  ip_high:u64 = bit.and(entry,ip_high_mask)
+  ip_address:u64 = bit.and(entry,ip_address_mask)
+  ip_yes:bool = compare.eq(ip_present,ip_one)
+  ip_flags:bool = compare.eq(ip_bad,ip_zero)
+  ip_reserved:bool = compare.eq(ip_high,ip_zero)
+  ip_nonzero:bool = compare.ne(ip_address,ip_zero)
+  ip_p0:bool = bool.and(ip_yes,ip_flags)
+  ip_p1:bool = bool.and(ip_reserved,ip_nonzero)
+  ip_valid:bool = bool.and(ip_p0,ip_p1)
+  ret(ip_valid)
+end
+fn read_slot(pages:mutbuf,page:u64,base:u64,va:u64,shift:u64) -> (u64) effects(read,trap) entry(start)
+block start(pages:mutbuf,page:u64,base:u64,va:u64,shift:u64)
+  rs_delta:u64 = int.sub.wrap(page,base)
+  rs_vai:u64 = int.shr.checked(va,shift)
+  rs_mask:u64 = const() {"value":511}
+  rs_index:u64 = bit.and(rs_vai,rs_mask)
+  rs_eight:u64 = const() {"value":8}
+  rs_byte:u64 = int.mul.wrap(rs_index,rs_eight)
+  rs_offset:u64 = int.add.wrap(rs_delta,rs_byte)
+  rs_pos:usize = int.cast(rs_offset) {"mode":"wrap"}
+  rs_entry:u64 = call(pages,rs_pos) {"function":"read_table"}
+  ret(rs_entry)
+end
+fn finish_translation(reply:mutbuf,translation:u64) -> (u32) effects(write,trap) entry(start)
+block start(reply:mutbuf,translation:u64)
+  ft_zero:u64 = const() {"value":0}
+  ft_ok:bool = compare.ne(translation,ft_zero)
+  ft_success:u32 = const() {"value":0}
+  ft_denied:u32 = const() {"value":6}
+  ft_status:u32 = select(ft_ok,ft_success,ft_denied)
+  ft_written:u32 = call(reply,ft_status,translation) {"function":"write_reply"}
+  ret(ft_written)
+end
+fn read_request(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
+  rr_zero:u64 = const() {"value":0}
+  jump loop(bytes,offset,rr_zero,rr_zero)
+block loop(rr_bytes:readbuf,rr_offset:usize,rr_index:u64,rr_acc:u64)
+  rr_eight:u64 = const() {"value":8}
+  rr_more:bool = compare.lt(rr_index,rr_eight)
+  branch rr_more byte(rr_bytes,rr_offset,rr_index,rr_acc) done(rr_acc)
+block byte(rb_bytes:readbuf,rb_offset:usize,rb_index:u64,rb_acc:u64)
+  rb_pos:usize = int.cast(rb_index) {"mode":"wrap"}
+  rb_loc:usize = int.add.wrap(rb_offset,rb_pos)
+  rb_octet:u8 = buffer.load(rb_bytes,rb_loc)
+  rb_wide:u64 = int.cast(rb_octet) {"mode":"wrap"}
+  rb_eight:u64 = const() {"value":8}
+  rb_shift:u64 = int.mul.wrap(rb_index,rb_eight)
+  rb_shifted:u64 = int.shl.checked(rb_wide,rb_shift)
+  rb_new:u64 = bit.or(rb_acc,rb_shifted)
+  rb_one:u64 = const() {"value":1}
+  rb_next:u64 = int.add.wrap(rb_index,rb_one)
+  jump loop(rb_bytes,rb_offset,rb_next,rb_new)
+block done(rd_value:u64)
+  ret(rd_value)
+end
+fn read_table(bytes:mutbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:mutbuf,offset:usize)
+  tr_zero:u64 = const() {"value":0}
+  jump loop(bytes,offset,tr_zero,tr_zero)
+block loop(tr_bytes:mutbuf,tr_offset:usize,tr_index:u64,tr_acc:u64)
+  tr_eight:u64 = const() {"value":8}
+  tr_more:bool = compare.lt(tr_index,tr_eight)
+  branch tr_more byte(tr_bytes,tr_offset,tr_index,tr_acc) done(tr_acc)
+block byte(tb_bytes:mutbuf,tb_offset:usize,tb_index:u64,tb_acc:u64)
+  tb_pos:usize = int.cast(tb_index) {"mode":"wrap"}
+  tb_loc:usize = int.add.wrap(tb_offset,tb_pos)
+  tb_octet:u8 = buffer.load(tb_bytes,tb_loc)
+  tb_wide:u64 = int.cast(tb_octet) {"mode":"wrap"}
+  tb_eight:u64 = const() {"value":8}
+  tb_shift:u64 = int.mul.wrap(tb_index,tb_eight)
+  tb_shifted:u64 = int.shl.checked(tb_wide,tb_shift)
+  tb_new:u64 = bit.or(tb_acc,tb_shifted)
+  tb_one:u64 = const() {"value":1}
+  tb_next:u64 = int.add.wrap(tb_index,tb_one)
+  jump loop(tb_bytes,tb_offset,tb_next,tb_new)
+block done(td_value:u64)
+  ret(td_value)
+end
+fn write_word(bytes:mutbuf,offset:usize,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(bytes:mutbuf,offset:usize,value:u64)
+  ww_zero:u64 = const() {"value":0}
+  jump loop(bytes,offset,value,ww_zero)
+block loop(ww_bytes:mutbuf,ww_offset:usize,ww_value:u64,ww_index:u64)
+  ww_eight:u64 = const() {"value":8}
+  ww_more:bool = compare.lt(ww_index,ww_eight)
+  branch ww_more byte(ww_bytes,ww_offset,ww_value,ww_index) done()
+block byte(wb_bytes:mutbuf,wb_offset:usize,wb_value:u64,wb_index:u64)
+  wb_pos:usize = int.cast(wb_index) {"mode":"wrap"}
+  wb_loc:usize = int.add.wrap(wb_offset,wb_pos)
+  wb_eight:u64 = const() {"value":8}
+  wb_shift:u64 = int.mul.wrap(wb_index,wb_eight)
+  wb_shifted:u64 = int.shr.checked(wb_value,wb_shift)
+  wb_octet:u8 = int.cast(wb_shifted) {"mode":"wrap"}
+  _ = buffer.store(wb_bytes,wb_loc,wb_octet)
+  wb_one:u64 = const() {"value":1}
+  wb_next:u64 = int.add.wrap(wb_index,wb_one)
+  jump loop(wb_bytes,wb_offset,wb_value,wb_next)
+block done()
+  wd_ok:u32 = const() {"value":0}
+  ret(wd_ok)
+end
+fn write_reply(reply:mutbuf,status:u32,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(reply:mutbuf,status:u32,value:u64)
+  wr_o0:usize = const() {"value":0}
+  wr_o8:usize = const() {"value":8}
+  wr_wide:u64 = int.cast(status) {"mode":"wrap"}
+  wr_first:u32 = call(reply,wr_o0,wr_wide) {"function":"write_word"}
+  wr_second:u32 = call(reply,wr_o8,value) {"function":"write_word"}
+  ret(status)
+end
+fn walk4(va:u64,pml4e:u64,pdpte:u64,pde:u64,pte:u64,phys_bits:u64) -> (u64) effects(trap) entry(start)
+block start(va:u64,pml4e:u64,pdpte:u64,pde:u64,pte:u64,phys_bits:u64)
+  s_min:u64 = const() {"value":32}
+  s_max:u64 = const() {"value":52}
+  s_low:bool = compare.le(s_min,phys_bits)
+  s_high:bool = compare.le(phys_bits,s_max)
+  s_ok:bool = bool.and(s_low,s_high)
+  branch s_ok canonical(va,pml4e,pdpte,pde,pte,phys_bits) denied()
+block canonical(c_va:u64,c_l4:u64,c_l3:u64,c_l2:u64,c_l1:u64,c_bits:u64)
+  c_shift:u64 = const() {"value":48}
+  c_upper:u64 = int.shr.checked(c_va,c_shift)
+  c_signmask:u64 = const() {"value":140737488355328}
+  c_sign:u64 = bit.and(c_va,c_signmask)
+  c_zero:u64 = const() {"value":0}
+  c_ones:u64 = const() {"value":65535}
+  c_high:bool = compare.ne(c_sign,c_zero)
+  c_high_valid:bool = compare.eq(c_upper,c_ones)
+  c_low_valid:bool = compare.eq(c_upper,c_zero)
+  c_not_high:bool = bool.not(c_high)
+  c_left:bool = bool.and(c_high,c_high_valid)
+  c_right:bool = bool.and(c_not_high,c_low_valid)
+  c_valid:bool = bool.or(c_left,c_right)
+  branch c_valid entries(c_va,c_l4,c_l3,c_l2,c_l1,c_bits) denied()
+block entries(e_va:u64,e_l4:u64,e_l3:u64,e_l2:u64,e_l1:u64,e_bits:u64)
+  e_one:u64 = const() {"value":1}
+  e_all1:u64 = bit.and(e_l4,e_l3)
+  e_all2:u64 = bit.and(e_l2,e_l1)
+  e_all3:u64 = bit.and(e_all1,e_all2)
+  e_present:u64 = bit.and(e_all3,e_one)
+  e_present_ok:bool = compare.eq(e_present,e_one)
+  e_total1:u64 = bit.or(e_l4,e_l3)
+  e_total2:u64 = bit.or(e_l2,e_l1)
+  e_total:u64 = bit.or(e_total1,e_total2)
+  e_reserved_mask:u64 = const() {"value":9218868437227405312}
+  e_reserved:u64 = bit.and(e_total,e_reserved_mask)
+  e_zero:u64 = const() {"value":0}
+  e_reserved_ok:bool = compare.eq(e_reserved,e_zero)
+  e_nonleaf:u64 = bit.or(e_l4,e_l3)
+  e_nonleaf_all:u64 = bit.or(e_nonleaf,e_l2)
+  e_ps_global_mask:u64 = const() {"value":384}
+  e_invalid:u64 = bit.and(e_nonleaf_all,e_ps_global_mask)
+  e_4k_ok:bool = compare.eq(e_invalid,e_zero)
+  e_pair:bool = bool.and(e_present_ok,e_reserved_ok)
+  e_valid:bool = bool.and(e_pair,e_4k_ok)
+  branch e_valid addresses(e_va,e_l4,e_l3,e_l2,e_l1,e_bits) denied()
+block addresses(a_va:u64,a_l4:u64,a_l3:u64,a_l2:u64,a_l1:u64,a_bits:u64)
+  a_mask:u64 = const() {"value":4503599627366400}
+  a_l4_addr:u64 = bit.and(a_l4,a_mask)
+  a_l3_addr:u64 = bit.and(a_l3,a_mask)
+  a_l2_addr:u64 = bit.and(a_l2,a_mask)
+  a_l1_addr:u64 = bit.and(a_l1,a_mask)
+  a_zero:u64 = const() {"value":0}
+  a_l4_live:bool = compare.ne(a_l4_addr,a_zero)
+  a_l3_live:bool = compare.ne(a_l3_addr,a_zero)
+  a_l2_live:bool = compare.ne(a_l2_addr,a_zero)
+  a_pair1:bool = bool.and(a_l4_live,a_l3_live)
+  a_nonnull:bool = bool.and(a_pair1,a_l2_live)
+  a_one:u64 = const() {"value":1}
+  a_limit:u64 = int.shl.checked(a_one,a_bits)
+  a_l4_in:bool = compare.lt(a_l4_addr,a_limit)
+  a_l3_in:bool = compare.lt(a_l3_addr,a_limit)
+  a_l2_in:bool = compare.lt(a_l2_addr,a_limit)
+  a_l1_in:bool = compare.lt(a_l1_addr,a_limit)
+  a_width1:bool = bool.and(a_l4_in,a_l3_in)
+  a_width2:bool = bool.and(a_l2_in,a_l1_in)
+  a_width:bool = bool.and(a_width1,a_width2)
+  a_valid:bool = bool.and(a_nonnull,a_width)
+  branch a_valid permissions(a_va,a_l4,a_l3,a_l2,a_l1,a_l1_addr) denied()
+block permissions(p_va:u64,p_l4:u64,p_l3:u64,p_l2:u64,p_l1:u64,p_base:u64)
+  p_rw_mask:u64 = const() {"value":2}
+  p_us_mask:u64 = const() {"value":4}
+  p_nx_mask:u64 = const() {"value":9223372036854775808}
+  p_zero:u64 = const() {"value":0}
+  p_common1:u64 = bit.and(p_l4,p_l3)
+  p_common2:u64 = bit.and(p_l2,p_l1)
+  p_common:u64 = bit.and(p_common1,p_common2)
+  p_rw:u64 = bit.and(p_common,p_rw_mask)
+  p_us:u64 = bit.and(p_common,p_us_mask)
+  p_can_write:bool = compare.ne(p_rw,p_zero)
+  p_can_user:bool = compare.ne(p_us,p_zero)
+  p_nx1:u64 = bit.or(p_l4,p_l3)
+  p_nx2:u64 = bit.or(p_l2,p_l1)
+  p_nx_all:u64 = bit.or(p_nx1,p_nx2)
+  p_nx:u64 = bit.and(p_nx_all,p_nx_mask)
+  p_can_exec:bool = compare.eq(p_nx,p_zero)
+  p_write_flag:u64 = const() {"value":4611686018427387904}
+  p_user_flag:u64 = const() {"value":2305843009213693952}
+  p_exec_flag:u64 = const() {"value":1152921504606846976}
+  p_success_flag:u64 = const() {"value":9223372036854775808}
+  p_w_bit:u64 = select(p_can_write,p_write_flag,p_zero)
+  p_u_bit:u64 = select(p_can_user,p_user_flag,p_zero)
+  p_x_bit:u64 = select(p_can_exec,p_exec_flag,p_zero)
+  p_off_mask:u64 = const() {"value":4095}
+  p_offset:u64 = bit.and(p_va,p_off_mask)
+  p_physical:u64 = bit.or(p_base,p_offset)
+  p_out1:u64 = bit.or(p_physical,p_success_flag)
+  p_out2:u64 = bit.or(p_out1,p_w_bit)
+  p_out3:u64 = bit.or(p_out2,p_u_bit)
+  p_out4:u64 = bit.or(p_out3,p_x_bit)
+  ret(p_out4)
+block denied()
+  d_zero:u64 = const() {"value":0}
+  ret(d_zero)
+end
+fn walk4_huge(va:u64,pml4e:u64,pdpte:u64,pde:u64,phys_bits:u64,page_shift:u64) -> (u64) effects(trap) entry(start)
+block start(va:u64,pml4e:u64,pdpte:u64,pde:u64,phys_bits:u64,page_shift:u64)
+  s_min:u64 = const() {"value":32}
+  s_max:u64 = const() {"value":52}
+  s_lower:bool = compare.le(s_min,phys_bits)
+  s_upper:bool = compare.le(phys_bits,s_max)
+  s_ok:bool = bool.and(s_lower,s_upper)
+  branch s_ok canonical(va,pml4e,pdpte,pde,phys_bits,page_shift) denied()
+block canonical(c_va:u64,c_l4:u64,c_l3:u64,c_l2:u64,c_bits:u64,c_shift:u64)
+  c_sh48:u64 = const() {"value":48}
+  c_hi:u64 = int.shr.checked(c_va,c_sh48)
+  c_signmask:u64 = const() {"value":140737488355328}
+  c_sign:u64 = bit.and(c_va,c_signmask)
+  c_zero:u64 = const() {"value":0}
+  c_ones:u64 = const() {"value":65535}
+  c_negative:bool = compare.ne(c_sign,c_zero)
+  c_highok:bool = compare.eq(c_hi,c_ones)
+  c_lowok:bool = compare.eq(c_hi,c_zero)
+  c_positive:bool = bool.not(c_negative)
+  c_goodhi:bool = bool.and(c_negative,c_highok)
+  c_goodlo:bool = bool.and(c_positive,c_lowok)
+  c_valid:bool = bool.or(c_goodhi,c_goodlo)
+  branch c_valid profile(c_va,c_l4,c_l3,c_l2,c_bits,c_shift) denied()
+block profile(p_va:u64,p_l4:u64,p_l3:u64,p_l2:u64,p_bits:u64,p_shift:u64)
+  p_shift2m:u64 = const() {"value":21}
+  p_shift1g:u64 = const() {"value":30}
+  p_two:bool = compare.eq(p_shift,p_shift2m)
+  p_one:bool = compare.eq(p_shift,p_shift1g)
+  p_mode_ok:bool = bool.or(p_two,p_one)
+  p_present:u64 = const() {"value":1}
+  p_l4_present:u64 = bit.and(p_l4,p_present)
+  p_l4_live:bool = compare.eq(p_l4_present,p_present)
+  p_reserved:u64 = const() {"value":9218868437227405312}
+  p_bad_high:u64 = bit.and(p_l4,p_reserved)
+  p_zero:u64 = const() {"value":0}
+  p_high_ok:bool = compare.eq(p_bad_high,p_zero)
+  p_nonleaf_bad:u64 = const() {"value":384}
+  p_bad_flags:u64 = bit.and(p_l4,p_nonleaf_bad)
+  p_flags_ok:bool = compare.eq(p_bad_flags,p_zero)
+  p_addr_mask:u64 = const() {"value":4503599627366400}
+  p_l4_addr:u64 = bit.and(p_l4,p_addr_mask)
+  p_nonnull:bool = compare.ne(p_l4_addr,p_zero)
+  p_unit:u64 = const() {"value":1}
+  p_limit:u64 = int.shl.checked(p_unit,p_bits)
+  p_inwidth:bool = compare.lt(p_l4_addr,p_limit)
+  p_pair1:bool = bool.and(p_l4_live,p_high_ok)
+  p_pair2:bool = bool.and(p_flags_ok,p_nonnull)
+  p_pair3:bool = bool.and(p_mode_ok,p_inwidth)
+  p_valid1:bool = bool.and(p_pair1,p_pair2)
+  p_valid:bool = bool.and(p_valid1,p_pair3)
+  branch p_valid choose(p_va,p_l4,p_l3,p_l2,p_limit,p_two) denied()
+block choose(ch_va:u64,ch_l4:u64,ch_l3:u64,ch_l2:u64,ch_limit:u64,ch_two:bool)
+  branch ch_two two_mib(ch_va,ch_l4,ch_l3,ch_l2,ch_limit) one_gib(ch_va,ch_l4,ch_l3,ch_limit)
+block two_mib(t_va:u64,t_l4:u64,t_l3:u64,t_l2:u64,t_limit:u64)
+  t_one:u64 = const() {"value":1}
+  t_ps:u64 = const() {"value":128}
+  t_nonleaf_bad:u64 = const() {"value":384}
+  t_highmask:u64 = const() {"value":9218868437227405312}
+  t_addrmask:u64 = const() {"value":4503599627366400}
+  t_zer:u64 = const() {"value":0}
+  t_l3_live:u64 = bit.and(t_l3,t_one)
+  t_l3_present:bool = compare.eq(t_l3_live,t_one)
+  t_l3_badflags:u64 = bit.and(t_l3,t_nonleaf_bad)
+  t_l3_flagsok:bool = compare.eq(t_l3_badflags,t_zer)
+  t_l3_high:u64 = bit.and(t_l3,t_highmask)
+  t_l3_highok:bool = compare.eq(t_l3_high,t_zer)
+  t_l3addr:u64 = bit.and(t_l3,t_addrmask)
+  t_l3_nonzero:bool = compare.ne(t_l3addr,t_zer)
+  t_l3_in:bool = compare.lt(t_l3addr,t_limit)
+  t_l2_live:u64 = bit.and(t_l2,t_one)
+  t_l2_present:bool = compare.eq(t_l2_live,t_one)
+  t_l2_ps:u64 = bit.and(t_l2,t_ps)
+  t_l2_isleaf:bool = compare.eq(t_l2_ps,t_ps)
+  t_l2_high:u64 = bit.and(t_l2,t_highmask)
+  t_l2_highok:bool = compare.eq(t_l2_high,t_zer)
+  t_reserved2m:u64 = const() {"value":2088960}
+  t_bad_low:u64 = bit.and(t_l2,t_reserved2m)
+  t_lowok:bool = compare.eq(t_bad_low,t_zer)
+  t_basemask:u64 = const() {"value":4503599625273344}
+  t_base:u64 = bit.and(t_l2,t_basemask)
+  t_base_in:bool = compare.lt(t_base,t_limit)
+  t_a:bool = bool.and(t_l3_present,t_l3_flagsok)
+  t_b:bool = bool.and(t_l3_highok,t_l3_nonzero)
+  t_c:bool = bool.and(t_l3_in,t_l2_present)
+  t_d:bool = bool.and(t_l2_isleaf,t_l2_highok)
+  t_e:bool = bool.and(t_lowok,t_base_in)
+  t_f:bool = bool.and(t_a,t_b)
+  t_g:bool = bool.and(t_c,t_d)
+  t_h:bool = bool.and(t_f,t_g)
+  t_all:bool = bool.and(t_h,t_e)
+  t_offset:u64 = const() {"value":2097151}
+  branch t_all finish(t_va,t_l4,t_l3,t_l2,t_base,t_offset) denied()
+block one_gib(g_va:u64,g_l4:u64,g_l3:u64,g_limit:u64)
+  g_present:u64 = const() {"value":1}
+  g_ps:u64 = const() {"value":128}
+  g_highmask:u64 = const() {"value":9218868437227405312}
+  g_zer:u64 = const() {"value":0}
+  g_presented:u64 = bit.and(g_l3,g_present)
+  g_live:bool = compare.eq(g_presented,g_present)
+  g_psbits:u64 = bit.and(g_l3,g_ps)
+  g_leaf:bool = compare.eq(g_psbits,g_ps)
+  g_high:u64 = bit.and(g_l3,g_highmask)
+  g_highok:bool = compare.eq(g_high,g_zer)
+  g_reserved1g:u64 = const() {"value":1073733632}
+  g_low:u64 = bit.and(g_l3,g_reserved1g)
+  g_lowok:bool = compare.eq(g_low,g_zer)
+  g_basemask:u64 = const() {"value":4503598553628672}
+  g_base:u64 = bit.and(g_l3,g_basemask)
+  g_base_in:bool = compare.lt(g_base,g_limit)
+  g_a:bool = bool.and(g_live,g_leaf)
+  g_b:bool = bool.and(g_highok,g_lowok)
+  g_c:bool = bool.and(g_a,g_b)
+  g_all:bool = bool.and(g_c,g_base_in)
+  g_mid:u64 = const() {"value":7}
+  g_offset:u64 = const() {"value":1073741823}
+  branch g_all finish(g_va,g_l4,g_mid,g_l3,g_base,g_offset) denied()
+block finish(f_va:u64,f_l4:u64,f_mid:u64,f_leaf:u64,f_base:u64,f_offset:u64)
+  f_rw_mask:u64 = const() {"value":2}
+  f_us_mask:u64 = const() {"value":4}
+  f_nx_mask:u64 = const() {"value":9223372036854775808}
+  f_zero:u64 = const() {"value":0}
+  f_pair:u64 = bit.and(f_l4,f_mid)
+  f_common:u64 = bit.and(f_pair,f_leaf)
+  f_rw:u64 = bit.and(f_common,f_rw_mask)
+  f_us:u64 = bit.and(f_common,f_us_mask)
+  f_writable:bool = compare.ne(f_rw,f_zero)
+  f_user:bool = compare.ne(f_us,f_zero)
+  f_nx_pair:u64 = bit.or(f_l4,f_mid)
+  f_nx_all:u64 = bit.or(f_nx_pair,f_leaf)
+  f_nx:u64 = bit.and(f_nx_all,f_nx_mask)
+  f_executable:bool = compare.eq(f_nx,f_zero)
+  f_w_flag:u64 = const() {"value":4611686018427387904}
+  f_u_flag:u64 = const() {"value":2305843009213693952}
+  f_x_flag:u64 = const() {"value":1152921504606846976}
+  f_success:u64 = const() {"value":9223372036854775808}
+  f_w:u64 = select(f_writable,f_w_flag,f_zero)
+  f_u:u64 = select(f_user,f_u_flag,f_zero)
+  f_x:u64 = select(f_executable,f_x_flag,f_zero)
+  f_vaoffset:u64 = bit.and(f_va,f_offset)
+  f_physical:u64 = bit.or(f_base,f_vaoffset)
+  f_o1:u64 = bit.or(f_success,f_physical)
+  f_o2:u64 = bit.or(f_o1,f_w)
+  f_o3:u64 = bit.or(f_o2,f_u)
+  f_o4:u64 = bit.or(f_o3,f_x)
+  ret(f_o4)
+block denied()
+  d_zero:u64 = const() {"value":0}
+  ret(d_zero)
+end
