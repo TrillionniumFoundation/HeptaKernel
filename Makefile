@@ -410,6 +410,8 @@ build/boot-pdpt-1g-stale.o: arch/x86_64/boot.S build/boot-cases.bin
 build/boot-pdpt-1g-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_PDPT_1G_DECOY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
+.SECONDARY: build/pdpt-1g-hw.elf build/pdpt-1g-stale.elf build/pdpt-1g-decoy.elf
+
 PDPT_1G_BOOT_SUPPORT := build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o build/pdpt-1g-boot.o
 
 build/pdpt-1g-%.elf: build/boot-pdpt-1g-%.o $(PDPT_1G_BOOT_SUPPORT) arch/x86_64/linker.ld
