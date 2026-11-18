@@ -29,7 +29,22 @@ over guarded request, reply, and page-table buffers, including reserved
 bits, capability refusals, stale expected values, and a dishonest native
 HIA all-accept negative control. `make record-build` recompiles under
 empty PATH and compares native object and shared library `.text` bytes.
-The 1GiB code is not linked into a boot image and **no hardware 1GiB
-translation test is claimed**. Real hardware invocation, CR3/TLB coherence,
-1GiB capability provenance, atomic CAS, SMP shootdown and frame reclamation
-are open, as are all 17 full-Linux acceptance gates.
+The same native object is now symbol-renamed without changing its .text and
+linked into three isolated QEMU boot images. The non-HIA CPL0 harness reads
+actual CPUID PDPE1GB, uses the active NXE/MAXPHYADDR profile, and requests
+the genuine HIA function to install a present 1GiB RX alias at virtual
+0x40000000 pointing to physical zero. After exact-old and table readback,
+the explicit non-HIA CR3 reload makes a CPU page walk consume that PDPTE:
+two distinct physical/virtual word addresses must match, and the CPU must
+set the PDPTE Accessed flag. The stale-old negative image requires status
+9 and no table write; an independent post-write decoy clears Present and
+must fail before the hardware alias may be claimed. Both PC/32MiB and
+Q35/64MiB run under TCG with qemu64 + PDPE1GB. These tests touch only
+known in-image low-RAM bytes, not all memory described by the huge mapping.
+
+The build-byte check compares the exact native HIA .text in all three live
+images, and retains the distinct boot image hashes. This demonstrates one
+restricted 1GiB hardware translation, **not** real-CPU qualification, HIA
+CR3/privilege support, arbitrary firmware RAM access, physical ownership,
+atomic CAS, SMP shootdown or frame reclamation. The 17 Linux full-acceptance
+gates remain open.

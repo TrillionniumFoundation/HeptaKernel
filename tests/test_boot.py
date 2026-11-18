@@ -17,6 +17,9 @@ RSP0_RING3_MARKER = "HEPTAKERNEL HIA TSS RSP0 CPL3 HARDWARE SWITCH VERIFIED"
 RSP0_DECOY_MARKER = "HEPTAKERNEL HIA TSS RSP0 DECOY STACK DETECTED"
 UPPER_USER_MARKER = "HEPTAKERNEL HIA LIVE UPPER USER TABLE VERIFIED"
 UPPER_USER_STALE_MARKER = "HEPTAKERNEL HIA UPPER USER TABLE STALE OLD REJECTED"
+PDPT_1G_HW_MARKER = "HEPTAKERNEL HIA 1G PDPTE HARDWARE ALIAS VERIFIED"
+PDPT_1G_STALE_MARKER = "HEPTAKERNEL HIA 1G PDPTE STALE OLD REJECTED"
+PDPT_1G_DECOY_MARKER = "HEPTAKERNEL HIA 1G PDPTE POSTWRITE DECOY DETECTED"
 PDE_2M_MARKER = "HEPTAKERNEL HIA LIVE USER 2M PDE VERIFIED"
 PDE_2M_STALE_MARKER = "HEPTAKERNEL HIA USER 2M PDE STALE OLD REJECTED"
 USER_GDT_MARKER = "HEPTAKERNEL HIA LIVE USER GDT VERIFIED"
@@ -59,7 +62,8 @@ def digest(path):
 
 
 def run(qemu, image, machine="pc", memory="32", mode="positive"):
-    cmd = [qemu, "-accel", "tcg", "-machine", machine, "-cpu", "qemu64", "-m", memory,
+    cpu = "qemu64,+pdpe1gb" if mode.startswith("pdpt_1g_") else "qemu64"
+    cmd = [qemu, "-accel", "tcg", "-machine", machine, "-cpu", cpu, "-m", memory,
            "-nodefaults", "-display", "none", "-serial", "stdio", "-monitor", "none",
            "-no-reboot", "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04",
            "-kernel", str(image)]
@@ -84,6 +88,12 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         upper_stale = p.stdout.count(UPPER_USER_STALE_MARKER) == 1
         record["native_hia_live_upper_user_grant"] = upper_verified
         record["native_hia_upper_user_stale_rejected"] = upper_stale
+        pdpt_1g_hw = p.stdout.count(PDPT_1G_HW_MARKER) == 1
+        pdpt_1g_stale = p.stdout.count(PDPT_1G_STALE_MARKER) == 1
+        pdpt_1g_decoy = p.stdout.count(PDPT_1G_DECOY_MARKER) == 1
+        record["hardware_pdpt_1g_alias_verified"] = pdpt_1g_hw
+        record["native_hia_pdpt_1g_stale_refused"] = pdpt_1g_stale
+        record["pdpt_1g_postwrite_decoy_detected"] = pdpt_1g_decoy
         pde_verified = p.stdout.count(PDE_2M_MARKER) == 1
         pde_stale = p.stdout.count(PDE_2M_STALE_MARKER) == 1
         record["native_hia_live_user_huge_pde"] = pde_verified
@@ -156,7 +166,28 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         record["native_hia_arena_router_observed"] = route_verified
         owner_verified = p.stdout.count(OWNER_MARKER) == 1
         record["native_hia_multizone_state_and_readback_observed"] = owner_verified
-        if mode == "user_gdt_conflict_rejected":
+        if mode == "pdpt_1g_hardware":
+            accepted = (state_verified and idt_verified and map_verified and
+                        reservation_verified and pdpt_1g_hw and
+                        not pdpt_1g_stale and not pdpt_1g_decoy and
+                        not pte_verified and not route_verified and
+                        p.returncode == 81 and FAIL_MARKER not in p.stdout and
+                        PASS_MARKER not in p.stdout)
+        elif mode == "pdpt_1g_stale":
+            accepted = (state_verified and idt_verified and map_verified and
+                        reservation_verified and pdpt_1g_stale and
+                        not pdpt_1g_hw and not pdpt_1g_decoy and
+                        not pte_verified and not route_verified and
+                        p.returncode == 83 and FAIL_MARKER not in p.stdout and
+                        PASS_MARKER not in p.stdout)
+        elif mode == "pdpt_1g_decoy":
+            accepted = (state_verified and idt_verified and map_verified and
+                        reservation_verified and pdpt_1g_decoy and
+                        not pdpt_1g_stale and not pdpt_1g_hw and
+                        not pte_verified and not route_verified and
+                        p.returncode == 35 and FAIL_MARKER in p.stdout and
+                        PASS_MARKER not in p.stdout)
+        elif mode == "user_gdt_conflict_rejected":
             accepted = (state_verified and user_gdt_stale and not user_gdt_verified
                         and not tss_verified and not idt_verified and not map_verified
                         and p.returncode == 35 and FAIL_MARKER in p.stdout
@@ -361,6 +392,9 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         p.stdout.count(PASS_MARKER) == 1 and FAIL_MARKER not in p.stdout)
         else:
             raise ValueError("unknown boot mode " + mode)
+        accepted = accepted and (pdpt_1g_hw == (mode == "pdpt_1g_hardware"))
+        accepted = accepted and (pdpt_1g_stale == (mode == "pdpt_1g_stale"))
+        accepted = accepted and (pdpt_1g_decoy == (mode == "pdpt_1g_decoy"))
         accepted = accepted and (us_initial == (mode in {"us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"}))
         accepted = accepted and (us_live == (mode in {"us_revoke_hardware_fault", "us_revoke_bypass_executed"}))
         accepted = accepted and (us_fault == (mode == "us_revoke_hardware_fault"))
@@ -385,7 +419,8 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         # An independent marker is mandatory on every execution that reaches
         # the native HIA table commit, including faults and dishonest controls.
         precommit = {"reserved_rejected", "nonvolatile_rejected", "protected_rejected",
-                     "pte_unsafe_rejected", "pt_commit_conflict_rejected"}
+                     "pte_unsafe_rejected", "pt_commit_conflict_rejected",
+                     "pdpt_1g_hardware", "pdpt_1g_stale", "pdpt_1g_decoy"}
         accepted = accepted and (pt_commit_verified == (mode not in precommit | {"user_gdt_conflict_rejected", "idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected", "rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected", "upper_user_stale_rejected"}))
         accepted = accepted and (upper_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"}))
         accepted = accepted and (upper_stale == (mode == "upper_user_stale_rejected"))
@@ -423,6 +458,11 @@ def main():
                "native_hia_pde_2m_object_sha256": digest("build/x86-pde-2m.o"),
               "native_hia_pde_2m_boot_symbol_sha256": digest("build/pde-2m-boot.o"),
               "pde_2m_stale_boot_sha256": digest("build/boot-ring3-pde-stale.o"),
+              "native_hia_pdpt_1g_object_sha256": digest("build/x86-pdpt-1g.o"),
+              "native_hia_pdpt_1g_boot_sha256": digest("build/pdpt-1g-boot.o"),
+              "pdpt_1g_hardware_boot_sha256": digest("build/boot-pdpt-1g-hw.o"),
+              "pdpt_1g_stale_boot_sha256": digest("build/boot-pdpt-1g-stale.o"),
+              "pdpt_1g_decoy_boot_sha256": digest("build/boot-pdpt-1g-decoy.o"),
               "native_hia_user_gdt_object_sha256": digest("build/x86-user-gdt.o"),
                "native_hia_user_gdt_boot_sha256": digest("build/user-gdt-boot.o"),
                "user_gdt_conflict_boot_sha256": digest("build/boot-user-gdt-conflict.o"),
@@ -492,6 +532,13 @@ def main():
                                       machine, memory, mode="tss_gdt_conflict_rejected"))
             report["runs"].append(run(args.qemu, Path("build/idt-conflict-multiboot.elf"),
                                       machine, memory, mode="idt_conflict_rejected"))
+        for machine, memory in (("pc", "32"), ("q35", "64")):
+            report["runs"].append(run(args.qemu, Path("build/pdpt-1g-hw-multiboot.elf"),
+                                      machine, memory, mode="pdpt_1g_hardware"))
+            report["runs"].append(run(args.qemu, Path("build/pdpt-1g-stale-multiboot.elf"),
+                                      machine, memory, mode="pdpt_1g_stale"))
+            report["runs"].append(run(args.qemu, Path("build/pdpt-1g-decoy-multiboot.elf"),
+                                      machine, memory, mode="pdpt_1g_decoy"))
         for machine, memory in (("pc", "32"), ("q35", "64")):
             report["runs"].append(run(args.qemu, Path("build/ring3-upper-stale-multiboot.elf"),
                                        machine, memory, mode="upper_user_stale_rejected"))

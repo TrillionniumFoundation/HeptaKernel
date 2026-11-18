@@ -460,6 +460,19 @@ def main():
         pdpt_text = Elf("build/x86-pdpt-1g.o").section_bytes(".text")
         if Elf("build/x86-pdpt-1g.so").section_bytes(".text") != pdpt_text:
             raise ValueError("HIA 1GiB PDPTE loaded .text differs from native object")
+        if Elf("build/pdpt-1g-boot.o").section_bytes(".text") != pdpt_text:
+            raise ValueError("HIA 1GiB PDPTE boot symbol rename changed machine code")
+        for pdpt_stem in ("pdpt-1g-hw", "pdpt-1g-stale", "pdpt-1g-decoy"):
+            live_elf = Elf("build/" + pdpt_stem + ".elf")
+            boot_elf = Elf("build/" + pdpt_stem + "-multiboot.elf")
+            entry = live_elf.symbol("pdpt_1g_f0")
+            if (boot_elf.symbol("pdpt_1g_f0") != entry or
+                    live_elf.text_at(entry, len(pdpt_text)) != pdpt_text or
+                    boot_elf.text_at(entry, len(pdpt_text)) != pdpt_text):
+                raise ValueError(pdpt_stem + " lacks byte-exact native HIA 1GiB code")
+        if len({sha(Path("build/" + stem + "-multiboot.elf").read_bytes())
+                for stem in ("pdpt-1g-hw", "pdpt-1g-stale", "pdpt-1g-decoy")}) != 3:
+            raise ValueError("1GiB hardware/stale/decoy images must differ")
         tss_source = Path("src/x86_tss_gdt.hepta").read_bytes()
         tss_object = Path("build/x86-tss-gdt.o").read_bytes()
         tss_rebuilt = subprocess.run([compiler], input=tss_source, capture_output=True,
@@ -739,6 +752,9 @@ def main():
                        x86_pdpt_1g_empty_path_recompiled=True,
                        x86_pdpt_1g_native_loaded_text_matches=True,
                        x86_pdpt_1g_hardware_execution_tested=False,
+                       x86_pdpt_1g_hardware_observer_linked=True,
+                       x86_pdpt_1g_live_code_byte_identity=True,
+                       x86_pdpt_1g_hardware_test_uses_non_hia_privilege_bridge=True,
                        x86_pdpt_1g_atomic_smp_verified=False,
                        x86_user_gdt_source_sha256=sha(usr_source),
                        x86_user_gdt_object_sha256=sha(usr_object),

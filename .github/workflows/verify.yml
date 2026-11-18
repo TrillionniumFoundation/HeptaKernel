@@ -257,6 +257,16 @@ jobs:
             build/idt-conflict-multiboot.elf
             build/idt-conflict.elf
             build/idt-gate-boot.o
+            build/pdpt-1g-boot.o
+            build/boot-pdpt-1g-hw.o
+            build/boot-pdpt-1g-stale.o
+            build/boot-pdpt-1g-decoy.o
+            build/pdpt-1g-hw.elf
+            build/pdpt-1g-stale.elf
+            build/pdpt-1g-decoy.elf
+            build/pdpt-1g-hw-multiboot.elf
+            build/pdpt-1g-stale-multiboot.elf
+            build/pdpt-1g-decoy-multiboot.elf
             build/x86-tss-state-report.json
             build/x86-tss-state.o
             build/x86-tss-state.so
