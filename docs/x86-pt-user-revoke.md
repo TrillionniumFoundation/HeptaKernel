@@ -29,3 +29,18 @@ The change is a narrower physical write, not an atomic compare-exchange or
 concurrent ownership proof. A changing PTE between read and store remains a
 race; neither SMP TLB shootdown nor Linux user address-space management is
 implemented.
+
+## Software-defined high PTE bits (native HIA)
+
+The old-entry admission now permits bits **52–58** (software-available
+metadata) and carries all of them unchanged through the exact-old permission
+downgrade. The implementation still rejects bits **59–62** until protection
+key controls and their CPU state have independent modeling and validation.
+The physical address width, complete 64-bit old-entry comparison, native
+one-byte permission store, and all other existing checks remain unchanged.
+The independent native differential oracle now enumerates each high bit,
+including stale-old rejection for the newly permitted values.
+
+This change does not implement protection keys, atomic 64-bit CAS, TLB
+invalidation, SMP shootdown, or Linux address-space management. Its verified
+scope remains exclusive-owner, quiescent 4 KiB PTE downgrades.

@@ -70,3 +70,18 @@ This avoids an eight-store PTE update for this restricted transition; it is
 **not** a 64-bit atomic compare-exchange, does not preclude the race between
 the full-word read and the byte write, and establishes neither a TLB-shootdown
 protocol nor SMP-safe Linux `mprotect`.
+
+## Software-defined high PTE bits (native HIA)
+
+The old-entry admission now permits bits **52–58** (software-available
+metadata) and carries all of them unchanged through the exact-old permission
+downgrade. The implementation still rejects bits **59–62** until protection
+key controls and their CPU state have independent modeling and validation.
+The physical address width, complete 64-bit old-entry comparison, native
+one-byte permission store, and all other existing checks remain unchanged.
+The independent native differential oracle now enumerates each high bit,
+including stale-old rejection for the newly permitted values.
+
+This change does not implement protection keys, atomic 64-bit CAS, TLB
+invalidation, SMP shootdown, or Linux address-space management. Its verified
+scope remains exclusive-owner, quiescent 4 KiB PTE downgrades.
