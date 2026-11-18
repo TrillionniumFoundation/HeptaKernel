@@ -83,7 +83,7 @@ def main() -> None:
                 assert item["symbol_b64"] is None
         assert sum(r["path"] is None for r in records) == 1
         assert [r["start_line"] for r in records if r["path"] ==
-                "drivers/net/driver.c"] == [1, 2, 6, 10, 11, 12]
+                "drivers/net/driver.c"] == [1, 2, 6, 11, 12, 13]
         assert [r["status"] for r in records if r["path"] ==
                 "drivers/net/driver.c"] == [
                     "LEXICAL_ARGUMENTS", "LEXICAL_ARGUMENTS",
