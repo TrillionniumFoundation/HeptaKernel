@@ -148,6 +148,11 @@ jobs:
         run: |
           python3 tests/test_pt_downgrade_report_isolation.py
 
+      - name: Check exact-old dominated single-byte HIA PTE permission stores and mutations
+        shell: bash
+        run: |
+          python3 -B -m unittest tests.test_pt_downgrade_single_byte -v
+
       - name: Verify HIA native x86 access permission admission and malicious grant control
         shell: bash
         run: |
