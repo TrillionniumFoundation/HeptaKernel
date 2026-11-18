@@ -209,6 +209,34 @@ def main():
 
         # Independent reproducibility and loaded-code identity of the native HIA
         # exact-old RW->RO PTE downgrade; not yet a live MMU/TLB transition.
+
+        # Independent source-to-object recompilation of the genuine HIA
+        # RX->R/NX exact-old downgrade; no privileged TLB or atomicity claim.
+        nx_source = Path("src/x86_pt_nx_protect.hepta").read_bytes()
+        nx_object = Path("build/x86-pt-nx-protect.o").read_bytes()
+        nx_rebuilt = subprocess.run([compiler], input=nx_source,
+                                    capture_output=True, timeout=20,
+                                    env={"PATH": ""})
+        if (nx_rebuilt.returncode or nx_rebuilt.stderr or
+                nx_rebuilt.stdout != nx_object):
+            raise ValueError("native HIA NX downgrade differs from empty-PATH rebuild")
+        if subprocess.check_output(["nm", "-u", "build/x86-pt-nx-protect.o"],
+                                   text=True).strip():
+            raise ValueError("HIA NX downgrade has undefined symbols")
+        nx_text = Elf("build/x86-pt-nx-protect.o").section_bytes(".text")
+        if Elf("build/x86-pt-nx-protect.so").section_bytes(".text") != nx_text:
+            raise ValueError("HIA NX downgrade loaded .text differs")
+        report["x86_pt_nx_protect"] = {
+            "source_sha256": sha(nx_source),
+            "object_sha256": sha(nx_object),
+            "text_sha256": sha(nx_text),
+            "empty_path_recompiled": True,
+            "loaded_text_byte_identity": True,
+            "hardware_instruction_fetch_checked": False,
+            "tlb_invalidation_emitted_by_hia": False,
+            "smp_atomicity_verified": False,
+        }
+
         protect_source = Path("src/x86_pt_write_protect.hepta").read_bytes()
         protect_object = Path("build/x86-pt-write-protect.o").read_bytes()
         protect_rebuilt = subprocess.run([compiler], input=protect_source,
