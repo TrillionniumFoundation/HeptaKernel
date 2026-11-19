@@ -136,6 +136,30 @@ test-x86-user-gdt: build/x86-user-gdt.so build/e820-allow-all.so
 	timeout 90 $(PYTHON) tests/test_x86_user_gdt.py build/x86-user-gdt.so
 	$(PYTHON) tests/test_x86_user_gdt.py build/e820-allow-all.so --expect-unsafe
 
+
+# Genuine HIA Core v8 native admission of a narrow, caller-supplied single-page
+# IRQ/PTE/INVLPG effect sequence. No privileged instruction is emitted.
+build/x86-tlb-plan.o: src/x86_tlb_plan.hepta | build check-compiler
+	@set -eu; tmp=$(mktemp build/.x86-tlb-plan.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
+	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+
+build/x86-tlb-plan.so: build/x86-tlb-plan.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/x86-tlb-plan-unsafe.o: tests/negative/x86_tlb_plan_allow_all.hepta | build check-compiler
+	"$(HEPTA_COMPILER)" < "$<" > "$@"
+
+build/x86-tlb-plan-unsafe.so: build/x86-tlb-plan-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+test-x86-tlb-plan: build/x86-tlb-plan.so build/x86-tlb-plan-unsafe.so
+	@set -eu; tmp=$(mktemp build/.tlb-byte-identity.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_tlb_plan.hepta > "$tmp"; \
+	cmp "$tmp" build/x86-tlb-plan.o
+	$(PYTHON) tests/test_x86_tlb_plan.py build/x86-tlb-plan.so
+	$(PYTHON) tests/test_x86_tlb_plan.py build/x86-tlb-plan-unsafe.so --expect-unsafe
+
 # Real HIA Core v8 2 MiB huge PDE admission, distinct from the 4 KiB PTE writer.
 build/x86-pde-2m.o: src/x86_pde_2m.hepta | build check-compiler
 	@set -eu; tmp=$(mktemp build/.x86-pde-2m.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
@@ -561,7 +585,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
