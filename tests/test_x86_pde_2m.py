@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent byte-array oracle for the native HIA 2MiB huge-page PDE commit.
+"""Independent byte-array oracle for native HIA 2MiB PDE commit/removal.
 
 Models an exclusive, quiescent, caller-owned page table, not an atomic
 compare-and-swap, TLB shootdown, physical ownership, or full Linux MMU.
@@ -35,6 +35,24 @@ def oracle(raw: bytes, table: bytes, reply_size: int = 16):
     width = caps & 255
     if caps & ~0x3ff or not 32 <= width <= 52:
         return 8, 0, original
+    # Zero is a restricted removal request: the OLD entry must be a
+    # structurally valid present 2MiB leaf. Never clear an arbitrary table
+    # pointer or an already absent entry, even with a matching old word.
+    if candidate == 0:
+        phys = expected & PA_MASK
+        if (not expected & 1 or not expected & 128 or
+                expected & ~ALLOWED or phys >= 1 << width):
+            return 6, 0, original
+        if ((expected & NX and not caps & NXE) or
+                (expected & (1 << 8) and not caps & PGE)):
+            return 8, 0, original
+        if slot >= 512:
+            return 6, 0, original
+        if struct.unpack_from("<Q", original, slot * 8)[0] != expected:
+            return 9, 0, original
+        updated = bytearray(original)
+        struct.pack_into("<Q", updated, slot * 8, 0)
+        return 0, 0, bytes(updated)
     present = bool(candidate & 1)
     huge = bool(candidate & 0x80)
     writable = bool(candidate & 2)
@@ -168,6 +186,44 @@ def campaign(library: Path):
     ):
         assert oracle(pack(511, 0, candidate, caps), bytes(PAGE))[0] == status
         check(pack(511, 0, candidate, caps), bytes(PAGE))
+
+    # Revoke existing 2MiB leaves; the exact original byte word cannot be
+    # replayed after the native zero update. Neighbor bytes are random.
+    for i in range(320):
+        slot = rng.randrange(512)
+        table = bytearray(rng.randbytes(PAGE))
+        phys = rng.randrange(1, 1 << 30) << 21
+        flags = rng.choice((0, 0x20, 0x40, 0x100, 0x1000,
+                            (1 << 52), (1 << 58), 0x160))
+        old = NX | phys | 0x81 | flags
+        struct.pack_into("<Q", table, slot * 8, old)
+        request = pack(slot, old, 0)
+        assert oracle(request, bytes(table))[0] == 0
+        check(request, bytes(table))
+        struct.pack_into("<Q", table, slot * 8, 0)
+        assert oracle(request, bytes(table))[0] == 9
+        check(request, bytes(table))
+
+    # A non-leaf, absent, reserved-bit, or CPU-incompatible OLD PDE must
+    # not be removed. Capability errors remain distinct from bad entries.
+    for old, caps, expected_status in (
+        ((1 << 21) | 1, CAPS, 6),                 # not a huge leaf
+        ((1 << 21) | 128, CAPS, 6),               # not present
+        ((1 << 21) | 0x81 | (1 << 13), CAPS, 6),  # reserved physical bit
+        ((1 << 21) | 0x81 | (1 << 61), CAPS, 6),  # unsupported PK
+        ((1 << 40) | 0x81, 32 | NXE | PGE, 6),    # too wide
+        (NX | (1 << 21) | 0x81, CAPS & ~NXE, 8),
+        ((1 << 21) | 0x181, CAPS & ~PGE, 8),
+    ):
+        table = bytearray(PAGE)
+        struct.pack_into("<Q", table, 0, old)
+        request = pack(0, old, 0, caps)
+        assert oracle(request, bytes(table))[0] == expected_status
+        check(request, bytes(table))
+
+    # Nonzero commits retain their original checks, including no W+X.
+    assert oracle(pack(0, 0, 0), bytes(PAGE))[0] == 6
+    assert oracle(pack(0, 0, NX | 0x200083), bytes(PAGE))[0] == 6
 
     seed = bytes(PAGE)
     for raw in (b"", b"\0" * 24, b"\0" * 31,
