@@ -177,7 +177,7 @@ A native HIA 1GiB PDPTE commit/removal primitive in `src/x86_pdpt_1g.hepta`
 checks the caller-supplied PDPE1GB/NXE/PGE and physical-width profile, 1GiB
 alignment, reserved bits, PAT bit 12, W^X, USER+GLOBAL and exact-old entry.
 The native byte-array oracle, dishonest control and empty-PATH machine-byte
-identity remain required. An isolated real-CPU QEMU experiment now exercises
+identity remain required. An isolated QEMU TCG CPU/MMU experiment now exercises
 a 1GiB alias first created by native HIA, observes CPU-set Accessed and then
 uses native HIA to zero the *updated* PDPTE. Non-HIA INVLPG/IDT/CR2/IST1
 hardware observation requires the exact subsequent supervisor non-present
