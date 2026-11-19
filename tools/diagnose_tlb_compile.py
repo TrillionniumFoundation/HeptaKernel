@@ -15,12 +15,15 @@ assert len(blocks) == len(raw_blocks) and len(blocks) > 20, len(blocks)
 source_by_name = dict(zip(blocks, raw_blocks))
 assert len(source_by_name)==len(blocks)
 helper="fn read_request_u64("+helper
-tiny = ("hia-asm.v1 hepta.hia.program.v8 selfhost_elf\\n"
-        "fn tlb_plan(request:readbuf,reply:mutbuf,unused:mutbuf) -> (u32) effects(read,trap) entry(start)\\n"
-        "block start(request:readbuf,reply:mutbuf,unused:mutbuf)\\n"
-        "  ok:u32 = const() {\\\"value\\\":0}\\n"
-        "  ret(ok)\\nend\\n").replace("\\\\n","\\n").replace('\\\"','"')
-for label, data in [("minimal",tiny),("minimal_with_unused_helper",tiny+"\\n"+helper),("known_good",Path("src/x86_pde_2m.hepta").read_text())]:
+tiny = '''hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn tlb_plan(request:readbuf,reply:mutbuf,unused:mutbuf) -> (u32) effects(read,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,unused:mutbuf)
+  ok:u32 = const() {"value":0}
+  ret(ok)
+end
+'''
+for label,data in (("minimal",tiny),("minimal_with_unused_helper",tiny+chr(10)+helper),
+                   ("known_good",Path("src/x86_pde_2m.hepta").read_text())):
     p=subprocess.run([sys.argv[1]],input=data.encode("ascii"),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     print("CONTROL",label,"exit",p.returncode,"output_bytes",len(p.stdout),"source_bytes",len(data),flush=True)
 
