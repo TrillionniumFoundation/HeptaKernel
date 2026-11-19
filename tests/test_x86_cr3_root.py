@@ -138,7 +138,7 @@ def readonly_root_page(library):
         req = ctypes.create_string_buffer(request)
         reply = ctypes.create_string_buffer(b"\xbc" * 16)
         status = native(req, len(request), reply, 16, pointer, SIZE)
-        assert (status, struct.unpack("<2Q", reply.raw)) == (0, (0, 2))
+        assert (status, struct.unpack_from("<2Q", reply.raw)) == (0, (0, 2))
         assert page[:] == root, "native HIA modified read-only PML4"
     finally:
         if libc.mprotect(pointer, SIZE, mmap.PROT_READ | mmap.PROT_WRITE) != 0:
