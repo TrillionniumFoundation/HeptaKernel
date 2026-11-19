@@ -67,7 +67,7 @@ for name, first_name, effect, keep_helper, include_load in [
        "hia-asm.v1 hepta.hia.program.v8 selfhost_elf\n"
        f"fn {first_name}(request:readbuf,reply:mutbuf,unused:mutbuf) -> (u32) effects({effect}) entry(start)\n"
        "block start(request:readbuf,reply:mutbuf,unused:mutbuf)\n"
-       + body + "  sample_status:u32 = const() {\\\"value\\\":0}\n  ret(sample_status)\nend\n"
+       + body + "  sample_status:u32 = const() {\"value\":0}\n  ret(sample_status)\nend\n"
        + (helper if keep_helper else "")
     )
     result = subprocess.run([sys.argv[1]], input=sample.encode("ascii"),
