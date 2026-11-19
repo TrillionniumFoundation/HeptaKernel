@@ -12,9 +12,9 @@ block bad_width()
   a_width_status:u32 = const() {"value":1}
   ret(a_width_status)
 block mode(b_candidate:u64,b_cr0:u64,b_cr4:u64,b_efer:u64,b_width:u64)
-  b_cr0_mask:u64 = const() {"value":2147483649}
+  b_cr0_mask:u64 = const() {"value":2147549185}
   b_cr4_pae:u64 = const() {"value":32}
-  b_efer_long:u64 = const() {"value":1280}
+  b_efer_long:u64 = const() {"value":3328}
   b_cr0_set:u64 = bit.and(b_cr0,b_cr0_mask)
   b_cr4_set:u64 = bit.and(b_cr4,b_cr4_pae)
   b_efer_set:u64 = bit.and(b_efer,b_efer_long)

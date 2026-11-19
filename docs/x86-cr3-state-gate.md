@@ -9,9 +9,17 @@ function takes five SysV AMD64 `u64` arguments:
 It returns a `u32` admission result without touching hardware state.
 
 The deliberately restricted initial four-level long-mode profile requires
-CR0.PE/PG, CR4.PAE, EFER.LME/LMA, a 32–52-bit physical-address width,
+CR0.PE/PG/**WP**, CR4.PAE, EFER.LME/LMA/**NXE**, a 32–52-bit physical-address width,
 CR4.LA57=0, CR4.PCIDE=0, a nonzero 4 KiB-aligned root page-table base,
 PWT/PCD as the only permissible CR3 low bits, and no unsupported high bits.
+The WP and NXE requirements are deliberate *policy* restrictions:
+CR0.WP=0 would allow supervisor writes through read-only mappings, while
+EFER.NXE=0 does not provide the execute-disable semantics needed by this
+kernel's NX page policies. A CPU with an otherwise valid long-mode state
+but either bit clear is rejected with status 2. These are not universal
+requirements for a legal x86-64 CR3 load. The independent oracle exercises
+missing WP and missing NXE separately, including positive instances with
+both bits set.
 This is not a claim that all legal Intel/AMD CR3 configurations are supported.
 
 Result codes: 0 = admitted, 1 = bad width, 2 = mode unavailable,
