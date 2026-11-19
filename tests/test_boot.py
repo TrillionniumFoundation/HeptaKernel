@@ -487,6 +487,14 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         accepted = accepted and (protect_fault == (mode == "pt_protect_hardware_fault"))
         accepted = accepted and (protect_stale == (mode == "pt_protect_stale_rejected"))
         accepted = accepted and (protect_bypass == (mode == "pt_protect_bypass_stored"))
+        # These live-MMU markers are mutually exclusive and absent in all
+        # earlier scenarios; correct exit status alone cannot make them pass.
+        pde_unmap_modes = {"pde_2m_unmap_hardware_fault",
+                           "pde_2m_unmap_stale", "pde_2m_unmap_bypass"}
+        accepted = accepted and (pde_2m_warmed == (mode in pde_unmap_modes))
+        accepted = accepted and (pde_2m_fault == (mode == "pde_2m_unmap_hardware_fault"))
+        accepted = accepted and (pde_2m_stale == (mode == "pde_2m_unmap_stale"))
+        accepted = accepted and (pde_2m_bypass == (mode == "pde_2m_unmap_bypass"))
         # Revoke-only markers must never appear on unrelated boot images.
         accepted = accepted and (revoke_verified == (mode in
                       {"pt_revoke_hardware_fault", "pt_revoke_bypass_read"}))
@@ -498,7 +506,8 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         precommit = {"reserved_rejected", "nonvolatile_rejected", "protected_rejected",
                      "pte_unsafe_rejected", "pt_commit_conflict_rejected",
                      "pdpt_1g_hardware", "pdpt_1g_stale", "pdpt_1g_decoy",
-                     "pdpt_1g_unmap_hardware_fault", "pdpt_1g_unmap_stale", "pdpt_1g_unmap_bypass"}
+                     "pdpt_1g_unmap_hardware_fault", "pdpt_1g_unmap_stale", "pdpt_1g_unmap_bypass",
+                     "pde_2m_unmap_hardware_fault", "pde_2m_unmap_stale", "pde_2m_unmap_bypass"}
         accepted = accepted and (pt_commit_verified == (mode not in precommit | {"user_gdt_conflict_rejected", "idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected", "rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected", "upper_user_stale_rejected"}))
         accepted = accepted and (upper_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"}))
         accepted = accepted and (upper_stale == (mode == "upper_user_stale_rejected"))
