@@ -141,7 +141,9 @@ test-x86-user-gdt: build/x86-user-gdt.so build/e820-allow-all.so
 # IRQ/PTE/INVLPG effect sequence. No privileged instruction is emitted.
 build/x86-tlb-plan.o: src/x86_tlb_plan.hepta | build check-compiler
 	@set -eu; tmp=$(mktemp build/.x86-tlb-plan.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
+	set +e; "$(HEPTA_COMPILER)" < "$<" > "$tmp"; status=$?; set -e; \
+	if test "$status" -ne 0; then echo "native HIA tlb-plan compiler exit status=$status (2=invalid source, 3=capacity)" >&2; exit "$status"; fi; \
+	if ! test -s "$tmp"; then echo "native HIA tlb-plan emitted empty object" >&2; exit 1; fi; \
 	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
 
 build/x86-tlb-plan.so: build/x86-tlb-plan.o
