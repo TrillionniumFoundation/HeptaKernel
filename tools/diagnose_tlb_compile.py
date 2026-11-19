@@ -50,3 +50,28 @@ for limit in [1, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23,
     print("PROBE",limit,"reachable",len(visited),"source_bytes",len(candidate),
           "exit",command.returncode,"out",len(command.stdout),
           "stderr",command.stderr[:80].decode("ascii","replace"),flush=True)
+
+# Temporary controls to distinguish the source grammar, first-entry ABI,
+# unused helper acceptance and target effect spelling.
+print("PROBE CONTROL MATRIX", flush=True)
+for name, first_name, effect, keep_helper, include_load in [
+    ("minimal-read", "tlb_plan", "read,trap", False, False),
+    ("minimal-read-helper", "tlb_plan", "read,trap", True, False),
+    ("minimal-write-helper", "tlb_plan", "read,write,trap", True, False),
+    ("minimal-f0-helper", "f0", "read,trap", True, False),
+    ("minimal-load", "tlb_plan", "read,trap", False, True),
+    ("minimal-load-helper", "tlb_plan", "read,trap", True, True),
+]:
+    body = "  sample:usize = buffer.len(request)\n" if include_load else ""
+    sample = (
+       "hia-asm.v1 hepta.hia.program.v8 selfhost_elf\n"
+       f"fn {first_name}(request:readbuf,reply:mutbuf,unused:mutbuf) -> (u32) effects({effect}) entry(start)\n"
+       "block start(request:readbuf,reply:mutbuf,unused:mutbuf)\n"
+       + body + "  sample_status:u32 = const() {\\\"value\\\":0}\n  ret(sample_status)\nend\n"
+       + (helper if keep_helper else "")
+    )
+    result = subprocess.run([sys.argv[1]], input=sample.encode("ascii"),
+         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    print("PROBE CONTROL",name,"exit",result.returncode,
+          "source_bytes",len(sample),"out",len(result.stdout),
+          "stderr",result.stderr[:64].decode("ascii","replace"),flush=True)
