@@ -27,3 +27,30 @@ privileged CRx/MMIO/TLB backend. Integrate with a verified PMM claim,
 identity-bound mapping, appropriate memory ordering, and QEMU physical
 readback before claiming secure frame recycling or user data isolation.
 The original 17 full-Linux gates and 422 syscall obligations remain HOLD.
+
+## Isolated QEMU physical-frame test
+
+`make test-page-zero-hw` links the exact `src/page_zero.hepta` object
+with a renamed symbol into a Multiboot image; the object and linked object
+must have identical `.text` bytes. The NON-HIA boot observer requires the
+real Multiboot memory map and protected-range gate to admit two disjoint
+17-page arenas. The actual HIA router, HIA allocator and HIA state-owner
+checker provision two 2-page allocations at physical addresses 0x402000
+and 0x601000. Those four physical frames are filled with nonzero bytes
+in the observer, passed as 4096-byte mutable capabilities into the genuine
+HIA function, and independently checked byte by byte for zero in QEMU PC
+32 MiB and Q35 64 MiB.
+
+Two negative images use exactly the same observation path. One substitutes
+an independently compiled dishonest HIA routine that returns success without
+writing memory; the reply is preseeded with plausible values so only actual
+physical RAM readback can detect the bypass. The other runs genuine HIA and
+then corrupts byte 2048 in real RAM via an expressly NON-HIA malicious bridge;
+full-byte readback must reject the decoy. Each negative image must finish
+with failure exit 35, without a positive page-zero marker. Original host
+byte-oracle and guard-page tests remain independently required.
+
+This is an **isolated quiescent single-owner hardware test**, not a proof that
+`page_zero` itself authenticates physical-frame ownership, preserves other
+zones under concurrent updates, performs page retirement, implements IOMMU
+or DMA safety, or works without the existing non-HIA QEMU bootstrap.

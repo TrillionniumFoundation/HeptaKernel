@@ -2643,6 +2643,69 @@ owner_exercise64:
     movq $0, (%rsi)
     movq $0, PAGE_BYTES(%rsi)
 
+#if defined(HEPTAKERNEL_TEST_PAGE_ZERO_HW)
+    /* NON-HIA independent QEMU observer: these four frames are currently
+     * owned by two distinct native-HIA PMM states. Both zones passed actual
+     * Multiboot E820 and protected-range admission before allocation.
+     * The physical contents are filled nonzero, then only the genuine HIA
+     * page-zero object is allowed to clear them. This fixture does NOT
+     * establish authority inside page_zero or SMP synchronization. */
+    leaq page_zero_hw_physical_pages(%rip), %r12
+    movq $4, %r13
+page_zero_hw_each:
+    movq (%r12), %r14
+    movq %r14, %rdi
+    movabsq $0xd75ac321f00dbabe, %rax
+    movl $512, %ecx
+    rep stosq                       /* NON-HIA: initialize adversarial RAM */
+    movabsq $0xa55aa55a5aa55aa5, %rax
+    movq %rax, page_zero_hw_guard_before(%rip)
+    movq %rax, page_zero_hw_guard_after(%rip)
+    /* Pre-seed an apparently valid reply, so a dishonest no-op HIA cannot
+     * be rejected based on missing reply writes alone. Physical readback
+     * must separately prove every byte was cleared. */
+    movq $0, page_zero_hw_reply(%rip)
+    movq $4096, page_zero_hw_reply+8(%rip)
+    leaq page_zero_hw_empty_request(%rip), %rdi
+    xorq %rsi, %rsi
+    leaq page_zero_hw_reply(%rip), %rdx
+    movl $16, %ecx
+    movq %r14, %r8
+    movl $4096, %r9d
+    call page_zero_f0              /* genuine fixed upstream HIA machine code */
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, page_zero_hw_reply(%rip)
+    jne fail64
+    cmpq $4096, page_zero_hw_reply+8(%rip)
+    jne fail64
+    movabsq $0xa55aa55a5aa55aa5, %rax
+    cmpq %rax, page_zero_hw_guard_before(%rip)
+    jne fail64
+    cmpq %rax, page_zero_hw_guard_after(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_PAGE_ZERO_DECOY
+    /* Hostile NON-HIA bridge changes real RAM AFTER native HIA returns.
+     * The independent full-byte observer must refuse false success. */
+    cmpq $4, %r13
+    jne 94f
+    movb $0xe1, 2048(%r14)
+94:
+#endif
+    movq %r14, %rsi
+    movl $4096, %ecx
+page_zero_hw_check:
+    cmpb $0, (%rsi)
+    jne fail64
+    incq %rsi
+    loop page_zero_hw_check
+    addq $8, %r12
+    decq %r13
+    jnz page_zero_hw_each
+    leaq message_page_zero_hw_pass(%rip), %rsi
+    call puts64
+#endif
+
     /* Exact cross-zone claims must fail without changing either owner. */
     leaq owner_claim_b(%rip), %rdi
     movq owner_choice_a(%rip), %rsi
@@ -3007,6 +3070,8 @@ message_router_pass:
     .asciz "HEPTAKERNEL HIA ARENA ROUTER VERIFIED\r\n"
 message_owner_pass:
     .asciz "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED\r\n"
+message_page_zero_hw_pass:
+    .asciz "HEPTAKERNEL HIA PHYSICAL PAGE ZERO FOUR FRAMES VERIFIED\r\n"
 root_live_message:
     .asciz "HEPTAKERNEL HIA LIVE CR3 ROOT PAGE VERIFIED\r\n"
 root_unsafe_message:
@@ -3099,6 +3164,8 @@ arena_cases_end:
 owner_descriptors:
     .quad 0x400000, 17, 2
     .quad 0x600000, 17, 1
+page_zero_hw_physical_pages:
+    .quad 0x402000, 0x403000, 0x601000, 0x602000
 owner_state_table:
     .quad owner_a_state, owner_b_state
 owner_init_a:    .quad 0, 17, 0x400000, 2
@@ -3224,6 +3291,11 @@ owner_route_unused:       .skip 16
 owner_route_request:      .skip 80
 owner_choice_a:           .skip 8
 owner_choice_b:           .skip 8
+.balign 8
+page_zero_hw_guard_before: .skip 8
+page_zero_hw_reply:        .skip 16
+page_zero_hw_guard_after:  .skip 8
+page_zero_hw_empty_request: .skip 1
 case_cursor:      .skip 8
 case_index:       .skip 8
 physical_probes:  .skip 8
