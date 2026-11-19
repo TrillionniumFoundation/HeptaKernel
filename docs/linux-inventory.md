@@ -174,4 +174,21 @@ truncated, commented and invalid-UTF8/newline-path cases. The original
 same-line artifact is retained for comparability and tested unchanged.
 This is a source inventory improvement only: all 17 Linux acceptance gates,
 422 syscall obligations, and inventory_complete=false remain open.
-\n## Pinned UAPI C tag lexical coverage (additional source inventory)\n\nThe separate `tools/linux_uapi_tags.py` inventories every lexical\n`struct`, `union`, and `enum` tag mention from tracked regular UAPI header\nGit blobs at the exact Linux commit. It records the source blob SHA-1, raw-byte\npath, token byte position, line, optional tag name and local lexical class.\nC comments and quoted literals are excluded; inactive conditional branches\nand macro bodies remain visible. A malformed/unterminated lexical token aborts\nrather than silently declaring the file complete. Independent synthetic-Git\ntests check literal source offsets, forged worktree modification, disjoint\nsource scopes and wrong-HEAD refusal. CI retains the source manifest and\nits SHA-256 report alongside the existing recursive source inventory.\n\nThis is a **source-level obligation discovery tool**, not a C-preprocessed\nUAPI export list, type-layout resolver, ioctl ABI conformance test, or HIA\nkernel implementation. It does not reduce any of the 422 x86-64 syscall rows\nor the 17 full-acceptance gates.\n
+
+## Pinned UAPI C tag lexical coverage (additional source inventory)
+
+The separate `tools/linux_uapi_tags.py` inventories every lexical
+`struct`, `union`, and `enum` tag mention from tracked regular UAPI header
+Git blobs at the exact Linux commit. It records the source blob SHA-1, raw-byte
+path, token byte position, line, optional tag name and local lexical class.
+C comments and quoted literals are excluded; inactive conditional branches
+and macro bodies remain visible. A malformed/unterminated lexical token aborts
+rather than silently declaring the file complete. Independent synthetic-Git
+tests check literal source offsets, forged worktree modification, disjoint
+source scopes and wrong-HEAD refusal. CI retains the source manifest and
+its SHA-256 report alongside the existing recursive source inventory.
+
+This is a **source-level obligation discovery tool**, not a C-preprocessed
+UAPI export list, type-layout resolver, ioctl ABI conformance test, or HIA
+kernel implementation. It does not reduce any of the 422 x86-64 syscall rows
+or the 17 full-acceptance gates.

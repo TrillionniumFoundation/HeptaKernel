@@ -3,7 +3,9 @@ name: Pinned Linux source inventory
 on:
   pull_request:
     paths:
-      - 'tools/linux_inventory.py'\n      - 'tools/linux_uapi_tags.py'\n      - 'tests/test_linux_uapi_tags.py'
+      - 'tools/linux_inventory.py'
+      - 'tools/linux_uapi_tags.py'
+      - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -11,7 +13,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'tools/linux_inventory.py'\n      - 'tools/linux_uapi_tags.py'\n      - 'tests/test_linux_uapi_tags.py'
+      - 'tools/linux_inventory.py'
+      - 'tools/linux_uapi_tags.py'
+      - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -34,7 +38,8 @@ jobs:
       - name: Test inventory parser against adversarial Git fixtures
         run: |
           python3 -I -B tests/test_linux_inventory.py
-          python3 -I -B tests/test_device_table_spans.py\n          python3 -I -B tests/test_linux_uapi_tags.py
+          python3 -I -B tests/test_device_table_spans.py
+          python3 -I -B tests/test_linux_uapi_tags.py
 
       - name: Checkout exact pinned upstream Linux (not a moving branch)
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -416,7 +421,9 @@ jobs:
             build/linux-inventory/kconfig-source-edges.jsonl
             build/linux-inventory/directory-objects.jsonl
             build/linux-inventory/uapi-paths.jsonl
-            build/linux-inventory/uapi-macro-rows.jsonl\n            build/linux-inventory/uapi-tag-mentions.jsonl\n            build/linux-inventory/uapi-tag-report.json
+            build/linux-inventory/uapi-macro-rows.jsonl
+            build/linux-inventory/uapi-tag-mentions.jsonl
+            build/linux-inventory/uapi-tag-report.json
             build/linux-inventory/syscall-table-rows.jsonl
             build/linux-inventory/module-device-table-mentions.jsonl
             build/linux-inventory/module-device-table-invocations.jsonl
