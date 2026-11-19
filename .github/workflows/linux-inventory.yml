@@ -5,7 +5,9 @@ on:
     paths:
       - 'tools/linux_inventory.py'
       - 'tools/linux_uapi_tags.py'
+      - 'tools/linux_kconfig_relations.py'
       - 'tests/test_linux_uapi_tags.py'
+      - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -15,7 +17,9 @@ on:
     paths:
       - 'tools/linux_inventory.py'
       - 'tools/linux_uapi_tags.py'
+      - 'tools/linux_kconfig_relations.py'
       - 'tests/test_linux_uapi_tags.py'
+      - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -40,6 +44,7 @@ jobs:
           python3 -I -B tests/test_linux_inventory.py
           python3 -I -B tests/test_device_table_spans.py
           python3 -I -B tests/test_linux_uapi_tags.py
+          python3 -I -B tests/test_linux_kconfig_relations.py
 
       - name: Checkout exact pinned upstream Linux (not a moving branch)
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -110,6 +115,73 @@ jobs:
           print("UAPI_TAG_PHYSICAL_ORIGIN: PASS", report["records"], len(blobs))
           print("UAPI_TAG_LEXICAL_MANIFEST: PASS", report["records"], len(paths))
           print("FULL_LINUX_REWRITE: HOLD")
+          PY
+
+      - name: Inventory Kconfig relation lines with independent source-byte readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I -B tools/linux_kconfig_relations.py --repo .upstream/linux --lock compatibility/linux-source-lock.json --out build/linux-inventory
+          python3 - <<'PY'
+          import base64, hashlib, json, subprocess
+          from pathlib import Path
+          root = Path("build/linux-inventory")
+          report = json.loads((root / "kconfig-relation-report.json").read_text())
+          source = (root / "kconfig-relation-lines.jsonl").read_bytes()
+          commit = json.loads(Path("compatibility/linux-source-lock.json").read_text())["linux"]["commit"]
+          run = lambda *a: subprocess.check_output(["git", "-C", ".upstream/linux", *a])
+          assert report["linux_commit"] == run("rev-parse", "HEAD").strip().decode() == commit
+          assert report["linux_root_tree"] == run("rev-parse", "HEAD^{tree}").strip().decode()
+          assert hashlib.sha256(source).hexdigest() == report["source_sha256"]
+          assert report["status"] == "PARTIAL_LEXICAL_RELATIONS_NOT_RESOLVED_GRAPH"
+          assert report["inventory_complete"] is False and report["full_rewrite_complete"] is False
+          rows = [json.loads(line) for line in source.splitlines()]
+          assert len(rows) == report["counts"]["relation_line_candidates"] > 0
+          paths = [json.loads(line) for line in (root / "source-paths.jsonl").read_bytes().splitlines()]
+          ref = []
+          counter = {"kconfig_paths": 0, "unreadable_kconfig_paths": 0,
+                     "scanned_kconfig_paths": 0}
+          single = {b"select", b"imply", b"default", b"range", b"prompt",
+                    b"def_bool", b"def_tristate"}
+          for item in paths:
+              name = base64.b64decode(item["path_b64"])
+              leaf = name.split(b"/")[-1]
+              if leaf != b"Kconfig" and not leaf.startswith(b"Kconfig."):
+                  continue
+              counter["kconfig_paths"] += 1
+              if item["mode"] not in ("100644", "100755") or item["type"] != "blob":
+                  counter["unreadable_kconfig_paths"] += 1
+                  continue
+              counter["scanned_kconfig_paths"] += 1
+              blob = run("cat-file", "blob", item["oid"])
+              assert len(blob) == item["size"]
+              offset = 0
+              for number, raw in enumerate(blob.split(b"\n"), 1):
+                  trimmed = raw.lstrip(b" \t")
+                  words = trimmed.split(None, 2)
+                  kind, operand = None, None
+                  if len(words) >= 3 and words[0:2] == [b"depends", b"on"]:
+                      kind, operand = b"depends_on", words[2]
+                  elif len(words) >= 3 and words[0:2] == [b"visible", b"if"]:
+                      kind, operand = b"visible_if", words[2]
+                  elif len(words) >= 2 and words[0] in single:
+                      kind, operand = words[0], trimmed.split(None, 1)[1]
+                  if kind is not None and operand is not None and operand[:1] not in (b" ", b"\t", b"\r"):
+                      ref.append((name, item["oid"], number,
+                                  offset + len(raw) - len(trimmed),
+                                  offset + len(raw), kind, raw, operand))
+                  offset += len(raw) + 1
+          actual = [(base64.b64decode(x["path_b64"]), x["blob_oid"], x["line"],
+                     x["byte_at"], x["byte_end"], x["kind"].encode(),
+                     base64.b64decode(x["raw_b64"]),
+                     base64.b64decode(x["operand_b64"])) for x in rows]
+          assert [(a,b,c,d,e,f,g) for a,b,c,d,e,f,g,h in actual] == [
+              (a,b,c,d,e,f,g) for a,b,c,d,e,f,g,h in ref]
+          assert all(x[7] == y[7] for x,y in zip(actual,ref))
+          for key, count in counter.items():
+              assert report["counts"].get(key, 0) == count
+          print("KCONFIG_RELATION_ORIGINAL_GIT_BYTES: PASS", len(ref))
+          print("KCONFIG_SEMANTIC_DEPENDENCY_GRAPH: HOLD")
           PY
 
       - name: Independently check source counts, hashes and unclosed Linux scope
@@ -442,6 +514,8 @@ jobs:
             build/linux-inventory/source-paths.jsonl
             build/linux-inventory/kconfig-declarations.jsonl
             build/linux-inventory/kconfig-source-edges.jsonl
+            build/linux-inventory/kconfig-relation-lines.jsonl
+            build/linux-inventory/kconfig-relation-report.json
             build/linux-inventory/directory-objects.jsonl
             build/linux-inventory/uapi-paths.jsonl
             build/linux-inventory/uapi-macro-rows.jsonl

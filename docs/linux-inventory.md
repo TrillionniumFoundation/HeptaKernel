@@ -211,3 +211,23 @@ This is still a lexical approximation, not translation-phase completeness:
 C trigraph translation, macros, conditional activation, declaration
 semantics, type layout and ABI export resolution are outside this
 inventory. The pinned baseline and all Linux acceptance gates remain HOLD.
+
+
+## Immutable Kconfig property-line candidate ledger
+
+The separate \`tools/linux_kconfig_relations.py\` records every lexical
+\`depends on\`, \`visible if\`, \`select\`, \`imply\`, \`default\`,
+\`range\`, \`prompt\`, \`def_bool\`, and \`def_tristate\` line across the
+pinned Linux Git tree's tracked Kconfig files. Each record binds an immutable
+Git blob ID and raw-byte-safe path to the physical source line, byte offsets,
+exact original bytes and an unevaluated operand. Git symlinks are counted as
+unreadable rather than followed; the worktree can be modified without changing
+the immutable-object output. Its JSONL and SHA-256 report are retained in CI.
+
+This is **only a lexical source obligation ledger**, not a Kconfig parser,
+dependency graph, reachable build configuration, or HIA implementation. In
+particular, help text can contain a matching line, line continuations are not
+resolved, source/include variables are not expanded, and inactive branches are
+not evaluated. CI independently replays all candidate source rows from pinned
+Git blobs and retains explicit full-Linux HOLD. The 17 full-acceptance gates
+and 422 x86-64 syscall rows remain unchanged.
