@@ -1155,8 +1155,8 @@ test-page-copy-hw: build/page-copy-hw-multiboot.elf build/page-copy-dishonest-mu
 	  trap 'rm -f "$$original" "$$renamed"' EXIT HUP INT TERM; \
 	  objcopy --dump-section .text="$$original" build/page-copy.o; \
 	  objcopy --dump-section .text="$$renamed" build/page-copy-boot.o; \
-	  cmp "$original" "$renamed"; \
-	  objcopy --dump-section .text="$original" build/page-zero.o; \
-	  objcopy --dump-section .text="$renamed" build/page-zero-boot.o; \
-	  cmp "$original" "$renamed"
+	  cmp "$$original" "$$renamed"; \
+	  objcopy --dump-section .text="$$original" build/page-zero.o; \
+	  objcopy --dump-section .text="$$renamed" build/page-zero-boot.o; \
+	  cmp "$$original" "$$renamed"
 	$(PYTHON) tests/test_page_copy_qemu.py --qemu "$(QEMU)"
