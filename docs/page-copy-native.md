@@ -92,3 +92,27 @@ TLB flush, DMA exclusion, multi-CPU ownership or user-visible `fork`
 semantics is provided. The addresses, physical-RAM observer and
 quiescent execution are non-HIA test infrastructure. The full 17
 Linux acceptance gates and 422 syscall rows remain open.
+
+## Immediate HIA PMM state re-admission before native copy
+
+The cross-zone QEMU copy path now repeats the *genuine* native
+`owner_binding.hepta` scan **after** native HIA allocation, immediately
+before any source or destination memory is seeded or copied. Each pinned
+17-frame PMM state must match its immutable descriptor and its actual
+bitmap/free count (13 free in source zone A and 14 in destination zone B).
+The binder reads the entire header and occupied bitmap; merely accepting a
+status or trusting an earlier pre-allocation check is insufficient.
+
+Two separate PC/32MiB and Q35/64MiB adversarial images respectively
+replace the destination state header's physical base and corrupt its
+free-count without updating its bitmap. The genuine HIA binder must reject
+both before entering HIA `page_copy`. The independent observer requires
+exit 35 and the absence of all copy, detach and PMM success markers. This
+extends `make test-page-copy-hw` to 18 QEMU cases (4 positive, 14 negative).
+
+A correct header and bitmap can still be maliciously forged together;
+the pointers are supplied by an explicitly non-HIA single-CPU test bridge.
+Neither this re-admission nor the QEMU readback supplies cryptographically
+authenticated physical provenance, a page pin/lease, DMA protection,
+concurrent ownership or TLB shootdown. Complete Linux and HIA-native
+privilege/exception backend acceptance remain HOLD.

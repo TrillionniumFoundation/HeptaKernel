@@ -2644,6 +2644,30 @@ owner_exercise64:
     movq $0, PAGE_BYTES(%rsi)
 
 #if defined(HEPTAKERNEL_TEST_PAGE_COPY_HW)
+    /* Recheck both actual native HIA PMM states after allocating both
+     * cross-zone runs, immediately before providing the physical addresses
+     * to HIA page_copy. This verifies the HIA bitmap/header state against
+     * independently fixed descriptors and free counts (13 and 14).
+     * It is a quiescent handoff, NOT an authenticated pointer capability
+     * or atomic pin; the observer remains explicitly NON-HIA. */
+#ifdef HEPTAKERNEL_TEST_PAGE_COPY_OWNER_BASE_FORGE
+    /* Fault injection: an apparently allocated destination zone is
+     * misbound to a different physical base in its HIA-owned header. */
+    movq $0x700000, owner_b_state+16(%rip)
+#endif
+#ifdef HEPTAKERNEL_TEST_PAGE_COPY_OWNER_COUNT_FORGE
+    /* Fault injection: header free count disagrees with the bitmap. */
+    movq $16, owner_b_state+32(%rip)
+#endif
+    leaq owner_descriptors(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    movq $13, %rdx
+    call owner_bind64            /* genuine native HIA state/bitmap checker */
+    leaq owner_descriptors+24(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    movq $14, %rdx
+    call owner_bind64            /* reject forged B domain before any copy */
+
     /* NON-HIA physical observer, not a capability/provenance implementation:
      * both pages of each pair were admitted by the actual Multiboot E820
      * gate, allocated by native HIA PMM and bound to distinct owner states.

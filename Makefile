@@ -1114,6 +1114,14 @@ build/boot-page-copy-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
 build/boot-page-copy-source-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_PAGE_COPY_HW=1 -DHEPTAKERNEL_TEST_PAGE_COPY_SOURCE_DECOY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
+# Inject HIA PMM header identity and free-bitmap/accounting inconsistencies
+# before the first HIA page_copy: both independent negative images must fail.
+build/boot-page-copy-owner-base-forge.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PAGE_COPY_HW=1 -DHEPTAKERNEL_TEST_PAGE_COPY_OWNER_BASE_FORGE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-page-copy-owner-count-forge.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PAGE_COPY_HW=1 -DHEPTAKERNEL_TEST_PAGE_COPY_OWNER_COUNT_FORGE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
 PAGE_COPY_HW_SUPPORT := $(PAGE_ZERO_HW_SUPPORT)
 
 build/page-copy-hw.elf: build/boot-page-copy-hw.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o arch/x86_64/linker.ld
@@ -1127,6 +1135,12 @@ build/page-copy-decoy.elf: build/boot-page-copy-decoy.o $(PAGE_COPY_HW_SUPPORT) 
 
 build/page-copy-source-decoy.elf: build/boot-page-copy-source-decoy.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-copy-source-decoy.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o
+
+build/page-copy-owner-base-forge.elf: build/boot-page-copy-owner-base-forge.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-copy-owner-base-forge.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o
+
+build/page-copy-owner-count-forge.elf: build/boot-page-copy-owner-count-forge.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-copy-owner-count-forge.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o
 
 build/page-copy-%-multiboot.elf: build/page-copy-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
@@ -1150,7 +1164,7 @@ build/page-copy-detach-source-decoy.elf: build/boot-page-copy-detach-source-deco
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-copy-detach-source-decoy.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o build/page-zero-boot.o
 
 .PHONY: test-page-copy-hw
-test-page-copy-hw: build/page-copy-hw-multiboot.elf build/page-copy-dishonest-multiboot.elf build/page-copy-decoy-multiboot.elf build/page-copy-source-decoy-multiboot.elf build/page-copy-detach-multiboot.elf build/page-copy-detach-bypass-multiboot.elf build/page-copy-detach-source-decoy-multiboot.elf
+test-page-copy-hw: build/page-copy-hw-multiboot.elf build/page-copy-dishonest-multiboot.elf build/page-copy-decoy-multiboot.elf build/page-copy-source-decoy-multiboot.elf build/page-copy-owner-base-forge-multiboot.elf build/page-copy-owner-count-forge-multiboot.elf build/page-copy-detach-multiboot.elf build/page-copy-detach-bypass-multiboot.elf build/page-copy-detach-source-decoy-multiboot.elf
 	@set -eu; original=$$(mktemp build/.page-copy-original.XXXXXX); renamed=$$(mktemp build/.page-copy-renamed.XXXXXX); \
 	  trap 'rm -f "$$original" "$$renamed"' EXIT HUP INT TERM; \
 	  objcopy --dump-section .text="$$original" build/page-copy.o; \
