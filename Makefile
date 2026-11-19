@@ -1131,11 +1131,32 @@ build/page-copy-source-decoy.elf: build/boot-page-copy-source-decoy.o $(PAGE_COP
 build/page-copy-%-multiboot.elf: build/page-copy-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
+# Copy-then-detach data path using two *original* HIA native functions:
+# first copy each cross-zone physical page, then HIA-zero its destination.
+# Dishonest variant substitutes a genuine compiled HIA no-op for the zero.
+build/boot-page-copy-detach.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PAGE_COPY_HW=1 -DHEPTAKERNEL_TEST_PAGE_COPY_DETACH=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-page-copy-detach-source-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PAGE_COPY_HW=1 -DHEPTAKERNEL_TEST_PAGE_COPY_DETACH=1 -DHEPTAKERNEL_TEST_PAGE_COPY_DETACH_SOURCE_DECOY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/page-copy-detach.elf: build/boot-page-copy-detach.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o build/page-zero-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-copy-detach.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o build/page-zero-boot.o
+
+build/page-copy-detach-bypass.elf: build/boot-page-copy-detach.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o build/page-zero-dishonest-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-copy-detach.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o build/page-zero-dishonest-boot.o
+
+build/page-copy-detach-source-decoy.elf: build/boot-page-copy-detach-source-decoy.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o build/page-zero-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-copy-detach-source-decoy.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o build/page-zero-boot.o
+
 .PHONY: test-page-copy-hw
-test-page-copy-hw: build/page-copy-hw-multiboot.elf build/page-copy-dishonest-multiboot.elf build/page-copy-decoy-multiboot.elf build/page-copy-source-decoy-multiboot.elf
+test-page-copy-hw: build/page-copy-hw-multiboot.elf build/page-copy-dishonest-multiboot.elf build/page-copy-decoy-multiboot.elf build/page-copy-source-decoy-multiboot.elf build/page-copy-detach-multiboot.elf build/page-copy-detach-bypass-multiboot.elf build/page-copy-detach-source-decoy-multiboot.elf
 	@set -eu; original=$$(mktemp build/.page-copy-original.XXXXXX); renamed=$$(mktemp build/.page-copy-renamed.XXXXXX); \
 	  trap 'rm -f "$$original" "$$renamed"' EXIT HUP INT TERM; \
 	  objcopy --dump-section .text="$$original" build/page-copy.o; \
 	  objcopy --dump-section .text="$$renamed" build/page-copy-boot.o; \
+	  cmp "$$original" "$$renamed"; \
+	  objcopy --dump-section .text="$$original" build/page-zero.o; \
+	  objcopy --dump-section .text="$$renamed" build/page-zero-boot.o; \
 	  cmp "$$original" "$$renamed"
 	$(PYTHON) tests/test_page_copy_qemu.py --qemu "$(QEMU)"

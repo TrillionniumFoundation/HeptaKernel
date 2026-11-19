@@ -283,6 +283,9 @@ jobs:
             build/page-copy-dishonest-multiboot.elf
             build/page-copy-decoy-multiboot.elf
             build/page-copy-source-decoy-multiboot.elf
+            build/page-copy-detach-multiboot.elf
+            build/page-copy-detach-bypass-multiboot.elf
+            build/page-copy-detach-source-decoy-multiboot.elf
             build/page-copy-boot.o
             build/x86-tlb-plan.o
             build/x86-tlb-plan.so

@@ -27,8 +27,8 @@ pointers are not themselves physical capabilities. It does not implement
 page-fault handling, copy-on-write policy, virtual memory aliases, TLB
 shootdown, race freedom, dirty-bit protocol, DMA/IOMMU protection or a
 general-purpose Linux page copier. The 17 complete acceptance gates and
-422 syscall obligations remain HOLD. QEMU physical-source readback is a
-separate future test, not implied by the host-native oracle.
+422 syscall obligations remain HOLD. QEMU physical-source readback is tested separately below, not
+implied by the host-native oracle.
 
 ## Isolated QEMU actual physical page copy
 
@@ -63,3 +63,32 @@ capabilities, that physical mapping remains stable across concurrency or
 DMA, or that it implements COW faults, page-table commit, cache/TLB
 shootdown or Linux copy_page semantics. All 17 full-target gates and 422
 syscall rows remain unchanged and HOLD.
+
+## Cross-zone copy-then-detach physical-data experiment
+
+`make test-page-copy-hw` additionally checks two independent page data
+lifecycles under QEMU TCG, on both PC/32MiB and Q35/64MiB. After the
+original HIA `buffer.copy_range` has copied both E820-admitted and
+HIA-PMM-allocated 4KiB cross-zone pairs and the full-physical-RAM
+oracle has checked the source and destination, the *original native
+HIA* `page_zero_f0` clears each destination without modifying its source.
+A second independent byte-level oracle checks 8192 source bytes against
+the original deterministic patterns and 8192 destination bytes against
+zero. The page-zero success receipt is deliberately preseeded so returning
+success without writing cannot satisfy the observer.
+
+The dishonest HIA zero substitute (built from the existing
+`tests/negative/page_zero_allow_all.hepta`) and a post-zero non-HIA
+source-corruption fixture each must fail hardware readback, suppressing
+**both** success markers and yielding negative-control exit 35.
+`tests/test_page_copy_qemu.py` now runs 14 cases (4 positive, 10
+negative) and records each image digest, command, stdout, stderr and
+return code with timeout reported separately. Make compares the original
+and renamed `.text` bytes of **both** genuine HIA functions.
+
+This is a limited copy-then-detach **data-path** regression, not copy-on-write:
+no sharing/refcount model, write-protect fault, atomic PTE switch, CR3,
+TLB flush, DMA exclusion, multi-CPU ownership or user-visible `fork`
+semantics is provided. The addresses, physical-RAM observer and
+quiescent execution are non-HIA test infrastructure. The full 17
+Linux acceptance gates and 422 syscall rows remain open.
