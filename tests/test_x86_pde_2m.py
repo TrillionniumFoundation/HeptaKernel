@@ -223,7 +223,7 @@ def campaign(library: Path):
 
     # Nonzero commits retain their original checks, including no W+X.
     assert oracle(pack(0, 0, 0), bytes(PAGE))[0] == 6
-    assert oracle(pack(0, 0, NX | 0x200083), bytes(PAGE))[0] == 6
+    assert oracle(pack(0, 0, 0x200083), bytes(PAGE))[0] == 6
 
     seed = bytes(PAGE)
     for raw in (b"", b"\0" * 24, b"\0" * 31,
