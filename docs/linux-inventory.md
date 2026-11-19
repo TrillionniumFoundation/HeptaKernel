@@ -192,3 +192,22 @@ This is a **source-level obligation discovery tool**, not a C-preprocessed
 UAPI export list, type-layout resolver, ioctl ABI conformance test, or HIA
 kernel implementation. It does not reduce any of the 422 x86-64 syscall rows
 or the 17 full-acceptance gates.
+
+
+### Phase-2 source splicing and provenance
+
+The separate UAPI lexical tag index now performs LF/CRLF
+backslash-newline splicing **before** removing C comments and literals.
+This prevents a continued `//` comment from generating false type tags
+and preserves tags or names whose identifiers cross a physical line break.
+Every `byte_at` and `name_byte_at` still addresses the **original Git
+blob**, not a normalized copy. The additional `raw_span` and
+`name_raw_span` delimit the physical byte interval; removing the original
+splice sequences reconstructs the logical token. Original physical source
+line numbers are retained. The report format is
+`heptakernel.linux-uapi-tag-lexical.v2` and old artifacts remain immutable.
+
+This is still a lexical approximation, not translation-phase completeness:
+C trigraph translation, macros, conditional activation, declaration
+semantics, type layout and ABI export resolution are outside this
+inventory. The pinned baseline and all Linux acceptance gates remain HOLD.
