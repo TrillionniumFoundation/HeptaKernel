@@ -212,7 +212,6 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         p.returncode == 95 and FAIL_MARKER not in p.stdout and
                         PASS_MARKER not in p.stdout)
         elif mode == "pdpt_1g_hardware":
-        if mode == "pdpt_1g_hardware":
             accepted = (state_verified and idt_verified and map_verified and
                         reservation_verified and pdpt_1g_hw and
                         not pdpt_1g_stale and not pdpt_1g_decoy and
