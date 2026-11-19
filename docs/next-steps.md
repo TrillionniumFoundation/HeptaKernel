@@ -173,10 +173,17 @@ parent-table pointers, privileged CR3/IDT/TSS, INVLPG and IRETQ. This is
 single-CPU QEMU evidence, not atomic PTE writes, SMP shootdown, Linux mprotect,
 or a fully HIA-native privilege/backend capability.
 
-A native HIA 1GiB PDPTE admission/write primitive in `src/x86_pdpt_1g.hepta`
-checks the caller-supplied CPUID PDPE1GB capability, 1GiB physical alignment,
-reserved bits 13–29, PAT bit 12, NXE/PGE, physical width, W^X, USER+GLOBAL,
-and exact-old comparison. It has a separate byte-array oracle, dishonest-control
-test and empty-PATH native byte identity, but no 1GiB CPU hardware execution
-test, privileged CRx/invalidation, atomic CAS, SMP ownership or TLB shootdown.
-The full 17-gate closure remains HOLD.
+A native HIA 1GiB PDPTE commit/removal primitive in `src/x86_pdpt_1g.hepta`
+checks the caller-supplied PDPE1GB/NXE/PGE and physical-width profile, 1GiB
+alignment, reserved bits, PAT bit 12, W^X, USER+GLOBAL and exact-old entry.
+The native byte-array oracle, dishonest control and empty-PATH machine-byte
+identity remain required. An isolated QEMU TCG CPU/MMU experiment now exercises
+a 1GiB alias first created by native HIA, observes CPU-set Accessed and then
+uses native HIA to zero the *updated* PDPTE. Non-HIA INVLPG/IDT/CR2/IST1
+hardware observation requires the exact subsequent supervisor non-present
+read #PF. Independent stale-old refusal and post-HIA mapping-restoration
+bypass images verify that rejection preserves access and restoration defeats
+the fault, respectively, on PC/32MiB and Q35/64MiB. None of this supplies
+native HIA privilege/CRx/invalidation, atomic CAS, SMP TLB shootdown,
+firmware memory ownership, safe reclamation or Linux munmap semantics.
+The full 17-gate closure remains HOLD; the 422 syscall rows are unchanged.

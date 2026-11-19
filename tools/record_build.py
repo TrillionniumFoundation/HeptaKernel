@@ -462,7 +462,8 @@ def main():
             raise ValueError("HIA 1GiB PDPTE loaded .text differs from native object")
         if Elf("build/pdpt-1g-boot.o").section_bytes(".text") != pdpt_text:
             raise ValueError("HIA 1GiB PDPTE boot symbol rename changed machine code")
-        for pdpt_stem in ("pdpt-1g-hw", "pdpt-1g-stale", "pdpt-1g-decoy"):
+        for pdpt_stem in ("pdpt-1g-hw", "pdpt-1g-stale", "pdpt-1g-decoy",
+                          "pdpt-1g-unmap-fault", "pdpt-1g-unmap-stale", "pdpt-1g-unmap-bypass"):
             live_elf = Elf("build/" + pdpt_stem + ".elf")
             boot_elf = Elf("build/" + pdpt_stem + "-multiboot.elf")
             entry = live_elf.symbol("pdpt_1g_f0")
@@ -471,8 +472,9 @@ def main():
                     boot_elf.text_at(entry, len(pdpt_text)) != pdpt_text):
                 raise ValueError(pdpt_stem + " lacks byte-exact native HIA 1GiB code")
         if len({sha(Path("build/" + stem + "-multiboot.elf").read_bytes())
-                for stem in ("pdpt-1g-hw", "pdpt-1g-stale", "pdpt-1g-decoy")}) != 3:
-            raise ValueError("1GiB hardware/stale/decoy images must differ")
+                for stem in ("pdpt-1g-hw", "pdpt-1g-stale", "pdpt-1g-decoy",
+                          "pdpt-1g-unmap-fault", "pdpt-1g-unmap-stale", "pdpt-1g-unmap-bypass")}) != 6:
+            raise ValueError("1GiB map/unmap positive and negative images must all differ")
         tss_source = Path("src/x86_tss_gdt.hepta").read_bytes()
         tss_object = Path("build/x86-tss-gdt.o").read_bytes()
         tss_rebuilt = subprocess.run([compiler], input=tss_source, capture_output=True,

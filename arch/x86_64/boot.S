@@ -545,7 +545,7 @@ hia_idt_next64:
     incq %r12
     cmpq $256, %r12
     jb hia_idt_next64
-#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS) || defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT) || defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT) || defined(HEPTAKERNEL_TEST_PT_NX_FAULT) || defined(HEPTAKERNEL_TEST_US_FAULT)
+#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS) || defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT) || defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT) || defined(HEPTAKERNEL_TEST_PT_NX_FAULT) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT)
     /* HIA also owns updating the #PF descriptor, conditional on old bytes. */
     movq $14, idt_gate_request(%rip)
 #ifdef HEPTAKERNEL_TEST_US_FAULT
@@ -556,6 +556,8 @@ hia_idt_next64:
     leaq pt_protect_page_fault64(%rip), %rax
 #elif defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT)
     leaq pt_revoke_page_fault64(%rip), %rax
+#elif defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT)
+    leaq pdpt_1g_unmap_page_fault64(%rip), %rax
 #else
     leaq pte_page_fault64(%rip), %rax
 #endif
@@ -653,7 +655,7 @@ hia_idt_next64:
     call reservation_admit64
     leaq message_reservation_pass(%rip), %rsi
     call puts64
-#if defined(HEPTAKERNEL_TEST_PDPT_1G_HW) || defined(HEPTAKERNEL_TEST_PDPT_1G_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_DECOY)
+#if defined(HEPTAKERNEL_TEST_PDPT_1G_HW) || defined(HEPTAKERNEL_TEST_PDPT_1G_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_DECOY) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_BYPASS)
     /* Terminal single-owner HIA 1GiB PDPTE hardware experiment. */
     call pdpt_1g_exercise64
     jmp fail64
@@ -1002,6 +1004,52 @@ pt_protect_page_fault64:
     jmp debug_exit64
 #endif
 
+/* Genuine HIA writes zero to a live 1GiB PDPTE. The non-HIA IDT,
+ * CR2, IST1 and INVLPG observer checks the resulting real CPU #PF. */
+#ifdef HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT
+pdpt_1g_unmap_page_fault64:
+    cli
+    leaq ist_stack_base(%rip), %rax
+    cmpq %rax, %rsp
+    jbe exception64
+    leaq ist_stack_top(%rip), %rax
+    cmpq %rax, %rsp
+    jae exception64
+    cmpq $0x3147554e, pdpt_1g_unmap_armed(%rip)
+    jne exception64
+    cmpq $0, (%rsp)                 /* #PF P=0 W=0 U=0 (read) */
+    jne exception64
+    leaq pdpt_1g_unmap_fault_load64(%rip), %rax
+    cmpq %rax, 8(%rsp)              /* exact faulting instruction */
+    jne exception64
+    cmpq $0x08, 16(%rsp)            /* supervisor code selector */
+    jne exception64
+    movq %cr2, %rax
+    leaq message_idt_pass(%rip), %rdx
+    leaq 0x40000000(%rdx), %r8
+    cmpq %r8, %rax                 /* exact 1GiB alias fault address */
+    jne exception64
+    cmpq $0, pdpt+8(%rip)          /* HIA removed precisely the live leaf */
+    jne exception64
+    cmpq $0, pdpt_1g_reply(%rip)
+    jne exception64
+    cmpq $0, pdpt_1g_reply+8(%rip)
+    jne exception64
+    movq pdpt_1g_unmap_old(%rip), %rax
+    testq $0x20, %rax              /* hardware set Accessed before removal */
+    jz exception64
+    cmpq %rax, pdpt_1g_request+8(%rip)
+    jne exception64
+    leaq emergency_stack_top(%rip), %rsp
+    andq $-16, %rsp
+    leaq message_ist_verified(%rip), %rsi
+    call puts64
+    leaq message_pdpt_1g_unmap_fault(%rip), %rsi
+    call puts64
+    movl $0x2a, %eax               /* debug-exit 85 */
+    jmp debug_exit64
+#endif
+
 /* Isolated hardware observation after genuine native HIA clears live PTE.
  * INVLPG/CR2/exception entry remain expressly non-HIA boot bridge. */
 #ifdef HEPTAKERNEL_TEST_PT_REVOKE_FAULT
@@ -1144,7 +1192,7 @@ pte_page_fault64:
 #endif
 
 
-#if defined(HEPTAKERNEL_TEST_PDPT_1G_HW) || defined(HEPTAKERNEL_TEST_PDPT_1G_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_DECOY)
+#if defined(HEPTAKERNEL_TEST_PDPT_1G_HW) || defined(HEPTAKERNEL_TEST_PDPT_1G_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_DECOY) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_BYPASS)
 /* Non-HIA CPL0 observer for a real HIA Core v8 1GiB PDPTE writer.
  * HIA writes pdpt[1]; CPUID, CR3 flush and MMU alias load remain explicit
  * assembler test bridges. VA [1GiB, 2GiB) aliases physical [0, 1GiB).
@@ -1221,10 +1269,85 @@ pdpt_1g_readback_ok64:
     jne fail64
     testq $0x20, pdpt+8(%rip)      /* CPU set Accessed during actual MMU walk */
     jz fail64
+#if defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_BYPASS)
+    leaq message_pdpt_1g_warmed(%rip), %rsi
+    call puts64
+    /* Reuse the same native HIA object to remove the hardware-accessed leaf.
+     * A fresh expected-old is essential: CPU A-bit updates are real writes. */
+    movq pdpt+8(%rip), %rax
+    movq %rax, pdpt_1g_unmap_old(%rip)
+    movq %rax, pdpt_1g_request+8(%rip)
+    movq $0, pdpt_1g_request+16(%rip)
+#ifdef HEPTAKERNEL_TEST_PDPT_1G_UNMAP_STALE
+    xorq $8, pdpt_1g_request+8(%rip) /* legal but stale PWT value */
+#endif
+    movq $-1, pdpt_1g_reply(%rip)
+    movq $-1, pdpt_1g_reply+8(%rip)
+    leaq pdpt_1g_request(%rip), %rdi
+    movl $32, %esi
+    leaq pdpt_1g_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq pdpt(%rip), %r8
+    movl $4096, %r9d
+    call pdpt_1g_f0
+#ifdef HEPTAKERNEL_TEST_PDPT_1G_UNMAP_STALE
+    cmpl $9, %eax
+    jne fail64
+    cmpq $9, pdpt_1g_reply(%rip)
+    jne fail64
+    cmpq $0, pdpt_1g_reply+8(%rip)
+    jne fail64
+    movq pdpt_1g_unmap_old(%rip), %rax
+    cmpq %rax, pdpt+8(%rip)
+    jne fail64
+    /* Refusal must preserve the actual warmed hardware alias. */
+    leaq message_idt_pass(%rip), %rdx
+    leaq 0x40000000(%rdx), %r8
+    movq (%rdx), %rax
+    cmpq (%r8), %rax
+    jne fail64
+    leaq message_pdpt_1g_unmap_stale(%rip), %rsi
+    call puts64
+    movl $0x2b, %eax               /* debug-exit 87 */
+    jmp debug_exit64
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, pdpt_1g_reply(%rip)
+    jne fail64
+    cmpq $0, pdpt_1g_reply+8(%rip)
+    jne fail64
+    cmpq $0, pdpt+8(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_PDPT_1G_UNMAP_BYPASS
+    /* Hostile bridge restores the mapping after genuine HIA removal. */
+    movq pdpt_1g_unmap_old(%rip), %rax
+    movq %rax, pdpt+8(%rip)
+#endif
+    leaq message_idt_pass(%rip), %rdx
+    leaq 0x40000000(%rdx), %r8
+    invlpg (%r8)                   /* explicitly NON-HIA TLB invalidation */
+#ifdef HEPTAKERNEL_TEST_PDPT_1G_UNMAP_BYPASS
+    movq (%rdx), %rax
+    cmpq (%r8), %rax               /* bypass must still execute, no false #PF */
+    jne fail64
+    leaq message_pdpt_1g_unmap_bypass(%rip), %rsi
+    call puts64
+    movl $0x2c, %eax               /* debug-exit 89 */
+    jmp debug_exit64
+#else
+    movq $0x3147554e, pdpt_1g_unmap_armed(%rip)
+pdpt_1g_unmap_fault_load64:
+    movq (%r8), %rax               /* CPU must report a non-present #PF */
+    jmp fail64
+#endif
+#endif
+#else
     leaq message_pdpt_1g_hw(%rip), %rsi
     call puts64
     movl $0x28, %eax              /* debug-exit 81 */
     jmp debug_exit64
+#endif
 #endif
 #endif
 
@@ -2442,6 +2565,14 @@ message_upper_pass:
     .asciz "HEPTAKERNEL HIA LIVE UPPER USER TABLE VERIFIED\r\n"
 message_upper_stale:
     .asciz "HEPTAKERNEL HIA UPPER USER TABLE STALE OLD REJECTED\r\n"
+message_pdpt_1g_warmed:
+    .asciz "HEPTAKERNEL HIA 1G PDPTE HARDWARE ALIAS WARMED BEFORE UNMAP\r\n"
+message_pdpt_1g_unmap_fault:
+    .asciz "HEPTAKERNEL HIA 1G PDPTE REMOVAL HARDWARE FAULT VERIFIED\r\n"
+message_pdpt_1g_unmap_stale:
+    .asciz "HEPTAKERNEL HIA 1G PDPTE REMOVAL STALE OLD REJECTED\r\n"
+message_pdpt_1g_unmap_bypass:
+    .asciz "HEPTAKERNEL HIA 1G PDPTE REMOVAL BYPASS EXECUTED\r\n"
 message_pdpt_1g_hw:
     .asciz "HEPTAKERNEL HIA 1G PDPTE HARDWARE ALIAS VERIFIED\r\n"
 message_pdpt_1g_stale:
@@ -2631,6 +2762,8 @@ pde_2m_request:  .skip 32
 pde_2m_reply:    .skip 16
 pdpt_1g_request: .skip 32
 pdpt_1g_reply:   .skip 16
+pdpt_1g_unmap_old:   .skip 8
+pdpt_1g_unmap_armed: .skip 8
 user_gdt_request: .skip 16
 user_gdt_reply:   .skip 16
 tss_gdt_request:  .skip 32

@@ -63,6 +63,33 @@ native control; the locked self-hosted compiler builds the production code.
 
 This extends the bytewise owner-local PDPTE primitive; it **does not**
 perform a native HIA INVLPG/CR3 reload, synchronized shootdown, 64-bit
-atomic CAS, or safely release a physical 1GiB frame. The QEMU hardware
-experiments above cover *mapping* only; 1GiB removal hardware fault behavior
-has not been independently exercised and stays open.
+atomic CAS, or safely release a physical 1GiB frame.
+
+## Isolated 1GiB removal hardware fault and controls
+
+Three additional Multiboot/QEMU images link the **same native HIA object**
+into the exact previous 1GiB hardware alias scenario. The non-HIA observer
+first establishes a real `0x40000000` 1GiB alias, reads two words through
+the CPU MMU and checks the CPU-set Accessed bit; it then supplies that
+*updated* complete PDPTE as `expected_old` to genuine native HIA removal.
+
+* The positive removal image requires native status 0 and exact zero
+  table/reply readback, then explicitly invokes non-HIA INVLPG and
+  attempts a load from the warmed alias. The independent x86 #PF handler
+  requires an IST1 stack, non-present supervisor read error code 0,
+  exact faulting RIP and CR2, and the HIA result still zero before exit.
+* The stale-old negative changes only PWT in the otherwise legal expected
+  old value, requires native status 9, no write and a still-readable alias.
+  It must not print a hardware-fault success marker.
+* The bypass control deliberately restores the leaf *after* HIA removal.
+  Following INVLPG, the formerly removed alias must still be readable;
+  observing a #PF is not counted as success for this adversarial image.
+
+PC/32MiB and Q35/64MiB both run in QEMU TCG with `qemu64,+pdpe1gb`.
+Each scenario has unique output markers, debug-exit code, image/source
+hashes and a byte-for-byte check of the HIA source compiler object
+against the native text actually executing in all six images.
+These are **isolation experiments**, not Linux `munmap` completion,
+hardware qualification, atomic/linearizable page-table management or
+reclamation. Privileged IDT, CR2, INVLPG and exception entry remain
+explicitly non-HIA test code; the 17 full Linux gates remain HOLD.
