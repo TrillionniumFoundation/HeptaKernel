@@ -2,35 +2,35 @@ hia-asm.v1 hepta.hia.program.v8 selfhost_elf
 fn page_copy(source:readbuf,receipt:mutbuf,destination:mutbuf) -> (u32) effects(read,write,trap) entry(start)
 block start(source:readbuf,receipt:mutbuf,destination:mutbuf)
   source_len:usize = buffer.len(source)
-  page_bytes:usize = const() {"value":4096}
-  source_valid:bool = compare.eq(source_len,page_bytes)
+  source_page_bytes:usize = const() {"value":4096}
+  source_valid:bool = compare.eq(source_len,source_page_bytes)
   branch source_valid check_receipt(source,receipt,destination) invalid_source()
 block invalid_source()
   source_error:u32 = const() {"value":1}
   ret(source_error)
-block check_receipt(valid_source:readbuf,receipt:mutbuf,destination:mutbuf)
-  receipt_len:usize = buffer.len(receipt)
-  receipt_bytes:usize = const() {"value":16}
-  receipt_valid:bool = compare.eq(receipt_len,receipt_bytes)
-  branch receipt_valid check_destination(valid_source,receipt,destination) invalid_receipt()
+block check_receipt(source_r:readbuf,receipt_r:mutbuf,destination_r:mutbuf)
+  receipt_len:usize = buffer.len(receipt_r)
+  receipt_required:usize = const() {"value":16}
+  receipt_valid:bool = compare.eq(receipt_len,receipt_required)
+  branch receipt_valid check_destination(source_r,receipt_r,destination_r) invalid_receipt()
 block invalid_receipt()
   receipt_error:u32 = const() {"value":2}
   ret(receipt_error)
-block check_destination(valid_source:readbuf,valid_receipt:mutbuf,destination:mutbuf)
-  destination_len:usize = buffer.len(destination)
-  page_bytes:usize = const() {"value":4096}
-  destination_valid:bool = compare.eq(destination_len,page_bytes)
-  branch destination_valid perform_copy(valid_source,valid_receipt,destination) invalid_destination()
+block check_destination(source_d:readbuf,receipt_d:mutbuf,destination_d:mutbuf)
+  destination_len:usize = buffer.len(destination_d)
+  destination_page_bytes:usize = const() {"value":4096}
+  destination_valid:bool = compare.eq(destination_len,destination_page_bytes)
+  branch destination_valid perform_copy(source_d,receipt_d,destination_d) invalid_destination()
 block invalid_destination()
   destination_error:u32 = const() {"value":3}
   ret(destination_error)
 block perform_copy(valid_source:readbuf,valid_receipt:mutbuf,valid_destination:mutbuf)
   zero_offset:usize = const() {"value":0}
-  page_bytes:usize = const() {"value":4096}
-  receipt_bytes:usize = const() {"value":16}
+  copy_page_bytes:usize = const() {"value":4096}
+  copy_receipt_bytes:usize = const() {"value":16}
   zero:u8 = const() {"value":0}
-  _ = buffer.copy_range(valid_destination,valid_source,zero_offset,zero_offset,page_bytes)
-  _ = buffer.fill_range(valid_receipt,zero_offset,receipt_bytes,zero)
+  _ = buffer.copy_range(valid_destination,valid_source,zero_offset,zero_offset,copy_page_bytes)
+  _ = buffer.fill_range(valid_receipt,zero_offset,copy_receipt_bytes,zero)
   high_offset:usize = const() {"value":9}
   high_byte:u8 = const() {"value":16}
   _ = buffer.store(valid_receipt,high_offset,high_byte)
