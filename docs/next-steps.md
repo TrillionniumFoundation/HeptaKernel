@@ -193,3 +193,16 @@ first expected PTE old value to a separate eight-byte caller-supplied entry
 capability rather than only a self-declared row observation. See
 `docs/x86-tlb-entry-binding.md`. This is byte-level checking, not authenticated
 physical RAM, a privileged HIA instruction backend, atomic CAS or SMP safety.
+
+
+The genuine HIA Core v8 PML4-root admission primitive
+(`src/x86_cr3_root.hepta`, `docs/x86-cr3-root-native.md`) now scans all
+512 64-bit entries in a caller-provided, exactly 4 KiB CR3 root-page
+snapshot, rejecting malformed present descriptors and absent required
+root slots. It has independent byte-oriented native tests, dishonest HIA
+negative control, deterministic object bytes and retained Foundation CI
+artifacts. This is a *read-only supplied snapshot*, not proof that the
+current CR3 points to that page or that live page-table RAM is immutable.
+Hardware root ownership, verified privilege transitions, atomic updates,
+TLB shootdown and full user/driver/ABI functionality remain unmet. No
+full-acceptance gate is closed by this component.
