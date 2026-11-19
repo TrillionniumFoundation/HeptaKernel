@@ -31,7 +31,8 @@ def oracle(data, entry):
     root,owner,va,flags,n = struct.unpack_from("<5Q",data)
     if not 1 <= n <= 64 or len(data) != 40+40*n:
         return 1
-    if root == 0 or root & 4095 or root >= 1<<52 or root != owner or flags != 15:
+    if (root == 0 or root & 4095 or root >= 1<<52 or root != owner
+            or flags != 15 or struct.unpack_from("<Q",entry)[0] & 0x100):
         return 2
     sign=(va>>47)&1
     if va & 4095 or (va>>48) != (65535 if sign else 0):
@@ -46,7 +47,7 @@ def oracle(data, entry):
             masked=True
         elif op == 2:
             if (not masked or pending or page != va or observed != old or
-                    new == old or (seen and old != last)): return 4
+                    new == old or new & 0x100 or (seen and old != last)): return 4
             seen=True
             last=new
             pending=True
@@ -96,17 +97,17 @@ def campaign(path):
     for i in range(160):
         page = rng.choice([VA, 0, 4096, 0xffff800000004000, 0xfffffffffffff000])
         root = rng.randrange(1, 1 << 40) << 12
-        old, candidate = rng.getrandbits(64), rng.getrandbits(64)
+        old, candidate = rng.getrandbits(64) & ~0x100, rng.getrandbits(64) & ~0x100
         if old == candidate:
             candidate ^= 1
         plan = [(1,0,0,0,0),(2,page,old,old,candidate),(3,page,0,0,0)]
         if i % 3 == 0:
-            successor = candidate ^ (1 << rng.randrange(64))
+            successor = candidate ^ (1 << rng.choice([bit for bit in range(64) if bit != 8]))
             plan.extend([(2,page,candidate,candidate,successor),(3,page,0,0,0)])
             candidate = successor
         plan.append((4,0,0,0,0))
         if i % 7 == 0:
-            successor = candidate ^ (1 << rng.randrange(64))
+            successor = candidate ^ (1 << rng.choice([bit for bit in range(64) if bit != 8]))
             plan.extend([(1,0,0,0,0),(2,page,candidate,candidate,successor),
                          (3,page,0,0,0),(4,0,0,0,0)])
         raw = pack(root,root,page,F,plan)
@@ -122,6 +123,12 @@ def campaign(path):
                   pack(rows=[(1,0,0,0,0),(2,VA,0,0,1),
                              (3,VA,0,0,0),(2,VA,1,0,2),
                              (3,VA,0,0,0),(4,0,0,0,0)])])
+    # G=1 contradicts the declared profile's "global mappings absent" claim:
+    # neither an initially global PTE nor a candidate global PTE may pass.
+    global_candidate = [(1,0,0,0,0),(2,VA,0,0,0x100),
+                        (3,VA,0,0,0),(4,0,0,0,0)]
+    cases.extend([(pack(),u64(0x100)),(pack(rows=global_candidate),u64(0)),
+                  (pack(rows=global_candidate),u64(0x100))])
     # Same declared operations but a different live 8-byte PTE witness must
     # be rejected; supplying a previous candidate is never an initial readback.
     cases.extend([(pack(),u64(0x1234)),(pack(),b"\0"*7),(pack(),b"\0"*9),
@@ -164,6 +171,7 @@ def main():
               "privileged_operations_executed":False,"cpu_state_authenticated":False,
               "single_cpu_only":True,"entry_byte_witness_checked":True,
               "physical_entry_authenticated":False,
+              "profile_global_pte_refusal":True,
               "linux_full_acceptance":"HOLD"}
     Path("build/x86-tlb-plan-report.json").write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
     print("real HIA TLB effect admission:",report)

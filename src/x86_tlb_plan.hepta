@@ -70,7 +70,11 @@ block authority(au_req:readbuf,au_root:u64,au_owner:u64,au_va:u64,au_flags:u64,a
   au_b:bool = bool.and(au_owned,au_bounded)
   au_c:bool = bool.and(au_a,au_b)
   au_d:bool = bool.and(au_c,au_profile_ok)
-  branch au_d address(au_req,au_va,au_count,au_anchor) unsupported()
+  au_global_mask:u64 = const() {"value":256}
+  au_global_bits:u64 = bit.and(au_anchor,au_global_mask)
+  au_anchor_nonglobal:bool = compare.eq(au_global_bits,au_zero)
+  au_all:bool = bool.and(au_d,au_anchor_nonglobal)
+  branch au_all address(au_req,au_va,au_count,au_anchor) unsupported()
 block address(ad_req:readbuf,ad_va:u64,ad_count:u64,ad_anchor:u64)
   ad_mask:u64 = const() {"value":4095}
   ad_highmask:u64 = const() {"value":18446462598732840960}
@@ -175,7 +179,12 @@ block mutate_pte(wr_req:readbuf,wr_va:u64,wr_count:u64,wr_i:u64,wr_masked:bool,w
   wr_c:bool = bool.and(wr_changed,wr_chain)
   wr_d:bool = bool.and(wr_a,wr_b)
   wr_valid:bool = bool.and(wr_c,wr_d)
-  branch wr_valid write_ok(wr_req,wr_va,wr_count,wr_i,wr_writes,wr_pairs,wr_candidate) sequence_bad()
+  wr_global_mask:u64 = const() {"value":256}
+  wr_zero:u64 = const() {"value":0}
+  wr_global_bits:u64 = bit.and(wr_candidate,wr_global_mask)
+  wr_candidate_nonglobal:bool = compare.eq(wr_global_bits,wr_zero)
+  wr_all:bool = bool.and(wr_valid,wr_candidate_nonglobal)
+  branch wr_all write_ok(wr_req,wr_va,wr_count,wr_i,wr_writes,wr_pairs,wr_candidate) sequence_bad()
 block write_ok(wo_req:readbuf,wo_va:u64,wo_count:u64,wo_i:u64,wo_writes:u64,wo_pairs:u64,wo_candidate:u64)
   wo_one:u64 = const() {"value":1}
   wo_true:bool = compare.eq(wo_one,wo_one)

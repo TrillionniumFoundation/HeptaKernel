@@ -13,7 +13,11 @@ and IRQ records have four zero parameters. The profile is exactly 15
 (caller *claims* CPL0, single CPU, PCID off and global mappings absent);
 root must be nonzero, 4 KiB aligned, within 52 physical-address bits, and
 equal the claimed owner root. The 48-bit virtual page must be canonical and
-4 KiB aligned.
+4 KiB aligned. Since this profile asserts that global mappings are absent,
+the supplied initial PTE and every proposed PTE candidate must have G=0
+(bit 8 clear); an initial G=1 is refused with status 2 and a candidate G=1
+with status 4. This checks only the one caller-supplied entry, not the rest
+of the address space or real CPU global-TLB state.
 
 Writes must be inside an IRQ mask, have an exact caller-observed old value,
 change the entry, and await a matching INVLPG before another write or
