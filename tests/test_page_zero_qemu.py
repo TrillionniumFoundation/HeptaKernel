@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent QEMU observer for HIA page-zero on four E820/PMM-owned frames."""
+"""Independent QEMU observer for native HIA physical zeroing and PMM page reuse."""
 from __future__ import annotations
 
 import argparse
@@ -12,6 +12,7 @@ MAP = "HEPTAKERNEL HIA E820 VERIFIED"
 RESERV = "HEPTAKERNEL HIA RESERVATIONS VERIFIED"
 OWNER = "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED"
 ZERO = "HEPTAKERNEL HIA PHYSICAL PAGE ZERO FOUR FRAMES VERIFIED"
+REUSE = "HEPTAKERNEL HIA PHYSICAL PAGE REUSE SCRUB VERIFIED"
 PMM = "HEPTAKERNEL HIA PMM PASS"
 FAIL = "HEPTAKERNEL BOOT FAIL"
 
@@ -36,12 +37,14 @@ def probe(qemu: str, image: Path, machine: str, memory: int, mode: str) -> dict:
     if mode == "honest":
         assert result.returncode == 33, json.dumps(record, sort_keys=True)
         assert result.stdout.count(ZERO) == 1, json.dumps(record, sort_keys=True)
+        assert result.stdout.count(REUSE) == 1, json.dumps(record, sort_keys=True)
         assert result.stdout.count(OWNER) == 1, json.dumps(record, sort_keys=True)
         assert result.stdout.count(PMM) == 1, json.dumps(record, sort_keys=True)
         assert FAIL not in result.stdout, json.dumps(record, sort_keys=True)
     else:
         assert result.returncode == 35, json.dumps(record, sort_keys=True)
-        assert result.stdout.count(ZERO) == 0, json.dumps(record, sort_keys=True)
+        assert result.stdout.count(ZERO) == (1 if mode == "recycle-bypass" else 0), json.dumps(record, sort_keys=True)
+        assert result.stdout.count(REUSE) == 0, json.dumps(record, sort_keys=True)
         assert result.stdout.count(OWNER) == 0, json.dumps(record, sort_keys=True)
         assert result.stdout.count(PMM) == 0, json.dumps(record, sort_keys=True)
         assert result.stdout.count(FAIL) == 1, json.dumps(record, sort_keys=True)
@@ -53,11 +56,14 @@ def main() -> None:
     args = parser.parse_args()
     output = []
     for machine, memory in (("pc", 32), ("q35", 64)):
-        for mode in ("honest", "dishonest", "decoy"):
+        for mode in ("honest", "dishonest", "decoy", "recycle-bypass"):
             image = Path(f"build/page-zero-{ 'hw' if mode == 'honest' else mode }-multiboot.elf")
             output.append(probe(args.qemu, image, machine, memory, mode))
-    print(json.dumps({"cases": len(output), "positive": 2, "negative_controls": 4,
-                      "hardware_status": "PASS", "runs": output}, sort_keys=True))
+    report = {"cases": len(output), "positive": 2, "negative_controls": 6,
+              "hardware_status": "PASS", "runs": output}
+    Path("build/page-zero-hardware-report.json").write_text(
+        json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(report, sort_keys=True))
 
 if __name__ == "__main__":
     main()

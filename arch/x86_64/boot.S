@@ -2737,6 +2737,97 @@ page_zero_hw_check:
     xorq %rdx, %rdx
     xorq %rcx, %rcx
     call owner_call64
+#if defined(HEPTAKERNEL_TEST_PAGE_ZERO_HW)
+    /* Real PMM lifecycle on BOTH E820-admitted zones. After native HIA
+     * releases both runs, its independent state binder must observe every
+     * page as free, then native HIA first-fit must reallocate exactly those
+     * physical frames. This is a quiescent NON-HIA coordinator, not SMP
+     * ownership, authenticated DMA protection or safe user-space reuse. */
+    leaq owner_descriptors(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    movq $15, %rdx
+    call owner_bind64
+    leaq owner_descriptors+24(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    movq $16, %rdx
+    call owner_bind64
+    leaq owner_alloc_two(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    movq $0, %rdx
+    movq $0x402000, %rcx
+    call owner_call64
+    leaq owner_alloc_two(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    movq $0, %rdx
+    movq $0x601000, %rcx
+    call owner_call64
+    leaq owner_descriptors(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    movq $13, %rdx
+    call owner_bind64
+    leaq owner_descriptors+24(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    movq $14, %rdx
+    call owner_bind64
+
+    /* Reallocated RAM is deliberately made dirty AFTER reallocation.
+     * An independent full-byte readback must refuse a claimed success if
+     * either the native HIA scrub or any of its 4096 physical stores is
+     * omitted. The third image bypasses the scrub but spoofs its reply. */
+    leaq page_zero_hw_physical_pages(%rip), %r12
+    movq $4, %r13
+page_zero_recycle_each:
+    movq (%r12), %r14
+    movq %r14, %rdi
+    movabsq $0xc1eada7afaceb00c, %rax
+    movl $512, %ecx
+    rep stosq
+    movq $0, page_zero_hw_reply(%rip)
+    movq $4096, page_zero_hw_reply+8(%rip)
+    leaq page_zero_hw_empty_request(%rip), %rdi
+    xorq %rsi, %rsi
+    leaq page_zero_hw_reply(%rip), %rdx
+    movl $16, %ecx
+    movq %r14, %r8
+    movl $4096, %r9d
+#ifndef HEPTAKERNEL_TEST_PAGE_ZERO_RECYCLE_BYPASS
+    call page_zero_f0              /* exact genuine HIA object, no bridge zero */
+#else
+    xorq %rax, %rax                 /* hostile NON-HIA test-only forged status */
+#endif
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, page_zero_hw_reply(%rip)
+    jne fail64
+    cmpq $4096, page_zero_hw_reply+8(%rip)
+    jne fail64
+    movq %r14, %rsi
+    movl $4096, %ecx
+page_zero_recycle_check:
+    cmpb $0, (%rsi)
+    jne fail64
+    incq %rsi
+    loop page_zero_recycle_check
+    addq $8, %r12
+    decq %r13
+    jnz page_zero_recycle_each
+    leaq message_page_zero_recycle_pass(%rip), %rsi
+    call puts64
+
+    /* Release again so original double-free refusal and free-count
+     * postconditions retain their exact expected values. */
+    leaq owner_free_a(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    xorq %rdx, %rdx
+    xorq %rcx, %rcx
+    call owner_call64
+    leaq owner_free_b(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    xorq %rdx, %rdx
+    xorq %rcx, %rcx
+    call owner_call64
+#endif
+
     leaq owner_free_a(%rip), %rdi
     movq owner_choice_a(%rip), %rsi
     movq $7, %rdx
@@ -3072,6 +3163,8 @@ message_owner_pass:
     .asciz "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED\r\n"
 message_page_zero_hw_pass:
     .asciz "HEPTAKERNEL HIA PHYSICAL PAGE ZERO FOUR FRAMES VERIFIED\r\n"
+message_page_zero_recycle_pass:
+    .asciz "HEPTAKERNEL HIA PHYSICAL PAGE REUSE SCRUB VERIFIED\r\n"
 root_live_message:
     .asciz "HEPTAKERNEL HIA LIVE CR3 ROOT PAGE VERIFIED\r\n"
 root_unsafe_message:

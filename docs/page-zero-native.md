@@ -54,3 +54,34 @@ This is an **isolated quiescent single-owner hardware test**, not a proof that
 `page_zero` itself authenticates physical-frame ownership, preserves other
 zones under concurrent updates, performs page retirement, implements IOMMU
 or DMA safety, or works without the existing non-HIA QEMU bootstrap.
+
+
+## E820/PMM release–reallocate–scrub lifecycle (isolated QEMU)
+
+The same PC/32MiB and Q35/64MiB physical test now calls the genuine HIA
+PMM to free both allocated two-frame runs, checks the *new* native HIA
+ownership states via the independent HIA owner-binding entry, then
+reallocates both runs. The HIA first-fit results must be the exact original
+four physical addresses, and each state must again have its expected
+free-page count. The non-HIA observer dirties all 16,384 physical bytes
+*after* reallocation; the unchanged native HIA `page_zero` object must
+clear every byte. An independent physical RAM readback, not the reply
+status alone, determines success. Both runs are released again before
+the original double-free refusal and final-count tests.
+
+A dedicated `recycle-bypass` image performs the genuine HIA PMM
+release/reallocation operations but suppresses only the second HIA
+zero call in the expressly malicious **non-HIA test bridge**; it
+falsifies a successful status/reply, leaving dirty real RAM behind.
+The independent physical observer must reject the first dirty byte
+with the failure exit, while retaining the marker that the first
+four-page HIA scrub actually passed. Source/object/linked-image binding
+remains unchanged. Eight distinct QEMU runs (two machines × four
+scenarios) are recorded in `build/page-zero-hardware-report.json`,
+including image SHA-256, stdout/stderr and return codes.
+
+This is a single-owner **test fixture** for identity-bound reuse and
+data erasure, not a concurrent allocator, an authenticated frame
+mapping, a native HIA physical-pointer authority, IOMMU/DMA isolation,
+SMP shootdown, or a substitute for the missing privileged HIA backend.
+The full 17 gates and 422 syscall rows remain HOLD.
