@@ -1,0 +1,233 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn tlb_plan(request:readbuf,reply:mutbuf,unused:mutbuf) -> (u32) effects(read,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,unused:mutbuf)
+  st_size:usize = buffer.len(request)
+  st_min:usize = const() {"value":40}
+  st_enough:bool = compare.ge(st_size,st_min)
+  branch st_enough decode(request,st_size) malformed()
+block malformed()
+  sh_bad:u32 = const() {"value":1}
+  ret(sh_bad)
+block unsupported()
+  su_bad:u32 = const() {"value":2}
+  ret(su_bad)
+block address_bad()
+  sa_bad:u32 = const() {"value":3}
+  ret(sa_bad)
+block sequence_bad()
+  sq_bad:u32 = const() {"value":4}
+  ret(sq_bad)
+block accepted()
+  ok_code:u32 = const() {"value":0}
+  ret(ok_code)
+block decode(dc_req:readbuf,dc_len:usize)
+  dc0:usize = const() {"value":0}
+  dc8:usize = const() {"value":8}
+  dc16:usize = const() {"value":16}
+  dc24:usize = const() {"value":24}
+  dc32:usize = const() {"value":32}
+  dc_root:u64 = call(dc_req,dc0) {"function":"read_request_u64"}
+  dc_owner:u64 = call(dc_req,dc8) {"function":"read_request_u64"}
+  dc_va:u64 = call(dc_req,dc16) {"function":"read_request_u64"}
+  dc_flags:u64 = call(dc_req,dc24) {"function":"read_request_u64"}
+  dc_count:u64 = call(dc_req,dc32) {"function":"read_request_u64"}
+  dc_one:u64 = const() {"value":1}
+  dc_max:u64 = const() {"value":64}
+  dc_40:u64 = const() {"value":40}
+  dc_count_min:bool = compare.ge(dc_count,dc_one)
+  dc_count_max:bool = compare.le(dc_count,dc_max)
+  dc_count_ok:bool = bool.and(dc_count_min,dc_count_max)
+  dc_rows:u64 = int.mul.wrap(dc_count,dc_40)
+  dc_total:u64 = int.add.wrap(dc_rows,dc_40)
+  dc_actual:u64 = int.cast(dc_len) {"mode":"wrap"}
+  dc_exact:bool = compare.eq(dc_total,dc_actual)
+  dc_shape:bool = bool.and(dc_count_ok,dc_exact)
+  branch dc_shape authority(dc_req,dc_root,dc_owner,dc_va,dc_flags,dc_count) malformed()
+block authority(au_req:readbuf,au_root:u64,au_owner:u64,au_va:u64,au_flags:u64,au_count:u64)
+  au_zero:u64 = const() {"value":0}
+  au_mask:u64 = const() {"value":4095}
+  au_max:u64 = const() {"value":4503599627370496}
+  au_profile:u64 = const() {"value":15}
+  au_remainder:u64 = bit.and(au_root,au_mask)
+  au_aligned:bool = compare.eq(au_remainder,au_zero)
+  au_nonzero:bool = compare.ne(au_root,au_zero)
+  au_bounded:bool = compare.lt(au_root,au_max)
+  au_owned:bool = compare.eq(au_root,au_owner)
+  au_profile_ok:bool = compare.eq(au_flags,au_profile)
+  au_a:bool = bool.and(au_aligned,au_nonzero)
+  au_b:bool = bool.and(au_owned,au_bounded)
+  au_c:bool = bool.and(au_a,au_b)
+  au_d:bool = bool.and(au_c,au_profile_ok)
+  branch au_d address(au_req,au_va,au_count) unsupported()
+block address(ad_req:readbuf,ad_va:u64,ad_count:u64)
+  ad_mask:u64 = const() {"value":4095}
+  ad_highmask:u64 = const() {"value":18446462598732840960}
+  ad_signmask:u64 = const() {"value":140737488355328}
+  ad_zero:u64 = const() {"value":0}
+  ad_low:u64 = bit.and(ad_va,ad_mask)
+  ad_high:u64 = bit.and(ad_va,ad_highmask)
+  ad_sign:u64 = bit.and(ad_va,ad_signmask)
+  ad_aligned:bool = compare.eq(ad_low,ad_zero)
+  ad_negative:bool = compare.ne(ad_sign,ad_zero)
+  ad_positive_ok:bool = compare.eq(ad_high,ad_zero)
+  ad_negative_ok:bool = compare.eq(ad_high,ad_highmask)
+  ad_no_sign:bool = bool.not(ad_negative)
+  ad_pos_path:bool = bool.and(ad_no_sign,ad_positive_ok)
+  ad_neg_path:bool = bool.and(ad_negative,ad_negative_ok)
+  ad_canonical:bool = bool.or(ad_pos_path,ad_neg_path)
+  ad_valid:bool = bool.and(ad_aligned,ad_canonical)
+  branch ad_valid begin(ad_req,ad_va,ad_count) address_bad()
+block begin(bg_req:readbuf,bg_va:u64,bg_count:u64)
+  bg_zero:u64 = const() {"value":0}
+  bg_false:bool = compare.ne(bg_zero,bg_zero)
+  jump scan(bg_req,bg_va,bg_count,bg_zero,bg_false,bg_false,bg_false,bg_zero,bg_zero,bg_zero)
+block scan(sc_req:readbuf,sc_va:u64,sc_count:u64,sc_i:u64,sc_masked:bool,sc_pending:bool,sc_seen:bool,sc_last:u64,sc_writes:u64,sc_pairs:u64)
+  sc_more:bool = compare.lt(sc_i,sc_count)
+  branch sc_more row(sc_req,sc_va,sc_count,sc_i,sc_masked,sc_pending,sc_seen,sc_last,sc_writes,sc_pairs) finish(sc_masked,sc_pending,sc_writes,sc_pairs)
+block finish(fi_masked:bool,fi_pending:bool,fi_writes:u64,fi_pairs:u64)
+  fi_zero:u64 = const() {"value":0}
+  fi_not_masked:bool = bool.not(fi_masked)
+  fi_not_pending:bool = bool.not(fi_pending)
+  fi_writes_ok:bool = compare.gt(fi_writes,fi_zero)
+  fi_pairs_ok:bool = compare.gt(fi_pairs,fi_zero)
+  fi_a:bool = bool.and(fi_not_masked,fi_not_pending)
+  fi_b:bool = bool.and(fi_writes_ok,fi_pairs_ok)
+  fi_good:bool = bool.and(fi_a,fi_b)
+  branch fi_good accepted() sequence_bad()
+block row(rr_req:readbuf,rr_va:u64,rr_count:u64,rr_i:u64,rr_masked:bool,rr_pending:bool,rr_seen:bool,rr_last:u64,rr_writes:u64,rr_pairs:u64)
+  rr_width:u64 = const() {"value":40}
+  rr_base:u64 = const() {"value":40}
+  rr_eight:u64 = const() {"value":8}
+  rr_16:u64 = const() {"value":16}
+  rr_24:u64 = const() {"value":24}
+  rr_32:u64 = const() {"value":32}
+  rr_delta:u64 = int.mul.wrap(rr_i,rr_width)
+  rr_at:u64 = int.add.wrap(rr_delta,rr_base)
+  rr_o1:u64 = int.add.wrap(rr_at,rr_eight)
+  rr_o2:u64 = int.add.wrap(rr_at,rr_16)
+  rr_o3:u64 = int.add.wrap(rr_at,rr_24)
+  rr_o4:u64 = int.add.wrap(rr_at,rr_32)
+  rr_at0:usize = int.cast(rr_at) {"mode":"wrap"}
+  rr_at1:usize = int.cast(rr_o1) {"mode":"wrap"}
+  rr_at2:usize = int.cast(rr_o2) {"mode":"wrap"}
+  rr_at3:usize = int.cast(rr_o3) {"mode":"wrap"}
+  rr_at4:usize = int.cast(rr_o4) {"mode":"wrap"}
+  rr_op:u64 = call(rr_req,rr_at0) {"function":"read_request_u64"}
+  rr_page:u64 = call(rr_req,rr_at1) {"function":"read_request_u64"}
+  rr_expected:u64 = call(rr_req,rr_at2) {"function":"read_request_u64"}
+  rr_observed:u64 = call(rr_req,rr_at3) {"function":"read_request_u64"}
+  rr_candidate:u64 = call(rr_req,rr_at4) {"function":"read_request_u64"}
+  rr_one:u64 = const() {"value":1}
+  rr_disable:bool = compare.eq(rr_op,rr_one)
+  branch rr_disable mask_irq(rr_req,rr_va,rr_count,rr_i,rr_masked,rr_pending,rr_seen,rr_last,rr_writes,rr_pairs,rr_page,rr_expected,rr_observed,rr_candidate) route_write(rr_req,rr_va,rr_count,rr_i,rr_masked,rr_pending,rr_seen,rr_last,rr_writes,rr_pairs,rr_op,rr_page,rr_expected,rr_observed,rr_candidate)
+block route_write(rw_req:readbuf,rw_va:u64,rw_count:u64,rw_i:u64,rw_masked:bool,rw_pending:bool,rw_seen:bool,rw_last:u64,rw_writes:u64,rw_pairs:u64,rw_op:u64,rw_page:u64,rw_expected:u64,rw_observed:u64,rw_candidate:u64)
+  rw_two:u64 = const() {"value":2}
+  rw_yes:bool = compare.eq(rw_op,rw_two)
+  branch rw_yes mutate_pte(rw_req,rw_va,rw_count,rw_i,rw_masked,rw_pending,rw_seen,rw_last,rw_writes,rw_pairs,rw_page,rw_expected,rw_observed,rw_candidate) route_flush(rw_req,rw_va,rw_count,rw_i,rw_masked,rw_pending,rw_seen,rw_last,rw_writes,rw_pairs,rw_op,rw_page,rw_expected,rw_observed,rw_candidate)
+block route_flush(rf_req:readbuf,rf_va:u64,rf_count:u64,rf_i:u64,rf_masked:bool,rf_pending:bool,rf_seen:bool,rf_last:u64,rf_writes:u64,rf_pairs:u64,rf_op:u64,rf_page:u64,rf_expected:u64,rf_observed:u64,rf_candidate:u64)
+  rf_three:u64 = const() {"value":3}
+  rf_yes:bool = compare.eq(rf_op,rf_three)
+  branch rf_yes invalidate_page(rf_req,rf_va,rf_count,rf_i,rf_masked,rf_pending,rf_seen,rf_last,rf_writes,rf_pairs,rf_page,rf_expected,rf_observed,rf_candidate) route_enable(rf_req,rf_va,rf_count,rf_i,rf_masked,rf_pending,rf_seen,rf_last,rf_writes,rf_pairs,rf_op,rf_page,rf_expected,rf_observed,rf_candidate)
+block route_enable(re_req:readbuf,re_va:u64,re_count:u64,re_i:u64,re_masked:bool,re_pending:bool,re_seen:bool,re_last:u64,re_writes:u64,re_pairs:u64,re_op:u64,re_page:u64,re_expected:u64,re_observed:u64,re_candidate:u64)
+  re_four:u64 = const() {"value":4}
+  re_yes:bool = compare.eq(re_op,re_four)
+  branch re_yes unmask_irq(re_req,re_va,re_count,re_i,re_masked,re_pending,re_seen,re_last,re_writes,re_pairs,re_page,re_expected,re_observed,re_candidate) sequence_bad()
+block mask_irq(di_req:readbuf,di_va:u64,di_count:u64,di_i:u64,di_masked:bool,di_pending:bool,di_seen:bool,di_last:u64,di_writes:u64,di_pairs:u64,di_page:u64,di_expected:u64,di_observed:u64,di_candidate:u64)
+  di_zero:u64 = const() {"value":0}
+  di_a:bool = compare.eq(di_page,di_zero)
+  di_b:bool = compare.eq(di_expected,di_zero)
+  di_c:bool = compare.eq(di_observed,di_zero)
+  di_d:bool = compare.eq(di_candidate,di_zero)
+  di_e:bool = bool.not(di_masked)
+  di_f:bool = bool.and(di_a,di_b)
+  di_g:bool = bool.and(di_c,di_d)
+  di_h:bool = bool.and(di_f,di_g)
+  di_valid:bool = bool.and(di_h,di_e)
+  branch di_valid disable_ok(di_req,di_va,di_count,di_i,di_pending,di_seen,di_last,di_writes,di_pairs) sequence_bad()
+block disable_ok(do_req:readbuf,do_va:u64,do_count:u64,do_i:u64,do_pending:bool,do_seen:bool,do_last:u64,do_writes:u64,do_pairs:u64)
+  do_one:u64 = const() {"value":1}
+  do_true:bool = compare.eq(do_one,do_one)
+  do_next:u64 = int.add.wrap(do_i,do_one)
+  jump scan(do_req,do_va,do_count,do_next,do_true,do_pending,do_seen,do_last,do_writes,do_pairs)
+block mutate_pte(wr_req:readbuf,wr_va:u64,wr_count:u64,wr_i:u64,wr_masked:bool,wr_pending:bool,wr_seen:bool,wr_last:u64,wr_writes:u64,wr_pairs:u64,wr_page:u64,wr_expected:u64,wr_observed:u64,wr_candidate:u64)
+  wr_on_page:bool = compare.eq(wr_page,wr_va)
+  wr_match:bool = compare.eq(wr_expected,wr_observed)
+  wr_changed:bool = compare.ne(wr_candidate,wr_expected)
+  wr_no_pending:bool = bool.not(wr_pending)
+  wr_seen_match:bool = compare.eq(wr_expected,wr_last)
+  wr_not_seen:bool = bool.not(wr_seen)
+  wr_chain:bool = bool.or(wr_not_seen,wr_seen_match)
+  wr_a:bool = bool.and(wr_masked,wr_no_pending)
+  wr_b:bool = bool.and(wr_on_page,wr_match)
+  wr_c:bool = bool.and(wr_changed,wr_chain)
+  wr_d:bool = bool.and(wr_a,wr_b)
+  wr_valid:bool = bool.and(wr_c,wr_d)
+  branch wr_valid write_ok(wr_req,wr_va,wr_count,wr_i,wr_writes,wr_pairs,wr_candidate) sequence_bad()
+block write_ok(wo_req:readbuf,wo_va:u64,wo_count:u64,wo_i:u64,wo_writes:u64,wo_pairs:u64,wo_candidate:u64)
+  wo_one:u64 = const() {"value":1}
+  wo_true:bool = compare.eq(wo_one,wo_one)
+  wo_next:u64 = int.add.wrap(wo_i,wo_one)
+  wo_count_next:u64 = int.add.wrap(wo_writes,wo_one)
+  jump scan(wo_req,wo_va,wo_count,wo_next,wo_true,wo_true,wo_true,wo_candidate,wo_count_next,wo_pairs)
+block invalidate_page(fl_req:readbuf,fl_va:u64,fl_count:u64,fl_i:u64,fl_masked:bool,fl_pending:bool,fl_seen:bool,fl_last:u64,fl_writes:u64,fl_pairs:u64,fl_page:u64,fl_expected:u64,fl_observed:u64,fl_candidate:u64)
+  fl_zero:u64 = const() {"value":0}
+  fl_a:bool = compare.eq(fl_page,fl_va)
+  fl_b:bool = compare.eq(fl_expected,fl_zero)
+  fl_c:bool = compare.eq(fl_observed,fl_zero)
+  fl_d:bool = compare.eq(fl_candidate,fl_zero)
+  fl_e:bool = bool.and(fl_masked,fl_pending)
+  fl_f:bool = bool.and(fl_a,fl_b)
+  fl_g:bool = bool.and(fl_c,fl_d)
+  fl_h:bool = bool.and(fl_e,fl_f)
+  fl_valid:bool = bool.and(fl_g,fl_h)
+  branch fl_valid flush_ok(fl_req,fl_va,fl_count,fl_i,fl_seen,fl_last,fl_writes,fl_pairs) sequence_bad()
+block flush_ok(fo_req:readbuf,fo_va:u64,fo_count:u64,fo_i:u64,fo_seen:bool,fo_last:u64,fo_writes:u64,fo_pairs:u64)
+  fo_one:u64 = const() {"value":1}
+  fo_zero:u64 = const() {"value":0}
+  fo_true:bool = compare.eq(fo_one,fo_one)
+  fo_false:bool = compare.ne(fo_one,fo_one)
+  fo_next:u64 = int.add.wrap(fo_i,fo_one)
+  jump scan(fo_req,fo_va,fo_count,fo_next,fo_true,fo_false,fo_seen,fo_last,fo_writes,fo_pairs)
+block unmask_irq(en_req:readbuf,en_va:u64,en_count:u64,en_i:u64,en_masked:bool,en_pending:bool,en_seen:bool,en_last:u64,en_writes:u64,en_pairs:u64,en_page:u64,en_expected:u64,en_observed:u64,en_candidate:u64)
+  en_zero:u64 = const() {"value":0}
+  en_a:bool = compare.eq(en_page,en_zero)
+  en_b:bool = compare.eq(en_expected,en_zero)
+  en_c:bool = compare.eq(en_observed,en_zero)
+  en_d:bool = compare.eq(en_candidate,en_zero)
+  en_e:bool = bool.not(en_pending)
+  en_f:bool = bool.and(en_a,en_b)
+  en_g:bool = bool.and(en_c,en_d)
+  en_h:bool = bool.and(en_f,en_g)
+  en_i_ok:bool = bool.and(en_masked,en_e)
+  en_valid:bool = bool.and(en_h,en_i_ok)
+  branch en_valid enable_ok(en_req,en_va,en_count,en_i,en_seen,en_last,en_writes,en_pairs) sequence_bad()
+block enable_ok(eo_req:readbuf,eo_va:u64,eo_count:u64,eo_i:u64,eo_seen:bool,eo_last:u64,eo_writes:u64,eo_pairs:u64)
+  eo_one:u64 = const() {"value":1}
+  eo_next:u64 = int.add.wrap(eo_i,eo_one)
+  eo_pairs_next:u64 = int.add.wrap(eo_pairs,eo_one)
+  eo_false:bool = compare.ne(eo_one,eo_one)
+  jump scan(eo_req,eo_va,eo_count,eo_next,eo_false,eo_false,eo_seen,eo_last,eo_writes,eo_pairs_next)
+end
+fn read_request_u64(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
+  hp_rzero:u64 = const() {"value":0}
+  jump loop(bytes,offset,hp_rzero,hp_rzero)
+block loop(hp_rbytes:readbuf,hp_rbase:usize,hp_ri:u64,hp_racc:u64)
+  hp_rwidth:u64 = const() {"value":8}
+  hp_rmore:bool = compare.lt(hp_ri,hp_rwidth)
+  branch hp_rmore byte(hp_rbytes,hp_rbase,hp_ri,hp_racc) done(hp_racc)
+block byte(hp_rbbytes:readbuf,hp_rbbase:usize,hp_rbi:u64,hp_rbacc:u64)
+  hp_rbindex:usize = int.cast(hp_rbi) {"mode":"wrap"}
+  hp_rbaddress:usize = int.add.wrap(hp_rbbase,hp_rbindex)
+  hp_rboctet:u8 = buffer.load(hp_rbbytes,hp_rbaddress)
+  hp_rbwide:u64 = int.cast(hp_rboctet) {"mode":"wrap"}
+  hp_rbeight:u64 = const() {"value":8}
+  hp_rbshift:u64 = int.mul.wrap(hp_rbi,hp_rbeight)
+  hp_rbvalue:u64 = int.shl.checked(hp_rbwide,hp_rbshift)
+  hp_rbnext:u64 = bit.or(hp_rbacc,hp_rbvalue)
+  hp_rbone:u64 = const() {"value":1}
+  hp_rbinext:u64 = int.add.wrap(hp_rbi,hp_rbone)
+  jump loop(hp_rbbytes,hp_rbbase,hp_rbinext,hp_rbnext)
+block done(hp_rdone:u64)
+  ret(hp_rdone)
+end

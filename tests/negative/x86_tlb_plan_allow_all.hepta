@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn tlb_plan(request:readbuf,reply:mutbuf,unused:mutbuf) -> (u32) effects(trap) entry(start)
+block start(request:readbuf,reply:mutbuf,unused:mutbuf)
+  always_ok:u32 = const() {"value":0}
+  ret(always_ok)
+end
