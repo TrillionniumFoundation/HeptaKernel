@@ -391,6 +391,11 @@ jobs:
             build/x86-walk4.so
             build/x86-walk4-unsafe.o
             build/x86-walk4-unsafe.so
+            build/x86-cr3-root-report.json
+            build/x86-cr3-root.o
+            build/x86-cr3-root.so
+            build/x86-cr3-root-unsafe.o
+            build/x86-cr3-root-unsafe.so
             build/x86-cr3-gate-report.json
             build/x86-cr3-gate.o
             build/x86-cr3-gate.so
