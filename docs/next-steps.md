@@ -187,3 +187,9 @@ the fault, respectively, on PC/32MiB and Q35/64MiB. None of this supplies
 native HIA privilege/CRx/invalidation, atomic CAS, SMP TLB shootdown,
 firmware memory ownership, safe reclamation or Linux munmap semantics.
 The full 17-gate closure remains HOLD; the 422 syscall rows are unchanged.
+
+The single-page native HIA TLB ordering admission additionally binds its
+first expected PTE old value to a separate eight-byte caller-supplied entry
+capability rather than only a self-declared row observation. See
+`docs/x86-tlb-entry-binding.md`. This is byte-level checking, not authenticated
+physical RAM, a privileged HIA instruction backend, atomic CAS or SMP safety.
