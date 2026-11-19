@@ -178,6 +178,11 @@ jobs:
         run: |
           make test-x86-pde-2m HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Verify actual native HIA IRQ PTE TLB plan admission and malicious control
+        shell: bash
+        run: |
+          make test-x86-tlb-plan HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify native HIA 1GiB PDPTE writes and dishonest control
         shell: bash
         run: |
