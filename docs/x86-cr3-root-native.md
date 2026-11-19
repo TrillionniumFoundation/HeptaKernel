@@ -6,10 +6,13 @@ differential test, without libc calls, Linux syscalls or embedded foreign code.
 
 The 24-byte request contains little-endian u64 words
 `(candidate_cr3, max_physical_address_bits, required_pml4_index)`.
-The third argument is an exactly 4096-byte, caller-provided **readbuf**
-capability holding the PML4 root. This is enforced by the HIA source-language
-loan type, not just by an implementation convention. The original native
-machine code scans the root without writing to it. The second
+The third public argument remains the fixed self-host `mutbuf` ABI
+holding exactly 4096 bytes of caller-supplied PML4 data. At each entry
+read, native HIA creates a local `borrow.read` loan, passes the `readbuf`
+capability to a typed private helper, and ends the loan before any next
+control-flow transfer. This enforces the helper's read-only access while
+preserving the pinned selfhost_elf entry signature. The actual native
+machine code never writes to the PML4 data. The second
 argument is a reply buffer of at least 16 bytes receiving
 `(status, present_entry_count)`; on error the count is zero.
 
@@ -35,11 +38,11 @@ ELF bytes, compares the loaded library machine text to the object and
 runs an independent byte-oriented Python oracle with immutable-buffer,
 reply-guard, reserved-bit, physical-width and missing-mapping negative
 cases, including an OS-mprotected read-only page. A separate
-invalid HIA source attempting `buffer.store` through the PML4 `readbuf` must
-fail with a verifier invalid-source result while the otherwise identical
-`mutbuf` variant compiles; this tests the source-language loan boundary.
-External raw ABI aliases, snapshot races and root-pointer provenance remain
-outside this property. An independently dishonest HIA unconditional-admit object must fail
+invalid HIA source attempting `buffer.store` through a private `readbuf`
+loan must fail with invalid-source status 2; the same helper with that
+store replaced by `buffer.load` must compile under the unchanged public
+three-buffer ABI. External raw ABI aliases, snapshot races and root-pointer
+provenance remain outside this property. An independently dishonest HIA unconditional-admit object must fail
 the oracle's root-admission case.
 
 **This is not authenticated physical RAM or actual CR3 ownership.**
