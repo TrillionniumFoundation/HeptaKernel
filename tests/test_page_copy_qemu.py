@@ -63,11 +63,11 @@ def main() -> None:
     args = parser.parse_args()
     runs = []
     for machine, memory in (("pc", 32), ("q35", 64)):
-        for mode in ("honest", "dishonest", "decoy", "source-decoy", "detach", "detach-bypass", "detach-source-decoy"):
+        for mode in ("honest", "dishonest", "decoy", "source-decoy", "owner-base-forge", "owner-count-forge", "detach", "detach-bypass", "detach-source-decoy"):
             suffix = "hw" if mode == "honest" else mode
             image = Path(f"build/page-copy-{suffix}-multiboot.elf")
             runs.append(probe(args.qemu, image, machine, memory, mode))
-    report = {"cases": len(runs), "positive": 4, "negative_controls": 10,
+    report = {"cases": len(runs), "positive": 4, "negative_controls": 14,
               "hardware_status": "PASS", "runs": runs}
     Path("build/page-copy-hardware-report.json").write_text(
         json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
