@@ -29,74 +29,104 @@ def git(repo: Path, *arguments: str) -> bytes:
                           stderr=subprocess.PIPE).stdout
 
 
-def tokens(data: bytes):
-    """Yield (byte offset, token) without parsing comments or quoted literals."""
+def logical_bytes(data: bytes):
+    """C phase-2 backslash/newline splicing with original byte offsets.
+
+    Retain physical offsets even for keywords and names split across lines.
+    This handles LF and CRLF, not trigraph replacement or preprocessing.
+    """
+    logical = bytearray()
+    origins = []
     i, n = 0, len(data)
     while i < n:
-        start, c = i, data[i]
+        if data[i] == 92 and i + 1 < n and data[i + 1] == 10:
+            i += 2
+            continue
+        if data[i] == 92 and data[i + 1:i + 3] == b"\r\n":
+            i += 3
+            continue
+        logical.append(data[i])
+        origins.append(i)
+        i += 1
+    return bytes(logical), origins
+
+
+def tokens(data: bytes):
+    """Yield (physical byte start, physical span length, logical token).
+
+    Perform line splicing before comment/literal lexing. For a spliced token
+    the original bytes span a larger interval than the logical token.
+    """
+    logical, origins = logical_bytes(data)
+    i, n = 0, len(logical)
+    while i < n:
+        start, c = i, logical[i]
         if c in SPACE:
             i += 1
             continue
-        if data.startswith(b"//", i):
-            end = data.find(b"\n", i + 2)
+        if logical.startswith(b"//", i):
+            end = logical.find(b"\n", i + 2)
             i = n if end < 0 else end + 1
             continue
-        if data.startswith(b"/*", i):
-            end = data.find(b"*/", i + 2)
+        if logical.startswith(b"/*", i):
+            end = logical.find(b"*/", i + 2)
             if end < 0:
-                raise ValueError("unterminated UAPI block comment at byte " + str(i))
+                raise ValueError("unterminated UAPI block comment at byte "
+                                 + str(origins[i]))
             i = end + 2
             continue
-        if c in (34, 39):  # C string/character literal, including escaped quotes.
+        if c in (34, 39):
             quote = c
             i += 1
             while i < n:
-                if data[i] == 92:  # backslash escapes the next byte
+                if logical[i] == 92:
                     i += 2
-                elif data[i] == quote:
+                elif logical[i] == quote:
                     i += 1
                     break
                 else:
                     i += 1
             else:
-                raise ValueError("unterminated UAPI literal at byte " + str(start))
+                raise ValueError("unterminated UAPI literal at byte "
+                                 + str(origins[start]))
             if i > n:
                 raise ValueError("truncated UAPI literal escape")
             continue
         if 65 <= c <= 90 or 97 <= c <= 122 or c == 95:
             i += 1
             while i < n:
-                v = data[i]
+                v = logical[i]
                 if (65 <= v <= 90 or 97 <= v <= 122 or 48 <= v <= 57
                         or v == 95):
                     i += 1
                 else:
                     break
-            yield start, data[start:i]
+            yield origins[start], origins[i - 1] + 1 - origins[start], logical[start:i]
             continue
-        yield i, data[i:i + 1]
+        yield origins[i], 1, logical[i:i + 1]
         i += 1
-
 
 def extract(data: bytes):
     """Record every lexical struct/union/enum tag, including anonymous ones."""
     words = list(tokens(data))
-    for index, (at, word) in enumerate(words):
+    for index, (at, raw_len, word) in enumerate(words):
         if word not in KEYWORDS:
             continue
-        name_at, name, classification = None, None, "UNPARSED_TAG"
+        name_at, name_raw_len, name, classification = None, None, None, "UNPARSED_TAG"
         if index + 1 < len(words):
-            next_at, next_word = words[index + 1]
+            next_at, next_raw_len, next_word = words[index + 1]
             if IDENT.fullmatch(next_word):
-                name_at, name = next_at, next_word
-                follow = words[index + 2][1] if index + 2 < len(words) else b""
+                name_at, name_raw_len, name = next_at, next_raw_len, next_word
+                follow = words[index + 2][2] if index + 2 < len(words) else b""
                 classification = ("NAMED_DEFINITION" if follow == b"{" else
                                   "NAMED_FORWARD_OR_ELABORATED" if follow == b";" else
                                   "NAMED_REFERENCE_OR_MACRO")
             elif next_word == b"{":
                 classification = "ANONYMOUS_DEFINITION"
-        yield {"byte_at": at, "line": data.count(b"\n", 0, at) + 1,
+        yield {"byte_at": at, "raw_span": raw_len,
+               "line": data.count(b"\n", 0, at) + 1,
                "tag": word.decode("ascii"), "name_byte_at": name_at,
+               "name_raw_span": name_raw_len,
                "name_b64": base64.b64encode(name).decode("ascii") if name else None,
                "classification": classification}
 
@@ -155,7 +185,7 @@ def collect(repo: Path, commit: str):
         raise ValueError("no UAPI tag tokens in pinned tree")
     output = b"".join((json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
                       .encode("ascii") for row in records)
-    return output, {"schema": "heptakernel.linux-uapi-tag-lexical.v1",
+    return output, {"schema": "heptakernel.linux-uapi-tag-lexical.v2",
                     "status": "PARTIAL_SOURCE_LEXICAL_NOT_ABI_IMPLEMENTATION",
                     "linux_commit": commit, "linux_root_tree": tree,
                     "source_file": "uapi-tag-mentions.jsonl",

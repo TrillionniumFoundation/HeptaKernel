@@ -75,7 +75,9 @@ jobs:
           assert not report["inventory_complete"] and not report["full_rewrite_complete"]
           assert report["linux_commit"] == subprocess.check_output(["git","-C",".upstream/linux","rev-parse","HEAD"],text=True).strip()
           assert report["linux_root_tree"] == subprocess.check_output(["git","-C",".upstream/linux","rev-parse","HEAD^{tree}"],text=True).strip()
+          assert report["schema"] == "heptakernel.linux-uapi-tag-lexical.v2"
           paths = set()
+          blobs = {}
           for raw in source.splitlines():
               row = json.loads(raw)
               path = base64.b64decode(row["path_b64"])
@@ -83,8 +85,29 @@ jobs:
               assert path.endswith(b".h") and b"/uapi/" in b"/" + path
               assert row["tag"] in ("struct","union","enum")
               assert row["byte_at"] >= 0 and row["line"] >= 1
-              assert len(row["blob_oid"]) == 40
+              oid = row["blob_oid"]
+              assert len(oid) == 40
+              if oid not in blobs:
+                  blobs[oid] = subprocess.check_output(
+                      ["git", "-C", ".upstream/linux", "cat-file", "blob", oid])
+              physical_blob = blobs[oid]
+              at = row["byte_at"]
+              assert physical_blob[:at].count(b"\n") + 1 == row["line"]
+              for start, span, token in (
+                  (at, row["raw_span"], row["tag"].encode("ascii")),
+                  (row["name_byte_at"], row["name_raw_span"],
+                   base64.b64decode(row["name_b64"]) if row["name_b64"] else None)):
+                  if token is None:
+                      assert start is None and span is None
+                      continue
+                  assert isinstance(start, int) and isinstance(span, int)
+                  assert 0 <= start < len(physical_blob) and span >= len(token)
+                  assert start + span <= len(physical_blob)
+                  physical_token = physical_blob[start:start + span]
+                  assert physical_token.replace(b"\\\r\n", b"").replace(
+                      b"\\\n", b"") == token
           assert paths
+          print("UAPI_TAG_PHYSICAL_ORIGIN: PASS", report["records"], len(blobs))
           print("UAPI_TAG_LEXICAL_MANIFEST: PASS", report["records"], len(paths))
           print("FULL_LINUX_REWRITE: HOLD")
           PY
