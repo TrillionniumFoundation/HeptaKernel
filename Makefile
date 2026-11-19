@@ -4,7 +4,7 @@ QEMU ?= qemu-system-x86_64
 PYTHON ?= python3
 COMPILER_SHA256 := 87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54
 
-.PHONY: test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-cr3-gate test-x86-upper-user all check-compiler test test-x86-pde-2m test-x86-pdpt-1g test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pt-revoke test-x86-pf-gate test-x86-idt test-x86-user-gdt test-x86-tss-gdt test-x86-tss-state test-closure test-linux-inventory record-build full-acceptance clean
+.PHONY: test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-cr3-gate test-cr3-hw test-x86-upper-user all check-compiler test test-x86-pde-2m test-x86-pdpt-1g test-native test-boot test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pt-revoke test-x86-pf-gate test-x86-idt test-x86-user-gdt test-x86-tss-gdt test-x86-tss-state test-closure test-linux-inventory record-build full-acceptance clean
 
 all: build/kernel-multiboot.elf
 
@@ -478,7 +478,7 @@ build/pdpt-1g-%.elf: build/boot-pdpt-1g-%.o $(PDPT_1G_BOOT_SUPPORT) arch/x86_64/
 build/pdpt-1g-%-multiboot.elf: build/pdpt-1g-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-boot: build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf
+test-boot: build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
 	$(PYTHON) tests/test_boot.py --qemu "$(QEMU)"
 
 test-guard-pages: build/kernel-host.so
@@ -587,7 +587,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -642,6 +642,35 @@ build/cr3-allow-all.so: build/cr3-allow-all.o
 test-x86-cr3-gate: build/x86-cr3-gate.so build/cr3-allow-all.so
 	timeout 90 $(PYTHON) tests/test_x86_cr3_gate.py build/x86-cr3-gate.so --object build/x86-cr3-gate.o
 	$(PYTHON) tests/test_x86_cr3_gate.py build/cr3-allow-all.so --expect-unsafe
+
+
+# The privileged hardware state sampler is intentionally NON-HIA. This
+# experiment calls unmodified native HIA Core v8 bytes and never writes CR3.
+build/cr3-boot.o: build/x86-cr3-gate.o
+	objcopy --redefine-sym cr3_admit=cr3_probe_f0 "$<" "$@"
+
+build/cr3-unsafe-boot.o: build/cr3-allow-all.o
+	objcopy --redefine-sym cr3_allow_all=cr3_probe_f0 "$<" "$@"
+
+build/boot-cr3-live.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_CR3_LIVE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-cr3-unsafe.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_CR3_UNSAFE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+CR3_HW_SUPPORT := build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o
+
+build/cr3-live.elf: build/boot-cr3-live.o $(CR3_HW_SUPPORT) build/cr3-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cr3-live.o $(CR3_HW_SUPPORT) build/cr3-boot.o
+
+build/cr3-unsafe.elf: build/boot-cr3-unsafe.o $(CR3_HW_SUPPORT) build/cr3-unsafe-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cr3-unsafe.o $(CR3_HW_SUPPORT) build/cr3-unsafe-boot.o
+
+build/cr3-%-multiboot.elf: build/cr3-%.elf
+	objcopy -O elf32-i386 "$<" "$@"
+
+test-cr3-hw: build/cr3-live-multiboot.elf build/cr3-unsafe-multiboot.elf
+	$(PYTHON) tests/test_cr3_qemu.py --qemu "$(QEMU)"
 
 # Genuine HIA native four-level 4KiB supplied-entry translation/policy.
 build/x86-walk4.o: src/x86_walk4_entries.hepta | build check-compiler
