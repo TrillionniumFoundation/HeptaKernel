@@ -2566,13 +2566,13 @@ message_upper_pass:
 message_upper_stale:
     .asciz "HEPTAKERNEL HIA UPPER USER TABLE STALE OLD REJECTED\r\n"
 message_pdpt_1g_warmed:
-    .asciz "HEPTAKERNEL HIA 1G PDPTE HARDWARE ALIAS WARMED BEFORE UNMAP\\r\\n"
+    .asciz "HEPTAKERNEL HIA 1G PDPTE HARDWARE ALIAS WARMED BEFORE UNMAP\r\n"
 message_pdpt_1g_unmap_fault:
-    .asciz "HEPTAKERNEL HIA 1G PDPTE REMOVAL HARDWARE FAULT VERIFIED\\r\\n"
+    .asciz "HEPTAKERNEL HIA 1G PDPTE REMOVAL HARDWARE FAULT VERIFIED\r\n"
 message_pdpt_1g_unmap_stale:
-    .asciz "HEPTAKERNEL HIA 1G PDPTE REMOVAL STALE OLD REJECTED\\r\\n"
+    .asciz "HEPTAKERNEL HIA 1G PDPTE REMOVAL STALE OLD REJECTED\r\n"
 message_pdpt_1g_unmap_bypass:
-    .asciz "HEPTAKERNEL HIA 1G PDPTE REMOVAL BYPASS EXECUTED\\r\\n"
+    .asciz "HEPTAKERNEL HIA 1G PDPTE REMOVAL BYPASS EXECUTED\r\n"
 message_pdpt_1g_hw:
     .asciz "HEPTAKERNEL HIA 1G PDPTE HARDWARE ALIAS VERIFIED\r\n"
 message_pdpt_1g_stale:
