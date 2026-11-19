@@ -20,9 +20,14 @@ def pack(root=ROOT, owner=ROOT, va=VA, flags=F, rows=None):
     return struct.pack("<5Q",root,owner,va,flags,len(rows)) + b"".join(
         struct.pack("<5Q", *row) for row in rows)
 
-def oracle(data):
+def u64(word):
+    return struct.pack("<Q", word)
+
+def oracle(data, entry):
     if len(data) < 40:
         return 1
+    if len(entry) != 8:
+        return 5
     root,owner,va,flags,n = struct.unpack_from("<5Q",data)
     if not 1 <= n <= 64 or len(data) != 40+40*n:
         return 1
@@ -31,8 +36,9 @@ def oracle(data):
     sign=(va>>47)&1
     if va & 4095 or (va>>48) != (65535 if sign else 0):
         return 3
-    masked=pending=seen=False
-    last=0
+    masked=pending=False
+    seen=True
+    last=struct.unpack_from("<Q",entry)[0]
     writes=pairs=0
     for op,page,old,observed,new in struct.iter_unpack("<5Q",data[40:]):
         if op == 1:
@@ -67,10 +73,10 @@ def campaign(path):
     rows = [(1,0,0,0,0),(2,VA,0,0,0x200085),
             (3,VA,0,0,0),(2,VA,0x200085,0x200085,0x8000000000200085),
             (3,VA,0,0,0),(4,0,0,0,0)]
-    cases=[pack(),pack(rows=rows),
-           pack(rows=[(1,0,0,0,0),(2,VA,0,0,1),(3,VA,0,0,0),
-                      (4,0,0,0,0),(1,0,0,0,0),(2,VA,1,1,2),
-                      (3,VA,0,0,0),(4,0,0,0,0)])]
+    cases=[(pack(),u64(0)),(pack(rows=rows),u64(0)),
+           (pack(rows=[(1,0,0,0,0),(2,VA,0,0,1),(3,VA,0,0,0),
+                       (4,0,0,0,0),(1,0,0,0,0),(2,VA,1,1,2),
+                       (3,VA,0,0,0),(4,0,0,0,0)]),u64(0))]
     for i in range(640):
         root=rng.choice([ROOT,0,1,0xFFFFFFFFFFFFF000,ROOT+1])
         owner=rng.choice([root,ROOT,0])
@@ -83,7 +89,7 @@ def campaign(path):
             rr[rng.randrange(5)]=rng.choice([0,1,2,3,4,VA,VA+4096,0x200085,MASK])
             operations[k]=tuple(rr)
         if rng.randrange(9)==0: operations=operations[:rng.randrange(1,len(operations))]
-        cases.append(pack(root,owner,va,flags,operations))
+        cases.append((pack(root,owner,va,flags,operations),u64(0)))
     # Genuine valid single-page plans under different canonical VAs and owned
     # roots, including repeated updates whose old word is the prior candidate.
     # These positives prevent an always-refuse implementation from passing.
@@ -104,9 +110,9 @@ def campaign(path):
             plan.extend([(1,0,0,0,0),(2,page,candidate,candidate,successor),
                          (3,page,0,0,0),(4,0,0,0,0)])
         raw = pack(root,root,page,F,plan)
-        assert oracle(raw) == 0, ("invalid positive fixture",i)
-        cases.append(raw)
-    cases.extend([b"",b"\0"*39,pack()+b"\0", pack(rows=[]),
+        assert oracle(raw,u64(old)) == 0, ("invalid positive fixture",i)
+        cases.append((raw,u64(old)))
+    cases.extend((raw,u64(0)) for raw in [b"",b"\0"*39,pack()+b"\0", pack(rows=[]),
                   pack(root=0), pack(va=1<<48),pack(flags=0),
                   pack(rows=rows[:3]),pack(rows=rows[:4]),
                   pack(rows=rows[:5]),
@@ -116,16 +122,21 @@ def campaign(path):
                   pack(rows=[(1,0,0,0,0),(2,VA,0,0,1),
                              (3,VA,0,0,0),(2,VA,1,0,2),
                              (3,VA,0,0,0),(4,0,0,0,0)])])
+    # Same declared operations but a different live 8-byte PTE witness must
+    # be rejected; supplying a previous candidate is never an initial readback.
+    cases.extend([(pack(),u64(0x1234)),(pack(),b"\0"*7),(pack(),b"\0"*9),
+                  (pack(rows=[(1,0,0,0,0),(2,VA,0,0,1),
+                              (3,VA,0,0,0),(4,0,0,0,0)]),u64(1))])
     passed=denied=0
-    for raw in cases:
+    for raw,entry in cases:
         input_buf=ctypes.create_string_buffer(b"\xa1"*32+raw+b"\xa1"*32)
         reply=ctypes.create_string_buffer(b"\xb2"*64)
-        workspace=ctypes.create_string_buffer(b"\xc3"*64)
+        workspace=ctypes.create_string_buffer(entry,len(entry))
         before=(bytes(input_buf),bytes(reply),bytes(workspace))
         got=func(ctypes.addressof(input_buf)+32,len(raw),
                  ctypes.addressof(reply),64,
-                 ctypes.addressof(workspace),64)
-        want=oracle(raw)
+                 ctypes.addressof(workspace),len(entry))
+        want=oracle(raw,entry)
         assert got == want, (got,want,raw.hex()[:200])
         assert (bytes(input_buf),bytes(reply),bytes(workspace)) == before, "hidden mutation"
         passed+=got==0
@@ -151,7 +162,9 @@ def main():
               "object_sha256":hashlib.sha256(Path("build/x86-tlb-plan.o").read_bytes()).hexdigest(),
               "library_sha256":hashlib.sha256(Path(args.library).read_bytes()).hexdigest(),
               "privileged_operations_executed":False,"cpu_state_authenticated":False,
-              "single_cpu_only":True,"linux_full_acceptance":"HOLD"}
+              "single_cpu_only":True,"entry_byte_witness_checked":True,
+              "physical_entry_authenticated":False,
+              "linux_full_acceptance":"HOLD"}
     Path("build/x86-tlb-plan-report.json").write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
     print("real HIA TLB effect admission:",report)
 
