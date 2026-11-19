@@ -66,6 +66,47 @@ class UapiLexicalTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 list(tokens(data))
 
+    def test_phase_two_splicing_comment_hiding_and_physical_origin(self):
+        # A backslash-newline continues // comments and can split C identifiers,
+        # including keywords. The original byte offsets must not be collapsed.
+        source = (b'// ignored \\\nstruct phantom { };\n'
+                  b'/\\\n* union hidden { }; */\n'
+                  b'str\\\nuct visible { int a; };\n'
+                  b'en\\\r\num state { A };\n'
+                  b'union name\\\r\n_spliced { char b; };\n'
+                  b'const char *s = "struct \\'
+                  b'\n should_not_appear";\n')
+        found = list(extract(source))
+        self.assertEqual([(r["tag"],
+                           base64.b64decode(r["name_b64"]) if r["name_b64"] else None)
+                          for r in found],
+                         [("struct", b"visible"), ("enum", b"state"),
+                          ("union", b"name_spliced")])
+        self.assertEqual([r["raw_span"] for r in found], [8, 7, 5])
+        self.assertEqual([r["name_raw_span"] for r in found], [7, 5, 15])
+        # Independent physical-to-logical source readback, including CRLF.
+        for row in found:
+            for offset, span, expected in (
+                (row["byte_at"], row["raw_span"], row["tag"].encode()),
+                (row["name_byte_at"], row["name_raw_span"],
+                 base64.b64decode(row["name_b64"]))):
+                raw = source[offset:offset + span]
+                self.assertEqual(raw.replace(b"\\\r\n", b"")
+                                    .replace(b"\\\n", b""), expected)
+            self.assertEqual(row["line"],
+                             source[:row["byte_at"]].count(b"\n") + 1)
+
+    def test_splicing_before_comment_and_literal_completion(self):
+        self.assertEqual(list(extract(b'// hide \\\nstruct shadow;')), [])
+        self.assertEqual(list(extract(b'/\\\n* enum fake; */')), [])
+        self.assertEqual(list(extract(b'"union \\'
+                                      b'\n hidden"; struct visible;'))[0]["tag"],
+                         "struct")
+        for malformed in (b'struct visible; /\\\n* unterminated',
+                          b'struct visible; "unterminated \\\n'):
+            with self.assertRaises(ValueError):
+                list(tokens(malformed))
+
     def test_immutable_pinned_git_blob_and_head_refusal(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
