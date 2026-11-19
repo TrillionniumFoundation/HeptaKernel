@@ -232,4 +232,3 @@ block byte(hp_rbbytes:readbuf,hp_rbbase:usize,hp_rbi:u64,hp_rbacc:u64)
 block done(hp_rdone:u64)
   ret(hp_rdone)
 end
-
