@@ -117,7 +117,7 @@ def extract(data: bytes):
             next_at, next_raw_len, next_word = words[index + 1]
             if IDENT.fullmatch(next_word):
                 name_at, name_raw_len, name = next_at, next_raw_len, next_word
-                follow = words[index + 2][1] if index + 2 < len(words) else b""
+                follow = words[index + 2][2] if index + 2 < len(words) else b""
                 classification = ("NAMED_DEFINITION" if follow == b"{" else
                                   "NAMED_FORWARD_OR_ELABORATED" if follow == b";" else
                                   "NAMED_REFERENCE_OR_MACRO")
