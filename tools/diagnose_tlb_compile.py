@@ -114,3 +114,23 @@ for label, fname, param3, effects in [
        stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     print("PROBE ABI",label,"exit",proc.returncode,"out",len(proc.stdout),
       "size",len(mini),flush=True)
+
+for label, action in [
+    ("used-call", '  result:u32 = int.cast(octets) {"mode":"wrap"}\n  ret(result)\n'),
+    ("used-call-and-store",
+     '  byte:u8 = int.cast(octets) {"mode":"wrap"}\n'
+     '  _ = buffer.store(reply,offset,byte)\n'
+     '  result:u32 = int.cast(octets) {"mode":"wrap"}\n  ret(result)\n'),
+]:
+    mini=(
+      "hia-asm.v1 hepta.hia.program.v8 selfhost_elf\n"
+      "fn tlb_plan(request:readbuf,reply:mutbuf,unused:mutbuf) -> (u32) effects(read,write,trap) entry(start)\n"
+      "block start(request:readbuf,reply:mutbuf,unused:mutbuf)\n"
+      '  offset:usize = const() {"value":0}\n'
+      '  octets:u64 = call(request,offset) {"function":"read_request_u64"}\n'
+      + action + "end\n" + helper
+    )
+    proc=subprocess.run([sys.argv[1]],input=mini.encode("ascii"),
+       stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    print("PROBE USED",label,"exit",proc.returncode,"out",len(proc.stdout),
+      "size",len(mini),flush=True)
