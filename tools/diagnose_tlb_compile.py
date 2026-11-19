@@ -56,7 +56,9 @@ for limit in [1, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23,
                 lines[-1]="  probe_status:u32 = const() {\"value\":0}"
                 lines.append("  ret(probe_status)")
         revised.append("\n".join(lines))
-    candidate=head+"\n"+"\n".join(revised)+"\nend\n"+helper
+    candidate=head+"\n"+"\n".join(revised)+"\nend\n"
+    if '"function":"read_request_u64"' in candidate:
+        candidate += helper
     command = subprocess.run([sys.argv[1]], input=candidate.encode("ascii"),
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     print("PROBE",limit,"reachable",len(visited),"source_bytes",len(candidate),
