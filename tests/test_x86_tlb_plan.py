@@ -2,6 +2,8 @@
 """Independent oracle for a genuine selfhost-compiled, single-page HIA TLB plan checker."""
 import argparse
 import ctypes
+import hashlib
+import json
 import random
 import struct
 from pathlib import Path
@@ -82,6 +84,28 @@ def campaign(path):
             operations[k]=tuple(rr)
         if rng.randrange(9)==0: operations=operations[:rng.randrange(1,len(operations))]
         cases.append(pack(root,owner,va,flags,operations))
+    # Genuine valid single-page plans under different canonical VAs and owned
+    # roots, including repeated updates whose old word is the prior candidate.
+    # These positives prevent an always-refuse implementation from passing.
+    for i in range(160):
+        page = rng.choice([VA, 0, 4096, 0xffff800000004000, 0xfffffffffffff000])
+        root = rng.randrange(1, 1 << 40) << 12
+        old, candidate = rng.getrandbits(64), rng.getrandbits(64)
+        if old == candidate:
+            candidate ^= 1
+        plan = [(1,0,0,0,0),(2,page,old,old,candidate),(3,page,0,0,0)]
+        if i % 3 == 0:
+            successor = candidate ^ (1 << rng.randrange(64))
+            plan.extend([(2,page,candidate,candidate,successor),(3,page,0,0,0)])
+            candidate = successor
+        plan.append((4,0,0,0,0))
+        if i % 7 == 0:
+            successor = candidate ^ (1 << rng.randrange(64))
+            plan.extend([(1,0,0,0,0),(2,page,candidate,candidate,successor),
+                         (3,page,0,0,0),(4,0,0,0,0)])
+        raw = pack(root,root,page,F,plan)
+        assert oracle(raw) == 0, ("invalid positive fixture",i)
+        cases.append(raw)
     cases.extend([b"",b"\0"*39,pack()+b"\0", pack(rows=[]),
                   pack(root=0), pack(va=1<<48),pack(flags=0),
                   pack(rows=rows[:3]),pack(rows=rows[:4]),
@@ -106,7 +130,7 @@ def campaign(path):
         assert (bytes(input_buf),bytes(reply),bytes(workspace)) == before, "hidden mutation"
         passed+=got==0
         denied+=got!=0
-    assert passed>=3 and denied>=100, (passed,denied)
+    assert passed>=160 and denied>=100, (passed,denied)
     return (len(cases),passed,denied)
 
 def main():
@@ -121,7 +145,15 @@ def main():
             return
         raise SystemExit("dishonest native HIA TLB planner falsely passed")
     count,passed,denied=campaign(args.library)
-    print("real HIA TLB effect admission:",count,"cases",passed,"accepted",denied,"refused")
+    report = {"schema": "heptakernel.hia-x86-tlb-plan.v1", "status": "PASS",
+              "cases":count,"accepted":passed,"refused":denied,
+              "source_sha256":hashlib.sha256(Path("src/x86_tlb_plan.hepta").read_bytes()).hexdigest(),
+              "object_sha256":hashlib.sha256(Path("build/x86-tlb-plan.o").read_bytes()).hexdigest(),
+              "library_sha256":hashlib.sha256(Path(args.library).read_bytes()).hexdigest(),
+              "privileged_operations_executed":False,"cpu_state_authenticated":False,
+              "single_cpu_only":True,"linux_full_acceptance":"HOLD"}
+    Path("build/x86-tlb-plan-report.json").write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
+    print("real HIA TLB effect admission:",report)
 
 if __name__ == "__main__":
     main()

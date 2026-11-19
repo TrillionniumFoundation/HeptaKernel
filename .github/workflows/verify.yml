@@ -178,11 +178,6 @@ jobs:
         run: |
           make test-x86-pde-2m HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
-      - name: Diagnose bounded native HIA planner parsing subsets (temporary)
-        shell: bash
-        run: |
-          python3 tools/diagnose_tlb_compile.py "$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
-
       - name: Verify actual native HIA IRQ PTE TLB plan admission and malicious control
         shell: bash
         run: |
@@ -261,6 +256,11 @@ jobs:
             .toolchain/compiler/B3.receipt.json
             .toolchain/compiler/native-compiler.receipt.json
             build/native-report.json
+            build/x86-tlb-plan.o
+            build/x86-tlb-plan.so
+            build/x86-tlb-plan-unsafe.o
+            build/x86-tlb-plan-unsafe.so
+            build/x86-tlb-plan-report.json
             build/e820-region-report.json
             build/arena-router-report.json
             build/boot-idt-conflict.o

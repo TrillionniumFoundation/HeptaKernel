@@ -38,3 +38,8 @@ does not permit recycling pages or closing any Linux syscall gate.
 The current non-HIA QEMU observer remains necessary. Real
 source-verifier-authorized privilege effects plus selfhost lowering
 and QEMU fault tests remain the next blocking work.
+
+The independent oracle includes 160 additional positive native plans across
+canonical lower/upper addresses, independent roots, chained exact-old updates
+and repeated mask/flush cycles. The report records source, native object and
+shared-library hashes, with explicit hardware and Linux closure exclusions.
