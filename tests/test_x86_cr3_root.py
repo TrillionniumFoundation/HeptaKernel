@@ -9,6 +9,7 @@ import argparse
 import ctypes
 import hashlib
 import json
+import mmap
 from pathlib import Path
 import random
 import struct
@@ -114,6 +115,37 @@ def cases():
     return fixed
 
 
+
+def readonly_root_page(library):
+    """The original HIA object must accept an OS-enforced read-only root page."""
+    if mmap.PAGESIZE != SIZE:
+        raise AssertionError("x86-64 4KiB page ABI expected")
+    root = make_root({0: 0x2003, 511: 0x3003})
+    request = make_request()
+    native = ctypes.CDLL(str(library.resolve())).f0
+    native.argtypes = [ctypes.c_void_p, ctypes.c_uint64] * 3
+    native.restype = ctypes.c_uint32
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.mprotect.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int]
+    libc.mprotect.restype = ctypes.c_int
+    page = mmap.mmap(-1, SIZE, flags=mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS,
+                     prot=mmap.PROT_READ | mmap.PROT_WRITE)
+    pointer = ctypes.addressof(ctypes.c_char.from_buffer(page))
+    try:
+        page[:] = root
+        if libc.mprotect(pointer, SIZE, mmap.PROT_READ) != 0:
+            raise OSError(ctypes.get_errno(), "mprotect(PROT_READ) failed")
+        req = ctypes.create_string_buffer(request)
+        reply = ctypes.create_string_buffer(b"\xbc" * 16)
+        status = native(req, len(request), reply, 16, pointer, SIZE)
+        assert (status, struct.unpack_from("<2Q", reply.raw)) == (0, (0, 2))
+        assert page[:] == root, "native HIA modified read-only PML4"
+    finally:
+        if libc.mprotect(pointer, SIZE, mmap.PROT_READ | mmap.PROT_WRITE) != 0:
+            raise OSError(ctypes.get_errno(), "mprotect(restore) failed")
+        page.close()
+
+
 def run(library, corpus):
     native = ctypes.CDLL(str(library.resolve())).f0
     native.argtypes = [ctypes.c_void_p, ctypes.c_uint64] * 3
@@ -163,6 +195,7 @@ def main():
     assert object_text(opts.library) == object_text("build/x86-cr3-root.o")
     corpus = cases()
     counts = run(opts.library, corpus)
+    readonly_root_page(opts.library)
     assert counts.get("0", 0) > 10 and counts.get("5", 0) > 10
     assert counts.get("6", 0) > 10 and counts.get("7", 0) > 10
     report = {
@@ -173,6 +206,7 @@ def main():
         "source_sha256": hashlib.sha256(Path("src/x86_cr3_root.hepta").read_bytes()).hexdigest(),
         "object_sha256": hashlib.sha256(Path("build/x86-cr3-root.o").read_bytes()).hexdigest(),
         "native_hia": True,
+        "readonly_os_page_cases": 1,
         "snapshot_authenticated": False,
         "hardware_cr3_access": False,
         "linux_full_acceptance": "HOLD",

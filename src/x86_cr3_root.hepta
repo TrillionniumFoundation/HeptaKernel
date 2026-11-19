@@ -84,7 +84,9 @@ block load(ld_reply:mutbuf,ld_root:mutbuf,ld_limit:u64,ld_required:u64,ld_index:
   ld_eight:u64 = const() {"value":8}
   ld_offset:u64 = int.mul.wrap(ld_index,ld_eight)
   ld_at:usize = int.cast(ld_offset) {"mode":"wrap"}
-  ld_entry:u64 = call(ld_root,ld_at) {"function":"read_root"}
+  ld_shared:readbuf = borrow.read(ld_root)
+  ld_entry:u64 = call(ld_shared,ld_at) {"function":"read_root"}
+  _ = loan.end(ld_shared)
   ld_one:u64 = const() {"value":1}
   ld_present_bit:u64 = bit.and(ld_entry,ld_one)
   ld_is_present:bool = compare.eq(ld_present_bit,ld_one)
@@ -155,15 +157,15 @@ block byte(rb_bytes:readbuf,rb_offset:usize,rb_i:u64,rb_acc:u64)
 block done(rd_result:u64)
   ret(rd_result)
 end
-fn read_root(bytes:mutbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
-block start(bytes:mutbuf,offset:usize)
+fn read_root(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
   tr_zero:u64 = const() {"value":0}
   jump loop(bytes,offset,tr_zero,tr_zero)
-block loop(tl_bytes:mutbuf,tl_offset:usize,tl_i:u64,tl_acc:u64)
+block loop(tl_bytes:readbuf,tl_offset:usize,tl_i:u64,tl_acc:u64)
   tl_eight:u64 = const() {"value":8}
   tl_more:bool = compare.lt(tl_i,tl_eight)
   branch tl_more byte(tl_bytes,tl_offset,tl_i,tl_acc) done(tl_acc)
-block byte(tb_bytes:mutbuf,tb_offset:usize,tb_i:u64,tb_acc:u64)
+block byte(tb_bytes:readbuf,tb_offset:usize,tb_i:u64,tb_acc:u64)
   tb_i_at:usize = int.cast(tb_i) {"mode":"wrap"}
   tb_at:usize = int.add.wrap(tb_offset,tb_i_at)
   tb_oct:u8 = buffer.load(tb_bytes,tb_at)

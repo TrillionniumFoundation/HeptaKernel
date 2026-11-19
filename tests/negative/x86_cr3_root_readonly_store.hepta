@@ -1,0 +1,16 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn f0(request:readbuf,reply:mutbuf,root:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,root:mutbuf)
+  shared:readbuf = borrow.read(root)
+  status:u32 = call(shared) {"function":"attempt_store"}
+  _ = loan.end(shared)
+  ret(status)
+end
+fn attempt_store(root:readbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(root:readbuf)
+  index:usize = const() {"value":0}
+  zero:u8 = const() {"value":0}
+  _ = buffer.store(root,index,zero)
+  status:u32 = const() {"value":0}
+  ret(status)
+end
