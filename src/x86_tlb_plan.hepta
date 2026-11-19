@@ -101,18 +101,18 @@ block row(rr_req:readbuf,rr_va:u64,rr_count:u64,rr_i:u64,rr_flags:u64,rr_last:u6
   rr_one:u64 = const() {"value":1}
   rr_disable:bool = compare.eq(rr_op,rr_one)
   branch rr_disable mask_irq(rr_req,rr_va,rr_count,rr_i,rr_flags,rr_last,rr_ptr) route_write(rr_req,rr_va,rr_count,rr_i,rr_flags,rr_last,rr_ptr,rr_op)
-block route_write(r_req:readbuf,r_va:u64,r_count:u64,r_i:u64,r_flags:u64,r_last:u64,r_ptr:usize,r_op:u64)
-  r_code:u64 = const() {"value":2}
-  r_match:bool = compare.eq(r_op,r_code)
-  branch r_match mutate_pte(r_req,r_va,r_count,r_i,r_flags,r_last,r_ptr) route_flush(r_req,r_va,r_count,r_i,r_flags,r_last,r_ptr,r_op)
-block route_flush(r_req:readbuf,r_va:u64,r_count:u64,r_i:u64,r_flags:u64,r_last:u64,r_ptr:usize,r_op:u64)
-  r_code:u64 = const() {"value":3}
-  r_match:bool = compare.eq(r_op,r_code)
-  branch r_match invalidate_page(r_req,r_va,r_count,r_i,r_flags,r_last,r_ptr) route_enable(r_req,r_va,r_count,r_i,r_flags,r_last,r_ptr,r_op)
-block route_enable(r_req:readbuf,r_va:u64,r_count:u64,r_i:u64,r_flags:u64,r_last:u64,r_ptr:usize,r_op:u64)
-  r_code:u64 = const() {"value":4}
-  r_match:bool = compare.eq(r_op,r_code)
-  branch r_match unmask_irq(r_req,r_va,r_count,r_i,r_flags,r_last,r_ptr) sequence_bad()
+block route_write(rw_req:readbuf,rw_va:u64,rw_count:u64,rw_i:u64,rw_flags:u64,rw_last:u64,rw_ptr:usize,rw_op:u64)
+  rw_code:u64 = const() {"value":2}
+  rw_match:bool = compare.eq(rw_op,rw_code)
+  branch rw_match mutate_pte(rw_req,rw_va,rw_count,rw_i,rw_flags,rw_last,rw_ptr) route_flush(rw_req,rw_va,rw_count,rw_i,rw_flags,rw_last,rw_ptr,rw_op)
+block route_flush(rf_req:readbuf,rf_va:u64,rf_count:u64,rf_i:u64,rf_flags:u64,rf_last:u64,rf_ptr:usize,rf_op:u64)
+  rf_code:u64 = const() {"value":3}
+  rf_match:bool = compare.eq(rf_op,rf_code)
+  branch rf_match invalidate_page(rf_req,rf_va,rf_count,rf_i,rf_flags,rf_last,rf_ptr) route_enable(rf_req,rf_va,rf_count,rf_i,rf_flags,rf_last,rf_ptr,rf_op)
+block route_enable(re_req:readbuf,re_va:u64,re_count:u64,re_i:u64,re_flags:u64,re_last:u64,re_ptr:usize,re_op:u64)
+  re_code:u64 = const() {"value":4}
+  re_match:bool = compare.eq(re_op,re_code)
+  branch re_match unmask_irq(re_req,re_va,re_count,re_i,re_flags,re_last,re_ptr) sequence_bad()
 block mask_irq(di_req:readbuf,di_va:u64,di_count:u64,di_i:u64,di_flags:u64,di_last:u64,di_ptr:usize)
   di_o8:usize = const() {"value":8}
   di_o16:usize = const() {"value":16}
