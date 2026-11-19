@@ -105,3 +105,25 @@ the leaf, perform the genuine native removal, invalidate the translation via
 an explicitly identified non-HIA bridge, observe #PF with exact CR2/error
 code/IST, and reject stale and restored-PDE negative controls. Only a
 future genuine HIA privilege/atomics backend can replace that bridge.
+
+## Isolated 2 MiB removal hardware experiment
+
+The three QEMU PC (32 MiB) and Q35 (64 MiB) tests use the *same* locked
+HIA Core v8 native `pde_2m_f0` entry linked into each boot image. After the
+real E820 and image/loader reservation admission, the explicitly **non-HIA**
+observer writes and reads a sentinel through the pre-existing identity-mapped
+4..6 MiB 2 MiB leaf. It captures the actual hardware-updated Accessed/Dirty
+PDE as `expected_old` and calls original HIA code with `slot=2,candidate=0`.
+
+The positive case checks status and zero readback, invalidates VA 0x400000 via
+non-HIA `invlpg`, then requires a real CPU #PF with P=0/W=0/U=0, precise
+RIP/CR2/CS and a frame on the isolated IST1 stack. Independent controls
+require that a legal but stale PWT-modified old word returns status 9 without
+mutating PD[2], and that deliberately restoring the old PDE after HIA removal
+causes the hardware read to succeed rather than being misclassified as a fault.
+Both controls must produce distinct debug-exit status and serial markers.
+
+The byte-identity gate requires the original compiled HIA .text to appear at
+the live `pde_2m_f0` symbol in each ELF64 and Multiboot container. This is
+**single-CPU QEMU TCG evidence**, not a privilege-instruction HIA backend,
+atomic 64-bit CAS, SMP TLB shootdown, safe frame reclamation or Linux `munmap`.

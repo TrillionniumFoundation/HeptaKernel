@@ -24,6 +24,10 @@ PDPT_1G_WARMED_MARKER = "HEPTAKERNEL HIA 1G PDPTE HARDWARE ALIAS WARMED BEFORE U
 PDPT_1G_UNMAP_FAULT_MARKER = "HEPTAKERNEL HIA 1G PDPTE REMOVAL HARDWARE FAULT VERIFIED"
 PDPT_1G_UNMAP_STALE_MARKER = "HEPTAKERNEL HIA 1G PDPTE REMOVAL STALE OLD REJECTED"
 PDPT_1G_UNMAP_BYPASS_MARKER = "HEPTAKERNEL HIA 1G PDPTE REMOVAL BYPASS EXECUTED"
+PDE_2M_UNMAP_WARMED_MARKER = "HEPTAKERNEL HIA 2M PDE HARDWARE LEAF WARMED BEFORE UNMAP"
+PDE_2M_UNMAP_FAULT_MARKER = "HEPTAKERNEL HIA 2M PDE REMOVAL HARDWARE FAULT VERIFIED"
+PDE_2M_UNMAP_STALE_MARKER = "HEPTAKERNEL HIA 2M PDE REMOVAL STALE OLD REJECTED"
+PDE_2M_UNMAP_BYPASS_MARKER = "HEPTAKERNEL HIA 2M PDE REMOVAL BYPASS EXECUTED"
 PDE_2M_MARKER = "HEPTAKERNEL HIA LIVE USER 2M PDE VERIFIED"
 PDE_2M_STALE_MARKER = "HEPTAKERNEL HIA USER 2M PDE STALE OLD REJECTED"
 USER_GDT_MARKER = "HEPTAKERNEL HIA LIVE USER GDT VERIFIED"
@@ -106,6 +110,14 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         record["hardware_pdpt_1g_alias_verified"] = pdpt_1g_hw
         record["native_hia_pdpt_1g_stale_refused"] = pdpt_1g_stale
         record["pdpt_1g_postwrite_decoy_detected"] = pdpt_1g_decoy
+        pde_2m_warmed = p.stdout.count(PDE_2M_UNMAP_WARMED_MARKER) == 1
+        pde_2m_fault = p.stdout.count(PDE_2M_UNMAP_FAULT_MARKER) == 1
+        pde_2m_stale = p.stdout.count(PDE_2M_UNMAP_STALE_MARKER) == 1
+        pde_2m_bypass = p.stdout.count(PDE_2M_UNMAP_BYPASS_MARKER) == 1
+        record["hardware_pde_2m_warmed_before_unmap"] = pde_2m_warmed
+        record["hardware_pde_2m_unmap_nonpresent_fault"] = pde_2m_fault
+        record["native_hia_pde_2m_unmap_stale_refused"] = pde_2m_stale
+        record["mutated_pde_2m_unmap_bypass_executed"] = pde_2m_bypass
         pde_verified = p.stdout.count(PDE_2M_MARKER) == 1
         pde_stale = p.stdout.count(PDE_2M_STALE_MARKER) == 1
         record["native_hia_live_user_huge_pde"] = pde_verified
@@ -178,7 +190,28 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         record["native_hia_arena_router_observed"] = route_verified
         owner_verified = p.stdout.count(OWNER_MARKER) == 1
         record["native_hia_multizone_state_and_readback_observed"] = owner_verified
-        if mode == "pdpt_1g_hardware":
+        if mode == "pde_2m_unmap_hardware_fault":
+            accepted = (state_verified and idt_verified and map_verified and
+                        reservation_verified and pde_2m_warmed and pde_2m_fault and
+                        ist_fault_verified and not pde_2m_stale and not pde_2m_bypass and
+                        not pte_verified and not route_verified and
+                        p.returncode == 91 and FAIL_MARKER not in p.stdout and
+                        PASS_MARKER not in p.stdout)
+        elif mode == "pde_2m_unmap_stale":
+            accepted = (state_verified and idt_verified and map_verified and
+                        reservation_verified and pde_2m_warmed and pde_2m_stale and
+                        not pde_2m_fault and not pde_2m_bypass and not ist_fault_verified and
+                        not pte_verified and not route_verified and
+                        p.returncode == 93 and FAIL_MARKER not in p.stdout and
+                        PASS_MARKER not in p.stdout)
+        elif mode == "pde_2m_unmap_bypass":
+            accepted = (state_verified and idt_verified and map_verified and
+                        reservation_verified and pde_2m_warmed and pde_2m_bypass and
+                        not pde_2m_fault and not pde_2m_stale and not ist_fault_verified and
+                        not pte_verified and not route_verified and
+                        p.returncode == 95 and FAIL_MARKER not in p.stdout and
+                        PASS_MARKER not in p.stdout)
+        elif mode == "pdpt_1g_hardware":
             accepted = (state_verified and idt_verified and map_verified and
                         reservation_verified and pdpt_1g_hw and
                         not pdpt_1g_stale and not pdpt_1g_decoy and
@@ -454,6 +487,14 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         accepted = accepted and (protect_fault == (mode == "pt_protect_hardware_fault"))
         accepted = accepted and (protect_stale == (mode == "pt_protect_stale_rejected"))
         accepted = accepted and (protect_bypass == (mode == "pt_protect_bypass_stored"))
+        # These live-MMU markers are mutually exclusive and absent in all
+        # earlier scenarios; correct exit status alone cannot make them pass.
+        pde_unmap_modes = {"pde_2m_unmap_hardware_fault",
+                           "pde_2m_unmap_stale", "pde_2m_unmap_bypass"}
+        accepted = accepted and (pde_2m_warmed == (mode in pde_unmap_modes))
+        accepted = accepted and (pde_2m_fault == (mode == "pde_2m_unmap_hardware_fault"))
+        accepted = accepted and (pde_2m_stale == (mode == "pde_2m_unmap_stale"))
+        accepted = accepted and (pde_2m_bypass == (mode == "pde_2m_unmap_bypass"))
         # Revoke-only markers must never appear on unrelated boot images.
         accepted = accepted and (revoke_verified == (mode in
                       {"pt_revoke_hardware_fault", "pt_revoke_bypass_read"}))
@@ -465,7 +506,8 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         precommit = {"reserved_rejected", "nonvolatile_rejected", "protected_rejected",
                      "pte_unsafe_rejected", "pt_commit_conflict_rejected",
                      "pdpt_1g_hardware", "pdpt_1g_stale", "pdpt_1g_decoy",
-                     "pdpt_1g_unmap_hardware_fault", "pdpt_1g_unmap_stale", "pdpt_1g_unmap_bypass"}
+                     "pdpt_1g_unmap_hardware_fault", "pdpt_1g_unmap_stale", "pdpt_1g_unmap_bypass",
+                     "pde_2m_unmap_hardware_fault", "pde_2m_unmap_stale", "pde_2m_unmap_bypass"}
         accepted = accepted and (pt_commit_verified == (mode not in precommit | {"user_gdt_conflict_rejected", "idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected", "rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected", "upper_user_stale_rejected"}))
         accepted = accepted and (upper_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"}))
         accepted = accepted and (upper_stale == (mode == "upper_user_stale_rejected"))
@@ -502,6 +544,9 @@ def main():
                "upper_user_stale_boot_sha256": digest("build/boot-ring3-upper-stale.o"),
                "native_hia_pde_2m_object_sha256": digest("build/x86-pde-2m.o"),
               "native_hia_pde_2m_boot_symbol_sha256": digest("build/pde-2m-boot.o"),
+              "pde_2m_unmap_fault_boot_sha256": digest("build/boot-pde-2m-unmap-fault.o"),
+              "pde_2m_unmap_stale_boot_sha256": digest("build/boot-pde-2m-unmap-stale.o"),
+              "pde_2m_unmap_bypass_boot_sha256": digest("build/boot-pde-2m-unmap-bypass.o"),
               "pde_2m_stale_boot_sha256": digest("build/boot-ring3-pde-stale.o"),
               "native_hia_pdpt_1g_object_sha256": digest("build/x86-pdpt-1g.o"),
               "native_hia_pdpt_1g_boot_sha256": digest("build/pdpt-1g-boot.o"),
@@ -580,6 +625,13 @@ def main():
                                       machine, memory, mode="tss_gdt_conflict_rejected"))
             report["runs"].append(run(args.qemu, Path("build/idt-conflict-multiboot.elf"),
                                       machine, memory, mode="idt_conflict_rejected"))
+        for machine, memory in (("pc", "32"), ("q35", "64")):
+            report["runs"].append(run(args.qemu, Path("build/pde-2m-unmap-fault-multiboot.elf"),
+                                      machine, memory, mode="pde_2m_unmap_hardware_fault"))
+            report["runs"].append(run(args.qemu, Path("build/pde-2m-unmap-stale-multiboot.elf"),
+                                      machine, memory, mode="pde_2m_unmap_stale"))
+            report["runs"].append(run(args.qemu, Path("build/pde-2m-unmap-bypass-multiboot.elf"),
+                                      machine, memory, mode="pde_2m_unmap_bypass"))
         for machine, memory in (("pc", "32"), ("q35", "64")):
             report["runs"].append(run(args.qemu, Path("build/pdpt-1g-hw-multiboot.elf"),
                                       machine, memory, mode="pdpt_1g_hardware"))
