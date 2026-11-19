@@ -67,6 +67,48 @@ block bad_caps(hp_cap_reply:mutbuf)
   hp_cap_result:u32 = call(hp_cap_reply,hp_cap_code,hp_cap_zero) {"function":"write_reply"}
   ret(hp_cap_result)
 block check_bits(hp_bits_reply:mutbuf,hp_bits_page:mutbuf,hp_bits_slot:u64,hp_bits_old:u64,hp_bits_new:u64,hp_bits_caps:u64,hp_bits_width:u64)
+  hp_revoke_zero:u64 = const() {"value":0}
+  hp_is_unmap:bool = compare.eq(hp_bits_new,hp_revoke_zero)
+  branch hp_is_unmap check_unmap_old(hp_bits_reply,hp_bits_page,hp_bits_slot,hp_bits_old,hp_bits_new,hp_bits_caps,hp_bits_width) check_new_bits(hp_bits_reply,hp_bits_page,hp_bits_slot,hp_bits_old,hp_bits_new,hp_bits_caps,hp_bits_width)
+block check_unmap_old(ur_reply:mutbuf,ur_page:mutbuf,ur_slot:u64,ur_old:u64,ur_new:u64,ur_caps:u64,ur_width:u64)
+  ur_zero:u64 = const() {"value":0}
+  ur_present:u64 = const() {"value":1}
+  ur_ps:u64 = const() {"value":128}
+  ur_forbidden:u64 = const() {"value":8646911284553441280}
+  ur_pa_mask:u64 = const() {"value":4503599625273344}
+  ur_p:u64 = bit.and(ur_old,ur_present)
+  ur_h:u64 = bit.and(ur_old,ur_ps)
+  ur_p_ok:bool = compare.eq(ur_p,ur_present)
+  ur_h_ok:bool = compare.eq(ur_h,ur_ps)
+  ur_res:u64 = bit.and(ur_old,ur_forbidden)
+  ur_res_ok:bool = compare.eq(ur_res,ur_zero)
+  ur_phys:u64 = bit.and(ur_old,ur_pa_mask)
+  ur_one:u64 = const() {"value":1}
+  ur_limit:u64 = int.shl.checked(ur_one,ur_width)
+  ur_phys_ok:bool = compare.lt(ur_phys,ur_limit)
+  ur_ph:bool = bool.and(ur_p_ok,ur_h_ok)
+  ur_rp:bool = bool.and(ur_res_ok,ur_phys_ok)
+  ur_legal:bool = bool.and(ur_ph,ur_rp)
+  branch ur_legal check_unmap_caps(ur_reply,ur_page,ur_slot,ur_old,ur_new,ur_caps) bad_candidate(ur_reply)
+block check_unmap_caps(uc_reply:mutbuf,uc_page:mutbuf,uc_slot:u64,uc_old:u64,uc_new:u64,uc_caps:u64)
+  uc_zero:u64 = const() {"value":0}
+  uc_nx:u64 = const() {"value":9223372036854775808}
+  uc_global:u64 = const() {"value":256}
+  uc_nxe:u64 = const() {"value":256}
+  uc_pge:u64 = const() {"value":512}
+  uc_old_nx:u64 = bit.and(uc_old,uc_nx)
+  uc_old_global:u64 = bit.and(uc_old,uc_global)
+  uc_has_nxe:u64 = bit.and(uc_caps,uc_nxe)
+  uc_has_pge:u64 = bit.and(uc_caps,uc_pge)
+  uc_uses_nx:bool = compare.ne(uc_old_nx,uc_zero)
+  uc_uses_global:bool = compare.ne(uc_old_global,uc_zero)
+  uc_missing_nxe:bool = compare.eq(uc_has_nxe,uc_zero)
+  uc_missing_pge:bool = compare.eq(uc_has_pge,uc_zero)
+  uc_bad_nx:bool = bool.and(uc_uses_nx,uc_missing_nxe)
+  uc_bad_global:bool = bool.and(uc_uses_global,uc_missing_pge)
+  uc_unsupported:bool = bool.or(uc_bad_nx,uc_bad_global)
+  branch uc_unsupported bad_caps(uc_reply) check_slot(uc_reply,uc_page,uc_slot,uc_old,uc_new)
+block check_new_bits(hp_bits_reply:mutbuf,hp_bits_page:mutbuf,hp_bits_slot:u64,hp_bits_old:u64,hp_bits_new:u64,hp_bits_caps:u64,hp_bits_width:u64)
   hp_bzero:u64 = const() {"value":0}
   hp_bone:u64 = const() {"value":1}
   hp_bwrite:u64 = const() {"value":2}
