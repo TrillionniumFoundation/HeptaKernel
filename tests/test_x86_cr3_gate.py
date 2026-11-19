@@ -16,9 +16,9 @@ import subprocess
 import tempfile
 
 MASK64 = (1 << 64) - 1
-CR0_MODE = (1 << 31) | 1
+CR0_MODE = (1 << 31) | 1 | (1 << 16)
 CR4_PAE = 1 << 5
-EFER_LONG = (1 << 8) | (1 << 10)
+EFER_LONG = (1 << 8) | (1 << 10) | (1 << 11)
 CR4_UNSUPPORTED = (1 << 12) | (1 << 17)
 LOW_ALLOWED = (1 << 3) | (1 << 4)
 
@@ -70,9 +70,9 @@ def campaign(library, object_file=None):
         refused += expected != 0
 
     rng = random.Random(0xC3A017)
-    valid_cr0 = CR0_MODE | (1 << 16)
+    valid_cr0 = CR0_MODE
     valid_cr4 = CR4_PAE | (1 << 7)
-    valid_efer = EFER_LONG | (1 << 11)
+    valid_efer = EFER_LONG
     widths = (32, 36, 40, 48, 52)
     flags = (0, 8, 16, 24)
     for bits in widths:
@@ -80,9 +80,11 @@ def campaign(library, object_file=None):
             for base in (0x1000, 0x2000, 0x400000, (1 << (bits - 1)) & ~4095):
                 case(base | flag, valid_cr0, valid_cr4, valid_efer, bits)
                 case(base | flag, valid_cr0 & ~(1 << 31), valid_cr4, valid_efer, bits)
+                case(base | flag, valid_cr0 & ~(1 << 16), valid_cr4, valid_efer, bits)  # CR0.WP=0
                 case(base | flag, valid_cr0, valid_cr4 | (1 << 17), valid_efer, bits)
                 case(base | flag, valid_cr0, valid_cr4 | (1 << 12), valid_efer, bits)
                 case(base | flag, valid_cr0, valid_cr4, valid_efer & ~(1 << 10), bits)
+                case(base | flag, valid_cr0, valid_cr4, valid_efer & ~(1 << 11), bits)  # EFER.NXE=0
                 case(base | flag, valid_cr0, valid_cr4, valid_efer, 31)
                 case(base | flag, valid_cr0, valid_cr4, valid_efer, 53)
                 case(base | flag | 1, valid_cr0, valid_cr4, valid_efer, bits)
@@ -91,6 +93,18 @@ def campaign(library, object_file=None):
         case(0, valid_cr0, valid_cr4, valid_efer, bits)
         case(24, valid_cr0, valid_cr4, valid_efer, bits)
         case(1 << bits, valid_cr0, valid_cr4, valid_efer, bits)
+
+    # Adversarial cross-pair checks: all mode bits except the requested
+    # write-protect and execute-disable controls are valid, but admission
+    # must fail closed independently for each missing control.
+    for bits in widths:
+        for bad_cr0, bad_efer in (
+            (valid_cr0 & ~(1 << 16), valid_efer),
+            (valid_cr0, valid_efer & ~(1 << 11)),
+            (valid_cr0 & ~(1 << 16), valid_efer & ~(1 << 11)),
+        ):
+            case(0x2000, bad_cr0, valid_cr4, bad_efer, bits)
+            assert independent_oracle(0x2000, bad_cr0, valid_cr4, bad_efer, bits) == 2
 
     for _ in range(4200):
         bits = rng.choice(widths + (0, 31, 53, 64, MASK64))
