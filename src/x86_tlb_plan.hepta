@@ -1,5 +1,5 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn tlb_plan(request:readbuf,reply:mutbuf,unused:mutbuf) -> (u32) effects(read,trap) entry(start)
+fn tlb_plan(request:readbuf,reply:mutbuf,unused:mutbuf) -> (u32) effects(read,write,trap) entry(start)
 block start(request:readbuf,reply:mutbuf,unused:mutbuf)
   st_size:usize = buffer.len(request)
   st_min:usize = const() {"value":40}
