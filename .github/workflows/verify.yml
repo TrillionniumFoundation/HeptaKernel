@@ -52,7 +52,7 @@ jobs:
           PYTHONPATH=.toolchain/hepta python3 - <<'PY'
           from pathlib import Path
           from hepta.hia_agent_assembly import assemble_program
-          for source in ("src/x86_pt_nx_protect.hepta", "tests/negative/x86_pt_nx_protect_allow_all.hepta", "src/x86_pt_write_protect.hepta", "tests/negative/x86_pt_write_protect_allow_all.hepta", "src/x86_pt_user_revoke.hepta", "tests/negative/x86_pt_user_revoke_allow_all.hepta", "src/x86_pt_revoke.hepta", "tests/negative/x86_pt_revoke_allow_all.hepta", "src/x86_access_gate.hepta", "tests/negative/x86_access_allow_all.hepta", "src/x86_walk4_physical.hepta", "src/x86_walk4_auto.hepta", "src/x86_walk4_huge.hepta", "tests/negative/walk4_huge_allow_all.hepta", "src/x86_walk4_indexed.hepta", "tests/negative/walk4_indexed_allow_all.hepta", "src/x86_walk4_entries.hepta", "tests/negative/walk4_allow_all.hepta", "src/x86_cr3_gate.hepta", "tests/negative/cr3_allow_all.hepta", "src/x86_upper_user_gate.hepta", "src/kernel.hepta", "src/e820_region.hepta", "src/arena_router.hepta", "src/owner_binding.hepta", "src/reservation_gate.hepta", "src/x86_pte_leaf.hepta", "src/x86_pt_commit.hepta", "src/x86_pde_2m.hepta", "src/x86_tlb_plan.hepta", "tests/negative/x86_tlb_plan_allow_all.hepta", "src/x86_pdpt_1g.hepta", "src/x86_pf_gate.hepta", "src/x86_idt_gate.hepta", "src/x86_user_gdt.hepta", "src/x86_tss_gdt.hepta", "src/x86_tss_state.hepta", "tests/negative/e820_allow_all.hepta"):
+          for source in ("src/x86_cr3_root.hepta", "tests/negative/x86_cr3_root_allow_all.hepta", "src/x86_pt_nx_protect.hepta", "tests/negative/x86_pt_nx_protect_allow_all.hepta", "src/x86_pt_write_protect.hepta", "tests/negative/x86_pt_write_protect_allow_all.hepta", "src/x86_pt_user_revoke.hepta", "tests/negative/x86_pt_user_revoke_allow_all.hepta", "src/x86_pt_revoke.hepta", "tests/negative/x86_pt_revoke_allow_all.hepta", "src/x86_access_gate.hepta", "tests/negative/x86_access_allow_all.hepta", "src/x86_walk4_physical.hepta", "src/x86_walk4_auto.hepta", "src/x86_walk4_huge.hepta", "tests/negative/walk4_huge_allow_all.hepta", "src/x86_walk4_indexed.hepta", "tests/negative/walk4_indexed_allow_all.hepta", "src/x86_walk4_entries.hepta", "tests/negative/walk4_allow_all.hepta", "src/x86_cr3_gate.hepta", "tests/negative/cr3_allow_all.hepta", "src/x86_upper_user_gate.hepta", "src/kernel.hepta", "src/e820_region.hepta", "src/arena_router.hepta", "src/owner_binding.hepta", "src/reservation_gate.hepta", "src/x86_pte_leaf.hepta", "src/x86_pt_commit.hepta", "src/x86_pde_2m.hepta", "src/x86_tlb_plan.hepta", "tests/negative/x86_tlb_plan_allow_all.hepta", "src/x86_pdpt_1g.hepta", "src/x86_pf_gate.hepta", "src/x86_idt_gate.hepta", "src/x86_user_gdt.hepta", "src/x86_tss_gdt.hepta", "src/x86_tss_state.hepta", "tests/negative/e820_allow_all.hepta"):
               checked = assemble_program(Path(source).read_bytes())
               print("Independent HIA Core syntax/semantics verification: PASS", source)
               print("Verified functions:", len(checked.as_dict()["functions"]))
@@ -162,6 +162,11 @@ jobs:
         shell: bash
         run: |
           make test-x86-cr3-root HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
+      - name: Verify real QEMU CR3 root HIA scan and forged snapshot controls
+        shell: bash
+        run: |
+          make test-cr3-root-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
       - name: Verify native HIA CR3 state profile and dishonest all-accept control
         shell: bash
@@ -391,6 +396,10 @@ jobs:
             build/x86-walk4.so
             build/x86-walk4-unsafe.o
             build/x86-walk4-unsafe.so
+            build/cr3-root-hardware-report.json
+            build/root-live-multiboot.elf
+            build/root-unsafe-multiboot.elf
+            build/root-spoof-multiboot.elf
             build/x86-cr3-root-report.json
             build/x86-cr3-root.o
             build/x86-cr3-root.so

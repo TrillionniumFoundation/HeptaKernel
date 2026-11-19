@@ -313,6 +313,9 @@ long_entry:
     /* Non-HIA isolated observer using original native HIA CR3 gate bytes. */
     jmp cr3_live_probe64
 #endif
+#if defined(HEPTAKERNEL_ROOT_LIVE) || defined(HEPTAKERNEL_ROOT_UNSAFE) || defined(HEPTAKERNEL_ROOT_SPOOF)
+    jmp root_probe64
+#endif
 
     /* Catch HIA bounds traps (#UD), #GP, #PF and other exception vectors.
      * No handler returns. Only the isolated #PF vector uses a hardware IST1.
@@ -964,6 +967,133 @@ cr3_live_probe64:
     call puts64
     movl $0x30, %eax                /* debug-exit 97 */
     jmp debug_exit64
+#endif
+#endif
+
+/* CR3 and CPUID are read by a NON-HIA bootstrap observer. HIA scans RAM. */
+#if defined(HEPTAKERNEL_ROOT_LIVE) || defined(HEPTAKERNEL_ROOT_UNSAFE) || defined(HEPTAKERNEL_ROOT_SPOOF)
+root_probe64:
+    movq %cr3, %r12
+    leaq pml4(%rip), %r13
+    cmpq %r13, %r12
+    jne fail64                 /* binding to actual CPU root, not an address claim */
+    movl $0x80000000, %eax
+    xorl %ecx, %ecx
+    cpuid
+    cmpl $0x80000008, %eax
+    jb fail64
+    movl $0x80000008, %eax
+    xorl %ecx, %ecx
+    cpuid
+    movzbl %al, %eax
+    movq %r12, root_request(%rip)
+    movq %rax, root_request+8(%rip)
+    movq $0, root_request+16(%rip)
+#ifndef HEPTAKERNEL_ROOT_UNSAFE
+    movq $-1, root_reply(%rip)
+    movq $-1, root_reply+8(%rip)
+    leaq root_request(%rip), %rdi
+    movl $24, %esi
+    leaq root_reply(%rip), %rdx
+    movl $16, %ecx
+    movq %r12, %r8
+    movl $4096, %r9d
+    call root_native_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, root_reply(%rip)
+    jne fail64
+    cmpq $1, root_reply+8(%rip)
+    jne fail64
+#endif
+    movq %cr3, %rax
+    cmpq %r12, %rax
+    jne fail64
+    leaq pml4(%rip), %rsi
+    leaq root_copy(%rip), %rdi
+    movl $512, %ecx
+    cld
+    rep movsq
+    movq (%r13), %rax
+    cmpq %rax, root_copy(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_ROOT_SPOOF
+    /* Valid substituted table is accepted by HIA byte policy only.
+     * The non-HIA observer must notice it is NOT the CR3-rooted page. */
+    xorq $0x1000, root_copy(%rip)
+    movq $-1, root_reply(%rip)
+    movq $-1, root_reply+8(%rip)
+    leaq root_request(%rip), %rdi
+    movl $24, %esi
+    leaq root_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq root_copy(%rip), %r8
+    movl $4096, %r9d
+    call root_native_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, root_reply(%rip)
+    jne fail64
+    cmpq $1, root_reply+8(%rip)
+    jne fail64
+    leaq root_copy(%rip), %rax
+    cmpq %r12, %rax
+    je fail64
+    leaq root_spoof_message(%rip), %rsi
+    call puts64
+    movl $0x11, %eax
+    jmp debug_exit64
+#else
+    orq $128, root_copy(%rip) /* reserved PML4 bit */
+    movq $-1, root_reply(%rip)
+    movq $-1, root_reply+8(%rip)
+    leaq root_request(%rip), %rdi
+    movl $24, %esi
+    leaq root_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq root_copy(%rip), %r8
+    movl $4096, %r9d
+    call root_native_f0
+#ifdef HEPTAKERNEL_ROOT_UNSAFE
+    testl %eax, %eax
+    jne fail64
+    leaq root_unsafe_message(%rip), %rsi
+    call puts64
+    movl $0x11, %eax
+    jmp debug_exit64
+#else
+    cmpl $7, %eax
+    jne fail64
+    cmpq $7, root_reply(%rip)
+    jne fail64
+    cmpq $0, root_reply+8(%rip)
+    jne fail64
+    movq (%r13), %rax
+    movq %rax, root_copy(%rip)
+    andq $-2, root_copy(%rip) /* required slot absent in COPY */
+    leaq root_request(%rip), %rdi
+    movl $24, %esi
+    leaq root_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq root_copy(%rip), %r8
+    movl $4096, %r9d
+    call root_native_f0
+    cmpl $5, %eax
+    jne fail64
+    cmpq $5, root_reply(%rip)
+    jne fail64
+    cmpq $0, root_reply+8(%rip)
+    jne fail64
+    movq %cr3, %rax
+    cmpq %r12, %rax
+    jne fail64
+    testq $1, (%r13)
+    jz fail64
+    leaq root_live_message(%rip), %rsi
+    call puts64
+    movl $0x30, %eax
+    jmp debug_exit64
+#endif
 #endif
 #endif
 
@@ -2877,6 +3007,12 @@ message_router_pass:
     .asciz "HEPTAKERNEL HIA ARENA ROUTER VERIFIED\r\n"
 message_owner_pass:
     .asciz "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED\r\n"
+root_live_message:
+    .asciz "HEPTAKERNEL HIA LIVE CR3 ROOT PAGE VERIFIED\r\n"
+root_unsafe_message:
+    .asciz "HEPTAKERNEL HIA CR3 ROOT UNSAFE ACCEPT DETECTED\r\n"
+root_spoof_message:
+    .asciz "HEPTAKERNEL HIA CR3 ROOT SPOOF REFUSED BY OBSERVER\r\n"
 message_cr3_live:
     .asciz "HEPTAKERNEL HIA CR3 LIVE CPU SNAPSHOT VERIFIED\r\n"
 message_cr3_unsafe:
@@ -2992,6 +3128,11 @@ ist_stack_top:
 rsp0_decoy_stack_base: .skip 8192
 rsp0_decoy_stack_top:
 .balign 16
+.balign 4096
+root_copy:       .skip 4096
+.balign 16
+root_request:    .skip 24
+root_reply:      .skip 16
 tss_state_request: .skip 40
 tss_state_reply:   .skip 16
 upper_user_request: .skip 24

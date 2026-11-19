@@ -206,3 +206,12 @@ current CR3 points to that page or that live page-table RAM is immutable.
 Hardware root ownership, verified privilege transitions, atomic updates,
 TLB shootdown and full user/driver/ABI functionality remain unmet. No
 full-acceptance gate is closed by this component.
+
+An isolated hardware-root QEMU case now compares the actual CPU CR3 against
+the identity-mapped PML4 page, passes that live page to original native HIA
+`x86_cr3_root_admit`, and checks the full return and physical root readback.
+Malformed and absent-slot snapshots, a dishonest HIA always-accept binary,
+and an alternative *well-formed* forged page provide independent controls.
+The forgery is refused by the **non-HIA** physical-provenance observer, not
+by the HIA source-language verifier or hardware privilege backend. See
+`docs/x86-cr3-root-qemu.md`; full Linux acceptance stays HOLD.
