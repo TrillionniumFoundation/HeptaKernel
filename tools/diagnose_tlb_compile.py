@@ -94,3 +94,23 @@ result = subprocess.run([sys.argv[1]],input=call_src.encode("ascii"),
  stdout=subprocess.PIPE,stderr=subprocess.PIPE)
 print("PROBE CONTROL minimal-call-helper","exit",result.returncode,
  "source_bytes",len(call_src),"out",len(result.stdout),flush=True)
+
+for label, fname, param3, effects in [
+    ("pde-abi", "x86_pde_2m", "table", "read,write,trap"),
+    ("tlb-pde-abi", "tlb_plan", "table", "read,write,trap"),
+    ("tlb-named-unused", "tlb_plan", "unused", "read,write,trap"),
+    ("tlb-no-write", "tlb_plan", "unused", "read,trap"),
+]:
+    mini = (
+     "hia-asm.v1 hepta.hia.program.v8 selfhost_elf\n"
+     f"fn {fname}(request:readbuf,reply:mutbuf,{param3}:mutbuf) -> (u32) effects({effects}) entry(start)\n"
+     f"block start(request:readbuf,reply:mutbuf,{param3}:mutbuf)\n"
+     '  offset:usize = const() {"value":0}\n'
+     '  octets:u64 = call(request,offset) {"function":"read_request_u64"}\n'
+     '  result:u32 = const() {"value":0}\n'
+     '  ret(result)\nend\n' + helper
+    )
+    proc=subprocess.run([sys.argv[1]],input=mini.encode("ascii"),
+       stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    print("PROBE ABI",label,"exit",proc.returncode,"out",len(proc.stdout),
+      "size",len(mini),flush=True)
