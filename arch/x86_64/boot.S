@@ -309,6 +309,10 @@ long_entry:
     leaq stack_top(%rip), %rsp
     xorq %rbp, %rbp
     cld
+#if defined(HEPTAKERNEL_TEST_CR3_LIVE) || defined(HEPTAKERNEL_TEST_CR3_UNSAFE)
+    /* Non-HIA isolated observer using original native HIA CR3 gate bytes. */
+    jmp cr3_live_probe64
+#endif
 
     /* Catch HIA bounds traps (#UD), #GP, #PF and other exception vectors.
      * No handler returns. Only the isolated #PF vector uses a hardware IST1.
@@ -876,6 +880,92 @@ cases_done:
     call puts64
     movl $0x10, %eax              /* QEMU exit code 33 */
     jmp debug_exit64
+
+
+/* The CPL0/CPUID/MSR hardware sampler is an explicit NON-HIA test observer.
+ * The actual CR3 admission is the selfhost-compiled HIA cr3_probe_f0. */
+#if defined(HEPTAKERNEL_TEST_CR3_LIVE) || defined(HEPTAKERNEL_TEST_CR3_UNSAFE)
+cr3_live_probe64:
+    movl $0x80000000, %eax
+    xorl %ecx, %ecx
+    cpuid
+    cmpl $0x80000008, %eax
+    jb fail64
+    movl $0x80000008, %eax
+    xorl %ecx, %ecx
+    cpuid
+    movzbl %al, %ebx                /* MAXPHYADDR from real CPUID */
+    movq %cr3, %r12
+    movq %cr0, %r13
+    movq %cr4, %r14
+    movl $0xc0000080, %ecx
+    rdmsr
+    movq %rdx, %r15
+    shlq $32, %r15
+    orq %rax, %r15                  /* actual EFER */
+
+    movq %r12, %rdi
+    movq %r13, %rsi
+    movq %r14, %rdx
+    movq %r15, %rcx
+    movq %rbx, %r8
+    call cr3_probe_f0
+    testl %eax, %eax
+    jne fail64
+    movq %cr3, %rax
+    cmpq %r12, %rax
+    jne fail64
+
+    /* Corrupt a COPY of sampled CR0.WP; do not modify live CR0. */
+    movq %r12, %rdi
+    movq %r13, %rsi
+    btrq $16, %rsi
+    movq %r14, %rdx
+    movq %r15, %rcx
+    movq %rbx, %r8
+    call cr3_probe_f0
+#ifdef HEPTAKERNEL_TEST_CR3_UNSAFE
+    /* An unconditional-admission native HIA control must expose bypass. */
+    testl %eax, %eax
+    jne fail64
+    leaq message_cr3_unsafe(%rip), %rsi
+    call puts64
+    movl $0x11, %eax                /* debug-exit 35 */
+    jmp debug_exit64
+#else
+    cmpl $2, %eax
+    jne fail64
+
+    /* Corrupt a COPY of EFER.NXE, not the hardware MSR. */
+    movq %r12, %rdi
+    movq %r13, %rsi
+    movq %r14, %rdx
+    movq %r15, %rcx
+    btrq $11, %rcx
+    movq %rbx, %r8
+    call cr3_probe_f0
+    cmpl $2, %eax
+    jne fail64
+
+    /* Reserved CR3 bit 0 must be refused despite valid mode. */
+    movq %r12, %rdi
+    orq $1, %rdi
+    movq %r13, %rsi
+    movq %r14, %rdx
+    movq %r15, %rcx
+    movq %rbx, %r8
+    call cr3_probe_f0
+    cmpl $4, %eax
+    jne fail64
+    movq %cr3, %rax
+    cmpq %r12, %rax
+    jne fail64
+    leaq message_cr3_live(%rip), %rsi
+    call puts64
+    movl $0x30, %eax                /* debug-exit 97 */
+    jmp debug_exit64
+#endif
+#endif
 
 fail64:
     leaq emergency_stack_top(%rip), %rsp
@@ -2787,6 +2877,10 @@ message_router_pass:
     .asciz "HEPTAKERNEL HIA ARENA ROUTER VERIFIED\r\n"
 message_owner_pass:
     .asciz "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED\r\n"
+message_cr3_live:
+    .asciz "HEPTAKERNEL HIA CR3 LIVE CPU SNAPSHOT VERIFIED\r\n"
+message_cr3_unsafe:
+    .asciz "HEPTAKERNEL HIA CR3 DISHONEST BYPASS DETECTED\r\n"
 message_pass:
     .asciz "HEPTAKERNEL HIA PMM PASS\r\n"
 message_fail32:
