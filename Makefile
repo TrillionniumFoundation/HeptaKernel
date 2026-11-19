@@ -1054,11 +1054,19 @@ build/page-zero-dishonest.elf: build/boot-page-zero-hw.o $(PAGE_ZERO_HW_SUPPORT)
 build/page-zero-decoy.elf: build/boot-page-zero-decoy.o $(PAGE_ZERO_HW_SUPPORT) build/page-zero-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-zero-decoy.o $(PAGE_ZERO_HW_SUPPORT) build/page-zero-boot.o
 
+# Deliberate physical-reuse bypass: it forges the HIA reply but leaves
+# reallocated real RAM dirty. Independent QEMU RAM readback must reject it.
+build/boot-page-zero-recycle-bypass.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PAGE_ZERO_HW=1 -DHEPTAKERNEL_TEST_PAGE_ZERO_RECYCLE_BYPASS=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/page-zero-recycle-bypass.elf: build/boot-page-zero-recycle-bypass.o $(PAGE_ZERO_HW_SUPPORT) build/page-zero-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-zero-recycle-bypass.o $(PAGE_ZERO_HW_SUPPORT) build/page-zero-boot.o
+
 build/page-zero-%-multiboot.elf: build/page-zero-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
 .PHONY: test-page-zero-hw
-test-page-zero-hw: build/page-zero-hw-multiboot.elf build/page-zero-dishonest-multiboot.elf build/page-zero-decoy-multiboot.elf
+test-page-zero-hw: build/page-zero-hw-multiboot.elf build/page-zero-dishonest-multiboot.elf build/page-zero-decoy-multiboot.elf build/page-zero-recycle-bypass-multiboot.elf
 	@set -eu; original=$$(mktemp build/.page-zero-original.XXXXXX); renamed=$$(mktemp build/.page-zero-renamed.XXXXXX); \
 	  trap 'rm -f "$$original" "$$renamed"' EXIT HUP INT TERM; \
 	  objcopy --dump-section .text="$$original" build/page-zero.o; \

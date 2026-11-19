@@ -271,6 +271,8 @@ jobs:
             .toolchain/compiler/B3.receipt.json
             .toolchain/compiler/native-compiler.receipt.json
             build/native-report.json
+            build/page-zero-recycle-bypass-multiboot.elf
+            build/page-zero-hardware-report.json
             build/x86-tlb-plan.o
             build/x86-tlb-plan.so
             build/x86-tlb-plan-unsafe.o
