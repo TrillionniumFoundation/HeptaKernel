@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn page_copy_fake(source:readbuf,receipt:mutbuf,destination:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(source:readbuf,receipt:mutbuf,destination:mutbuf)
+  success:u32 = const() {"value":0}
+  ret(success)
+end
