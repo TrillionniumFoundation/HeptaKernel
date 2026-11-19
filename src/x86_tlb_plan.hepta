@@ -208,7 +208,6 @@ block enable_ok(eo_req:readbuf,eo_va:u64,eo_count:u64,eo_i:u64,eo_seen:bool,eo_l
   eo_false:bool = compare.ne(eo_one,eo_one)
   jump scan(eo_req,eo_va,eo_count,eo_next,eo_false,eo_false,eo_seen,eo_last,eo_writes,eo_pairs_next)
 end
-
 fn read_request_u64(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
 block start(bytes:readbuf,offset:usize)
   hp_rzero:u64 = const() {"value":0}
