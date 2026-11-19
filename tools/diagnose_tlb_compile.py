@@ -45,6 +45,11 @@ for limit in [1, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23,
                 lines.append("  ret(probe_status)")
         revised.append("\n".join(lines))
     candidate=head+"\n"+"\n".join(revised)+"\nend\n"+helper
+    # Keep the helper reachable, otherwise the pinned native compiler may
+    # reject an unused second function before diagnosing the candidate CFG.
+    signature="block start(request:readbuf,reply:mutbuf,unused:mutbuf)\n"
+    inject='  probe_offset:usize = const() {"value":0}\n  probe_value:u64 = call(request,probe_offset) {"function":"read_request_u64"}\n'
+    candidate=candidate.replace(signature,signature+inject,1)
     command = subprocess.run([sys.argv[1]], input=candidate.encode("ascii"),
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     print("PROBE",limit,"reachable",len(visited),"source_bytes",len(candidate),
@@ -75,3 +80,17 @@ for name, first_name, effect, keep_helper, include_load in [
     print("PROBE CONTROL",name,"exit",result.returncode,
           "source_bytes",len(sample),"out",len(result.stdout),
           "stderr",result.stderr[:64].decode("ascii","replace"),flush=True)
+
+call_src = (
+ "hia-asm.v1 hepta.hia.program.v8 selfhost_elf\n"
+ "fn tlb_plan(request:readbuf,reply:mutbuf,unused:mutbuf) -> (u32) effects(read,trap) entry(start)\n"
+ "block start(request:readbuf,reply:mutbuf,unused:mutbuf)\n"
+ '  pos:usize = const() {"value":0}\n'
+ '  got:u64 = call(request,pos) {"function":"read_request_u64"}\n'
+ '  done:u32 = const() {"value":0}\n'
+ "  ret(done)\nend\n" + helper
+)
+result = subprocess.run([sys.argv[1]],input=call_src.encode("ascii"),
+ stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+print("PROBE CONTROL minimal-call-helper","exit",result.returncode,
+ "source_bytes",len(call_src),"out",len(result.stdout),flush=True)
