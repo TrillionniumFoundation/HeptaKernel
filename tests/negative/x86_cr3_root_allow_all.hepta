@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn dishonest_x86_cr3_root(request:readbuf,reply:mutbuf,root:mutbuf) -> (u32) effects() entry(start)
+block start(request:readbuf,reply:mutbuf,root:mutbuf)
+  dishonest_success:u32 = const() {"value":0}
+  ret(dishonest_success)
+end

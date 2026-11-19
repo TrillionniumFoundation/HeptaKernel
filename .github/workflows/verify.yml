@@ -158,6 +158,11 @@ jobs:
         run: |
           make test-x86-access-gate HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Validate genuine native HIA PML4 root snapshot and malicious control
+        shell: bash
+        run: |
+          make test-x86-cr3-root HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify native HIA CR3 state profile and dishonest all-accept control
         shell: bash
         run: |
@@ -386,6 +391,11 @@ jobs:
             build/x86-walk4.so
             build/x86-walk4-unsafe.o
             build/x86-walk4-unsafe.so
+            build/x86-cr3-root-report.json
+            build/x86-cr3-root.o
+            build/x86-cr3-root.so
+            build/x86-cr3-root-unsafe.o
+            build/x86-cr3-root-unsafe.so
             build/x86-cr3-gate-report.json
             build/x86-cr3-gate.o
             build/x86-cr3-gate.so
