@@ -2643,6 +2643,92 @@ owner_exercise64:
     movq $0, (%rsi)
     movq $0, PAGE_BYTES(%rsi)
 
+#if defined(HEPTAKERNEL_TEST_PAGE_COPY_HW)
+    /* NON-HIA physical observer, not a capability/provenance implementation:
+     * both pages of each pair were admitted by the actual Multiboot E820
+     * gate, allocated by native HIA PMM and bound to distinct owner states.
+     * Source and destination are disjoint physical frames. Only the
+     * unchanged native HIA page_copy_f0 performs the measured copy. */
+    leaq page_copy_hw_pairs(%rip), %r12
+    movq $2, %r13
+page_copy_hw_each:
+    movq (%r12), %r14             /* E820/HIA PMM owned source physical RAM */
+    movq 8(%r12), %r15            /* other-zone owned destination physical RAM */
+    movq 16(%r12), %r10           /* independent per-pair expected byte seed */
+    movq %r14, %rdi
+    movl $512, %ecx
+page_copy_hw_seed_source:
+    movq %r10, (%rdi)             /* NON-HIA setup of adversarial source */
+    addq $8, %rdi
+    addq $0x10101, %r10
+    decl %ecx
+    jnz page_copy_hw_seed_source
+    movq %r15, %rdi
+    movabsq $0xe7e7e7e7e7e7e7e7, %rax
+    movl $512, %ecx
+    rep stosq                     /* NON-HIA setup, not a copy */
+    movabsq $0x35a5c66cd33db44b, %rax
+    movq %rax, page_copy_hw_guard_before(%rip)
+    movq %rax, page_copy_hw_guard_after(%rip)
+    /* Plausible reply is seeded before call so a dishonest HIA no-op
+     * cannot be caught merely by omitting a reply write. */
+    movq $0, page_copy_hw_reply(%rip)
+    movq $4096, page_copy_hw_reply+8(%rip)
+    movq %r14, %rdi
+    movl $4096, %esi
+    leaq page_copy_hw_reply(%rip), %rdx
+    movl $16, %ecx
+    movq %r15, %r8
+    movl $4096, %r9d
+    call page_copy_f0             /* original native HIA selfhost_elf .text */
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, page_copy_hw_reply(%rip)
+    jne fail64
+    cmpq $4096, page_copy_hw_reply+8(%rip)
+    jne fail64
+    movabsq $0x35a5c66cd33db44b, %rax
+    cmpq %rax, page_copy_hw_guard_before(%rip)
+    jne fail64
+    cmpq %rax, page_copy_hw_guard_after(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_PAGE_COPY_DECOY
+    /* Hostile NON-HIA bridge changes actual destination RAM after HIA. */
+    cmpq $2, %r13
+    jne page_copy_hw_after_dest_decoy
+    movb $0x44, 2033(%r15)
+page_copy_hw_after_dest_decoy:
+#endif
+#ifdef HEPTAKERNEL_TEST_PAGE_COPY_SOURCE_DECOY
+    /* Hostile NON-HIA bridge changes actual read-only source contents. */
+    cmpq $2, %r13
+    jne page_copy_hw_after_source_decoy
+    movb $0x55, 3001(%r14)
+page_copy_hw_after_source_decoy:
+#endif
+    /* Independent full-physical-RAM 8-byte oracle. Verify BOTH original
+     * source and destination against the known 4096-byte sequence. */
+    movq 16(%r12), %r10
+    movq %r14, %rdi
+    movq %r15, %rsi
+    movl $512, %ecx
+page_copy_hw_readback:
+    cmpq %r10, (%rdi)
+    jne fail64
+    cmpq %r10, (%rsi)
+    jne fail64
+    addq $8, %rdi
+    addq $8, %rsi
+    addq $0x10101, %r10
+    decl %ecx
+    jnz page_copy_hw_readback
+    addq $24, %r12
+    decq %r13
+    jnz page_copy_hw_each
+    leaq message_page_copy_hw_pass(%rip), %rsi
+    call puts64
+#endif
+
 #if defined(HEPTAKERNEL_TEST_PAGE_ZERO_HW)
     /* NON-HIA independent QEMU observer: these four frames are currently
      * owned by two distinct native-HIA PMM states. Both zones passed actual
@@ -3161,6 +3247,8 @@ message_router_pass:
     .asciz "HEPTAKERNEL HIA ARENA ROUTER VERIFIED\r\n"
 message_owner_pass:
     .asciz "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED\r\n"
+message_page_copy_hw_pass:
+    .asciz "HEPTAKERNEL HIA PHYSICAL PAGE COPY TWO PAIRS VERIFIED\r\n"
 message_page_zero_hw_pass:
     .asciz "HEPTAKERNEL HIA PHYSICAL PAGE ZERO FOUR FRAMES VERIFIED\r\n"
 message_page_zero_recycle_pass:
@@ -3257,6 +3345,9 @@ arena_cases_end:
 owner_descriptors:
     .quad 0x400000, 17, 2
     .quad 0x600000, 17, 1
+page_copy_hw_pairs:
+    .quad 0x402000, 0x601000, 0x125a73de6789abcd
+    .quad 0x403000, 0x602000, 0x39be1247f0ca8865
 page_zero_hw_physical_pages:
     .quad 0x402000, 0x403000, 0x601000, 0x602000
 owner_state_table:
@@ -3385,6 +3476,9 @@ owner_route_request:      .skip 80
 owner_choice_a:           .skip 8
 owner_choice_b:           .skip 8
 .balign 8
+page_copy_hw_guard_before: .skip 8
+page_copy_hw_reply:        .skip 16
+page_copy_hw_guard_after:  .skip 8
 page_zero_hw_guard_before: .skip 8
 page_zero_hw_reply:        .skip 16
 page_zero_hw_guard_after:  .skip 8
