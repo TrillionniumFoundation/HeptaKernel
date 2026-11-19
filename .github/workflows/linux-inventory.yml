@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'tools/linux_inventory.py'
+      - 'tools/linux_uapi_tags.py'
+      - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -12,6 +14,8 @@ on:
     branches: [main]
     paths:
       - 'tools/linux_inventory.py'
+      - 'tools/linux_uapi_tags.py'
+      - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -35,6 +39,7 @@ jobs:
         run: |
           python3 -I -B tests/test_linux_inventory.py
           python3 -I -B tests/test_device_table_spans.py
+          python3 -I -B tests/test_linux_uapi_tags.py
 
       - name: Checkout exact pinned upstream Linux (not a moving branch)
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -54,6 +59,35 @@ jobs:
             --repo .upstream/linux \
             --lock compatibility/linux-source-lock.json \
             --out build/linux-inventory
+
+      - name: Inventory immutable UAPI C tag mentions (lexical, not ABI closure)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I -B tools/linux_uapi_tags.py --repo .upstream/linux --lock compatibility/linux-source-lock.json --out build/linux-inventory
+          python3 - <<'PY'
+          import base64, hashlib, json, subprocess
+          from pathlib import Path
+          report = json.loads(Path("build/linux-inventory/uapi-tag-report.json").read_text())
+          source = Path("build/linux-inventory/uapi-tag-mentions.jsonl").read_bytes()
+          assert hashlib.sha256(source).hexdigest() == report["source_sha256"]
+          assert report["records"] == len(source.splitlines()) and report["records"] > 0
+          assert not report["inventory_complete"] and not report["full_rewrite_complete"]
+          assert report["linux_commit"] == subprocess.check_output(["git","-C",".upstream/linux","rev-parse","HEAD"],text=True).strip()
+          assert report["linux_root_tree"] == subprocess.check_output(["git","-C",".upstream/linux","rev-parse","HEAD^{tree}"],text=True).strip()
+          paths = set()
+          for raw in source.splitlines():
+              row = json.loads(raw)
+              path = base64.b64decode(row["path_b64"])
+              paths.add(path)
+              assert path.endswith(b".h") and b"/uapi/" in b"/" + path
+              assert row["tag"] in ("struct","union","enum")
+              assert row["byte_at"] >= 0 and row["line"] >= 1
+              assert len(row["blob_oid"]) == 40
+          assert paths
+          print("UAPI_TAG_LEXICAL_MANIFEST: PASS", report["records"], len(paths))
+          print("FULL_LINUX_REWRITE: HOLD")
+          PY
 
       - name: Independently check source counts, hashes and unclosed Linux scope
         shell: bash
@@ -388,6 +422,8 @@ jobs:
             build/linux-inventory/directory-objects.jsonl
             build/linux-inventory/uapi-paths.jsonl
             build/linux-inventory/uapi-macro-rows.jsonl
+            build/linux-inventory/uapi-tag-mentions.jsonl
+            build/linux-inventory/uapi-tag-report.json
             build/linux-inventory/syscall-table-rows.jsonl
             build/linux-inventory/module-device-table-mentions.jsonl
             build/linux-inventory/module-device-table-invocations.jsonl
