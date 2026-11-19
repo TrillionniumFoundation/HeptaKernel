@@ -545,7 +545,7 @@ hia_idt_next64:
     incq %r12
     cmpq $256, %r12
     jb hia_idt_next64
-#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS) || defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT) || defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT) || defined(HEPTAKERNEL_TEST_PT_NX_FAULT) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT)
+#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS) || defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT) || defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT) || defined(HEPTAKERNEL_TEST_PT_NX_FAULT) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT) || defined(HEPTAKERNEL_TEST_PDE_2M_UNMAP_FAULT)
     /* HIA also owns updating the #PF descriptor, conditional on old bytes. */
     movq $14, idt_gate_request(%rip)
 #ifdef HEPTAKERNEL_TEST_US_FAULT
@@ -558,6 +558,8 @@ hia_idt_next64:
     leaq pt_revoke_page_fault64(%rip), %rax
 #elif defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT)
     leaq pdpt_1g_unmap_page_fault64(%rip), %rax
+#elif defined(HEPTAKERNEL_TEST_PDE_2M_UNMAP_FAULT)
+    leaq pde_2m_unmap_page_fault64(%rip), %rax
 #else
     leaq pte_page_fault64(%rip), %rax
 #endif
@@ -658,6 +660,11 @@ hia_idt_next64:
 #if defined(HEPTAKERNEL_TEST_PDPT_1G_HW) || defined(HEPTAKERNEL_TEST_PDPT_1G_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_DECOY) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_BYPASS)
     /* Terminal single-owner HIA 1GiB PDPTE hardware experiment. */
     call pdpt_1g_exercise64
+    jmp fail64
+#endif
+#if defined(HEPTAKERNEL_TEST_PDE_2M_UNMAP_FAULT) || defined(HEPTAKERNEL_TEST_PDE_2M_UNMAP_STALE) || defined(HEPTAKERNEL_TEST_PDE_2M_UNMAP_BYPASS)
+    /* A terminal real-MMU fixture, with native HIA removing PD[2]. */
+    call pde_2m_unmap_exercise64
     jmp fail64
 #endif
 #if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
@@ -1004,6 +1011,50 @@ pt_protect_page_fault64:
     jmp debug_exit64
 #endif
 
+/* The x86 CPU faults after native HIA clears the actual 4MiB huge PDE.
+ * IDT/IST1, CR2, and INVLPG remain non-HIA observation bridges. */
+#ifdef HEPTAKERNEL_TEST_PDE_2M_UNMAP_FAULT
+pde_2m_unmap_page_fault64:
+    cli
+    leaq ist_stack_base(%rip), %rax
+    cmpq %rax, %rsp
+    jbe exception64
+    leaq ist_stack_top(%rip), %rax
+    cmpq %rax, %rsp
+    jae exception64
+    cmpq $0x324d554e, pde_2m_unmap_armed(%rip)
+    jne exception64
+    cmpq $0, (%rsp)                 /* #PF P=0 W=0 U=0 */
+    jne exception64
+    leaq pde_2m_unmap_fault_load64(%rip), %rax
+    cmpq %rax, 8(%rsp)              /* precise faulting RIP */
+    jne exception64
+    cmpq $0x08, 16(%rsp)            /* CPL0 selector */
+    jne exception64
+    movq %cr2, %rax
+    cmpq $ARENA_MIN, %rax          /* exact removed 2MiB identity leaf */
+    jne exception64
+    cmpq $0, page_directory+16(%rip)
+    jne exception64
+    cmpq $0, pde_2m_reply(%rip)
+    jne exception64
+    cmpq $0, pde_2m_reply+8(%rip)
+    jne exception64
+    movq pde_2m_unmap_old(%rip), %rax
+    testq $0x20, %rax              /* CPU A-bit captured before unmap */
+    jz exception64
+    cmpq %rax, pde_2m_request+8(%rip)
+    jne exception64
+    leaq emergency_stack_top(%rip), %rsp
+    andq $-16, %rsp
+    leaq message_ist_verified(%rip), %rsi
+    call puts64
+    leaq message_pde_2m_unmap_fault(%rip), %rsi
+    call puts64
+    movl $0x2d, %eax              /* debug-exit 91 */
+    jmp debug_exit64
+#endif
+
 /* Genuine HIA writes zero to a live 1GiB PDPTE. The non-HIA IDT,
  * CR2, IST1 and INVLPG observer checks the resulting real CPU #PF. */
 #ifdef HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT
@@ -1191,6 +1242,91 @@ pte_page_fault64:
     jmp debug_exit64
 #endif
 
+
+#if defined(HEPTAKERNEL_TEST_PDE_2M_UNMAP_FAULT) || defined(HEPTAKERNEL_TEST_PDE_2M_UNMAP_STALE) || defined(HEPTAKERNEL_TEST_PDE_2M_UNMAP_BYPASS)
+/* The boot bridge made PD[2] present as the 4..6MiB identity huge page.
+ * The memory map/reservation verifier ran before this fixture touched RAM.
+ * Only the HIA Core v8 native pde_2m_f0 may clear this entry. */
+pde_2m_unmap_exercise64:
+    cmpq $0x400083, page_directory+16(%rip)
+    jne fail64
+    movq $ARENA_MIN, %r8
+    movabsq $0x486961324d506167, %r10
+    movq %r10, (%r8)               /* admitted test-only physical sentinel */
+    cmpq %r10, (%r8)               /* warm actual hardware mapping and A/D */
+    jne fail64
+    movq page_directory+16(%rip), %rax
+    testq $0x20, %rax
+    jz fail64
+    movq %rax, pde_2m_unmap_old(%rip)
+    movq $2, pde_2m_request(%rip)
+    movq %rax, pde_2m_request+8(%rip)
+    movq $0, pde_2m_request+16(%rip)
+    movl pte_caps(%rip), %eax
+    movq %rax, pde_2m_request+24(%rip)
+#ifdef HEPTAKERNEL_TEST_PDE_2M_UNMAP_STALE
+    xorq $8, pde_2m_request+8(%rip) /* valid PWT bit; wrong expected old */
+#endif
+    leaq message_pde_2m_unmap_warmed(%rip), %rsi
+    call puts64
+    movq $-1, pde_2m_reply(%rip)
+    movq $-1, pde_2m_reply+8(%rip)
+    leaq pde_2m_request(%rip), %rdi
+    movl $32, %esi
+    leaq pde_2m_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq page_directory(%rip), %r8
+    movl $4096, %r9d
+    call pde_2m_f0                /* genuine selfhost HIA machine code */
+#ifdef HEPTAKERNEL_TEST_PDE_2M_UNMAP_STALE
+    cmpl $9, %eax
+    jne fail64
+    cmpq $9, pde_2m_reply(%rip)
+    jne fail64
+    cmpq $0, pde_2m_reply+8(%rip)
+    jne fail64
+    movq pde_2m_unmap_old(%rip), %rax
+    cmpq %rax, page_directory+16(%rip)
+    jne fail64
+    movq $ARENA_MIN, %r8
+    movabsq $0x486961324d506167, %r10
+    cmpq %r10, (%r8)             /* unchanged hardware mapping is still live */
+    jne fail64
+    leaq message_pde_2m_unmap_stale(%rip), %rsi
+    call puts64
+    movl $0x2e, %eax             /* debug-exit 93 */
+    jmp debug_exit64
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, pde_2m_reply(%rip)
+    jne fail64
+    cmpq $0, pde_2m_reply+8(%rip)
+    jne fail64
+    cmpq $0, page_directory+16(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_PDE_2M_UNMAP_BYPASS
+    movq pde_2m_unmap_old(%rip), %rax
+    movq %rax, page_directory+16(%rip) /* malicious NON-HIA regrant */
+#endif
+    movq $ARENA_MIN, %r8
+    invlpg (%r8)                 /* explicitly NON-HIA hardware TLB bridge */
+#ifdef HEPTAKERNEL_TEST_PDE_2M_UNMAP_BYPASS
+    movabsq $0x486961324d506167, %r10
+    cmpq %r10, (%r8)
+    jne fail64
+    leaq message_pde_2m_unmap_bypass(%rip), %rsi
+    call puts64
+    movl $0x2f, %eax             /* debug-exit 95 */
+    jmp debug_exit64
+#else
+    movq $0x324d554e, pde_2m_unmap_armed(%rip)
+pde_2m_unmap_fault_load64:
+    movq (%r8), %rax             /* precise non-present read #PF required */
+    jmp fail64
+#endif
+#endif
+#endif
 
 #if defined(HEPTAKERNEL_TEST_PDPT_1G_HW) || defined(HEPTAKERNEL_TEST_PDPT_1G_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_DECOY) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_BYPASS)
 /* Non-HIA CPL0 observer for a real HIA Core v8 1GiB PDPTE writer.
@@ -2579,6 +2715,14 @@ message_pdpt_1g_stale:
     .asciz "HEPTAKERNEL HIA 1G PDPTE STALE OLD REJECTED\r\n"
 message_pdpt_1g_decoy:
     .asciz "HEPTAKERNEL HIA 1G PDPTE POSTWRITE DECOY DETECTED\r\n"
+message_pde_2m_unmap_warmed:
+    .asciz "HEPTAKERNEL HIA 2M PDE HARDWARE LEAF WARMED BEFORE UNMAP\r\n"
+message_pde_2m_unmap_fault:
+    .asciz "HEPTAKERNEL HIA 2M PDE REMOVAL HARDWARE FAULT VERIFIED\r\n"
+message_pde_2m_unmap_stale:
+    .asciz "HEPTAKERNEL HIA 2M PDE REMOVAL STALE OLD REJECTED\r\n"
+message_pde_2m_unmap_bypass:
+    .asciz "HEPTAKERNEL HIA 2M PDE REMOVAL BYPASS EXECUTED\r\n"
 message_pde_2m_pass:
     .asciz "HEPTAKERNEL HIA LIVE USER 2M PDE VERIFIED\r\n"
 message_pde_2m_stale:
@@ -2760,6 +2904,8 @@ upper_user_request: .skip 24
 upper_user_reply:   .skip 16
 pde_2m_request:  .skip 32
 pde_2m_reply:    .skip 16
+pde_2m_unmap_old:  .skip 8
+pde_2m_unmap_armed: .skip 8
 pdpt_1g_request: .skip 32
 pdpt_1g_reply:   .skip 16
 pdpt_1g_unmap_old:   .skip 8

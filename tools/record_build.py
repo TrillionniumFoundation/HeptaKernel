@@ -448,6 +448,19 @@ def main():
             raise ValueError("HIA huge PDE native library bytes differ")
         if Elf("build/pde-2m-boot.o").section_bytes(".text") != huge_text:
             raise ValueError("HIA huge PDE symbol rename changed its machine code")
+        for stem in ("pde-2m-unmap-fault", "pde-2m-unmap-stale",
+                     "pde-2m-unmap-bypass"):
+            linked = Elf("build/" + stem + ".elf")
+            packed = Elf("build/" + stem + "-multiboot.elf")
+            entry = linked.symbol("pde_2m_f0")
+            if (packed.symbol("pde_2m_f0") != entry or
+                    linked.text_at(entry, len(huge_text)) != huge_text or
+                    packed.text_at(entry, len(huge_text)) != huge_text):
+                raise ValueError(stem + " lacks exact original HIA 2MiB PDE code")
+        if len({sha(Path("build/" + stem + "-multiboot.elf").read_bytes())
+                for stem in ("pde-2m-unmap-fault", "pde-2m-unmap-stale",
+                             "pde-2m-unmap-bypass")}) != 3:
+            raise ValueError("HIA 2MiB unmap experiments are not distinct images")
         # New 1GiB PDPTE writer: independent empty-PATH rebuild and loaded .text.
         pdpt_source = Path("src/x86_pdpt_1g.hepta").read_bytes()
         pdpt_object = Path("build/x86-pdpt-1g.o").read_bytes()
@@ -747,6 +760,10 @@ def main():
                        x86_pde_2m_text_sha256=sha(huge_text),
                        x86_pde_2m_empty_path_recompiled=True,
                        x86_pde_2m_live_cpl3_hardware_path_bytes_match=True,
+                       x86_pde_2m_unmap_real_mmu_observer_linked=True,
+                       x86_pde_2m_unmap_original_native_code_bound=True,
+                       x86_pde_2m_unmap_uses_non_hia_tlb_bridge=True,
+                       x86_pde_2m_atomic_smp_verified=False,
                        x86_pde_2m_privileged_backend=False,
                        x86_pdpt_1g_source_sha256=sha(pdpt_source),
                        x86_pdpt_1g_object_sha256=sha(pdpt_object),
