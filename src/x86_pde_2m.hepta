@@ -66,10 +66,10 @@ block bad_caps(hp_cap_reply:mutbuf)
   hp_cap_zero:u64 = const() {"value":0}
   hp_cap_result:u32 = call(hp_cap_reply,hp_cap_code,hp_cap_zero) {"function":"write_reply"}
   ret(hp_cap_result)
-block check_bits(hp_bits_reply:mutbuf,hp_bits_page:mutbuf,hp_bits_slot:u64,hp_bits_old:u64,hp_bits_new:u64,hp_bits_caps:u64,hp_bits_width:u64)
+block check_bits(hp_route_reply:mutbuf,hp_route_page:mutbuf,hp_route_slot:u64,hp_route_old:u64,hp_route_new:u64,hp_route_caps:u64,hp_route_width:u64)
   hp_revoke_zero:u64 = const() {"value":0}
-  hp_is_unmap:bool = compare.eq(hp_bits_new,hp_revoke_zero)
-  branch hp_is_unmap check_unmap_old(hp_bits_reply,hp_bits_page,hp_bits_slot,hp_bits_old,hp_bits_new,hp_bits_caps,hp_bits_width) check_new_bits(hp_bits_reply,hp_bits_page,hp_bits_slot,hp_bits_old,hp_bits_new,hp_bits_caps,hp_bits_width)
+  hp_is_unmap:bool = compare.eq(hp_route_new,hp_revoke_zero)
+  branch hp_is_unmap check_unmap_old(hp_route_reply,hp_route_page,hp_route_slot,hp_route_old,hp_route_new,hp_route_caps,hp_route_width) check_new_bits(hp_route_reply,hp_route_page,hp_route_slot,hp_route_old,hp_route_new,hp_route_caps,hp_route_width)
 block check_unmap_old(ur_reply:mutbuf,ur_page:mutbuf,ur_slot:u64,ur_old:u64,ur_new:u64,ur_caps:u64,ur_width:u64)
   ur_zero:u64 = const() {"value":0}
   ur_present:u64 = const() {"value":1}
