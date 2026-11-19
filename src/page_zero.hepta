@@ -6,24 +6,24 @@ block start(request:readbuf,reply:mutbuf,page:mutbuf)
   request_valid:bool = compare.eq(request_len,required_request)
   branch request_valid check_reply(reply,page) invalid_request()
 block invalid_request()
-  code:u32 = const() {"value":1}
-  ret(code)
+  invalid_request_status:u32 = const() {"value":1}
+  ret(invalid_request_status)
 block check_reply(reply_cap:mutbuf,page_cap:mutbuf)
   reply_len:usize = buffer.len(reply_cap)
   required_reply:usize = const() {"value":16}
   reply_valid:bool = compare.eq(reply_len,required_reply)
   branch reply_valid check_page(reply_cap,page_cap) invalid_reply()
 block invalid_reply()
-  code:u32 = const() {"value":2}
-  ret(code)
+  invalid_reply_status:u32 = const() {"value":2}
+  ret(invalid_reply_status)
 block check_page(checked_reply:mutbuf,checked_page:mutbuf)
   page_len:usize = buffer.len(checked_page)
   required_page:usize = const() {"value":4096}
   page_valid:bool = compare.eq(page_len,required_page)
   branch page_valid zero_page(checked_reply,checked_page) invalid_page()
 block invalid_page()
-  code:u32 = const() {"value":3}
-  ret(code)
+  invalid_page_status:u32 = const() {"value":3}
+  ret(invalid_page_status)
 block zero_page(output:mutbuf,frame:mutbuf)
   beginning:usize = const() {"value":0}
   frame_bytes:usize = const() {"value":4096}
