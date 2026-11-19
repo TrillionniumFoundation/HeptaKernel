@@ -974,6 +974,13 @@ test-x86-cr3-root: build/x86-cr3-root.so build/x86-cr3-root-unsafe.so
 	cmp "$$tmp" build/x86-cr3-root.o
 	timeout 90 $(PYTHON) tests/test_x86_cr3_root.py build/x86-cr3-root.so
 	$(PYTHON) tests/test_x86_cr3_root.py build/x86-cr3-root-unsafe.so --expect-unsafe
+	@set -eu; bad=$(mktemp build/.x86-root-readonly-negative.XXXXXX); good=$(mktemp build/.x86-root-mutable-positive.XXXXXX); \
+	  source=$(mktemp build/.x86-root-mutable-source.XXXXXX); trap 'rm -f "$bad" "$good" "$source"' EXIT HUP INT TERM; \
+	  set +e; env -i PATH= "$(HEPTA_COMPILER)" < tests/negative/x86_cr3_root_readonly_store.hepta > "$bad"; status=$?; set -e; \
+	  test "$status" -eq 2 && test ! -s "$bad" || { echo "readonly root store not rejected with invalid-source status=2" >&2; exit 1; }; \
+	  sed 's/root:readbuf/root:mutbuf/g' tests/negative/x86_cr3_root_readonly_store.hepta > "$source"; \
+	  env -i PATH= "$(HEPTA_COMPILER)" < "$source" > "$good"; test -s "$good"; \
+	  test -z "$(nm -u "$good")"; echo "read-only loan store rejected; identical mutable control compiled"
 
 # Isolated CR3-root hardware observer: CPUID/MOV CR3 remain NON-HIA.
 build/root-native-boot.o: build/x86-cr3-root.o

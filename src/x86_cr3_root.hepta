@@ -1,6 +1,6 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn x86_cr3_root_admit(request:readbuf,reply:mutbuf,root:mutbuf) -> (u32) effects(read,write,trap) entry(start)
-block start(request:readbuf,reply:mutbuf,root:mutbuf)
+fn x86_cr3_root_admit(request:readbuf,reply:mutbuf,root:readbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,root:readbuf)
   s_len:usize = buffer.len(reply)
   s_min:usize = const() {"value":16}
   s_ok:bool = compare.ge(s_len,s_min)
@@ -8,7 +8,7 @@ block start(request:readbuf,reply:mutbuf,root:mutbuf)
 block short()
   sh_code:u32 = const() {"value":1}
   ret(sh_code)
-block check_request(r_req:readbuf,r_reply:mutbuf,r_root:mutbuf)
+block check_request(r_req:readbuf,r_reply:mutbuf,r_root:readbuf)
   r_len:usize = buffer.len(r_req)
   r_expected:usize = const() {"value":24}
   r_ok:bool = compare.eq(r_len,r_expected)
@@ -18,7 +18,7 @@ block bad_request(br_reply:mutbuf)
   br_zero:u64 = const() {"value":0}
   br_out:u32 = call(br_reply,br_code,br_zero) {"function":"write_reply"}
   ret(br_out)
-block check_root(t_req:readbuf,t_reply:mutbuf,t_root:mutbuf)
+block check_root(t_req:readbuf,t_reply:mutbuf,t_root:readbuf)
   t_len:usize = buffer.len(t_root)
   t_expected:usize = const() {"value":4096}
   t_ok:bool = compare.eq(t_len,t_expected)
@@ -28,7 +28,7 @@ block bad_root(bt_reply:mutbuf)
   bt_zero:u64 = const() {"value":0}
   bt_out:u32 = call(bt_reply,bt_code,bt_zero) {"function":"write_reply"}
   ret(bt_out)
-block decode(d_req:readbuf,d_reply:mutbuf,d_root:mutbuf)
+block decode(d_req:readbuf,d_reply:mutbuf,d_root:readbuf)
   d_off0:usize = const() {"value":0}
   d_off8:usize = const() {"value":8}
   d_off16:usize = const() {"value":16}
@@ -36,7 +36,7 @@ block decode(d_req:readbuf,d_reply:mutbuf,d_root:mutbuf)
   d_width:u64 = call(d_req,d_off8) {"function":"read_request"}
   d_required:u64 = call(d_req,d_off16) {"function":"read_request"}
   jump validate(d_reply,d_root,d_cr3,d_width,d_required)
-block validate(v_reply:mutbuf,v_root:mutbuf,v_cr3:u64,v_width:u64,v_required:u64)
+block validate(v_reply:mutbuf,v_root:readbuf,v_cr3:u64,v_width:u64,v_required:u64)
   v_min:u64 = const() {"value":32}
   v_max:u64 = const() {"value":52}
   v_512:u64 = const() {"value":512}
@@ -51,7 +51,7 @@ block validate(v_reply:mutbuf,v_root:mutbuf,v_cr3:u64,v_width:u64,v_required:u64
   v_w:bool = bool.and(v_lower,v_upper)
   v_ok:bool = bool.and(v_w,v_slot)
   branch v_ok check_cr3(v_reply,v_root,v_cr3,v_width,v_required) invalid(v_reply)
-block check_cr3(c_reply:mutbuf,c_root:mutbuf,c_cr3:u64,c_width:u64,c_required:u64)
+block check_cr3(c_reply:mutbuf,c_root:readbuf,c_cr3:u64,c_width:u64,c_required:u64)
   c_one:u64 = const() {"value":1}
   c_lowmask:u64 = const() {"value":4095}
   c_allow:u64 = const() {"value":24}
@@ -72,15 +72,15 @@ block invalid(inv_reply:mutbuf)
   inv_zero:u64 = const() {"value":0}
   inv_out:u32 = call(inv_reply,inv_code,inv_zero) {"function":"write_reply"}
   ret(inv_out)
-block scan_begin(sb_reply:mutbuf,sb_root:mutbuf,sb_limit:u64,sb_required:u64)
+block scan_begin(sb_reply:mutbuf,sb_root:readbuf,sb_limit:u64,sb_required:u64)
   sb_zero:u64 = const() {"value":0}
   sb_false:bool = compare.ne(sb_zero,sb_zero)
   jump scan(sb_reply,sb_root,sb_limit,sb_required,sb_zero,sb_zero,sb_false)
-block scan(sc_reply:mutbuf,sc_root:mutbuf,sc_limit:u64,sc_required:u64,sc_index:u64,sc_present:u64,sc_hit:bool)
+block scan(sc_reply:mutbuf,sc_root:readbuf,sc_limit:u64,sc_required:u64,sc_index:u64,sc_present:u64,sc_hit:bool)
   sc_total:u64 = const() {"value":512}
   sc_more:bool = compare.lt(sc_index,sc_total)
   branch sc_more load(sc_reply,sc_root,sc_limit,sc_required,sc_index,sc_present,sc_hit) finish(sc_reply,sc_present,sc_hit)
-block load(ld_reply:mutbuf,ld_root:mutbuf,ld_limit:u64,ld_required:u64,ld_index:u64,ld_present:u64,ld_hit:bool)
+block load(ld_reply:mutbuf,ld_root:readbuf,ld_limit:u64,ld_required:u64,ld_index:u64,ld_present:u64,ld_hit:bool)
   ld_eight:u64 = const() {"value":8}
   ld_offset:u64 = int.mul.wrap(ld_index,ld_eight)
   ld_at:usize = int.cast(ld_offset) {"mode":"wrap"}
@@ -89,7 +89,7 @@ block load(ld_reply:mutbuf,ld_root:mutbuf,ld_limit:u64,ld_required:u64,ld_index:
   ld_present_bit:u64 = bit.and(ld_entry,ld_one)
   ld_is_present:bool = compare.eq(ld_present_bit,ld_one)
   branch ld_is_present inspect(ld_reply,ld_root,ld_limit,ld_required,ld_index,ld_present,ld_hit,ld_entry) advance(ld_reply,ld_root,ld_limit,ld_required,ld_index,ld_present,ld_hit)
-block inspect(in_reply:mutbuf,in_root:mutbuf,in_limit:u64,in_required:u64,in_index:u64,in_present:u64,in_hit:bool,in_entry:u64)
+block inspect(in_reply:mutbuf,in_root:readbuf,in_limit:u64,in_required:u64,in_index:u64,in_present:u64,in_hit:bool,in_entry:u64)
   in_highmask:u64 = const() {"value":9218868437227405312}
   in_physmask:u64 = const() {"value":4503599627366400}
   in_psmask:u64 = const() {"value":128}
@@ -110,13 +110,13 @@ block malformed(m_reply:mutbuf)
   m_zero:u64 = const() {"value":0}
   m_out:u32 = call(m_reply,m_code,m_zero) {"function":"write_reply"}
   ret(m_out)
-block counted(ct_reply:mutbuf,ct_root:mutbuf,ct_limit:u64,ct_required:u64,ct_index:u64,ct_present:u64,ct_hit:bool)
+block counted(ct_reply:mutbuf,ct_root:readbuf,ct_limit:u64,ct_required:u64,ct_index:u64,ct_present:u64,ct_hit:bool)
   ct_one:u64 = const() {"value":1}
   ct_new:u64 = int.add.wrap(ct_present,ct_one)
   ct_here:bool = compare.eq(ct_index,ct_required)
   ct_new_hit:bool = bool.or(ct_hit,ct_here)
   jump advance(ct_reply,ct_root,ct_limit,ct_required,ct_index,ct_new,ct_new_hit)
-block advance(ad_reply:mutbuf,ad_root:mutbuf,ad_limit:u64,ad_required:u64,ad_index:u64,ad_present:u64,ad_hit:bool)
+block advance(ad_reply:mutbuf,ad_root:readbuf,ad_limit:u64,ad_required:u64,ad_index:u64,ad_present:u64,ad_hit:bool)
   ad_one:u64 = const() {"value":1}
   ad_next:u64 = int.add.wrap(ad_index,ad_one)
   jump scan(ad_reply,ad_root,ad_limit,ad_required,ad_next,ad_present,ad_hit)
@@ -155,15 +155,15 @@ block byte(rb_bytes:readbuf,rb_offset:usize,rb_i:u64,rb_acc:u64)
 block done(rd_result:u64)
   ret(rd_result)
 end
-fn read_root(bytes:mutbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
-block start(bytes:mutbuf,offset:usize)
+fn read_root(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
   tr_zero:u64 = const() {"value":0}
   jump loop(bytes,offset,tr_zero,tr_zero)
-block loop(tl_bytes:mutbuf,tl_offset:usize,tl_i:u64,tl_acc:u64)
+block loop(tl_bytes:readbuf,tl_offset:usize,tl_i:u64,tl_acc:u64)
   tl_eight:u64 = const() {"value":8}
   tl_more:bool = compare.lt(tl_i,tl_eight)
   branch tl_more byte(tl_bytes,tl_offset,tl_i,tl_acc) done(tl_acc)
-block byte(tb_bytes:mutbuf,tb_offset:usize,tb_i:u64,tb_acc:u64)
+block byte(tb_bytes:readbuf,tb_offset:usize,tb_i:u64,tb_acc:u64)
   tb_i_at:usize = int.cast(tb_i) {"mode":"wrap"}
   tb_at:usize = int.add.wrap(tb_offset,tb_i_at)
   tb_oct:u8 = buffer.load(tb_bytes,tb_at)

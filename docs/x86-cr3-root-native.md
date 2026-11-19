@@ -6,8 +6,10 @@ differential test, without libc calls, Linux syscalls or embedded foreign code.
 
 The 24-byte request contains little-endian u64 words
 `(candidate_cr3, max_physical_address_bits, required_pml4_index)`.
-The third argument is an exactly 4096-byte, caller-provided mutable buffer
-holding the PML4 root. The root is read but never modified. The second
+The third argument is an exactly 4096-byte, caller-provided **readbuf**
+capability holding the PML4 root. This is enforced by the HIA source-language
+loan type, not just by an implementation convention. The original native
+machine code scans the root without writing to it. The second
 argument is a reply buffer of at least 16 bytes receiving
 `(status, present_entry_count)`; on error the count is zero.
 
@@ -32,7 +34,12 @@ native HIA compiler, checks undefined symbols and empty-PATH deterministic
 ELF bytes, compares the loaded library machine text to the object and
 runs an independent byte-oriented Python oracle with immutable-buffer,
 reply-guard, reserved-bit, physical-width and missing-mapping negative
-cases. An independently dishonest HIA unconditional-admit object must fail
+cases, including an OS-mprotected read-only page. A separate
+invalid HIA source attempting `buffer.store` through the PML4 `readbuf` must
+fail with a verifier invalid-source result while the otherwise identical
+`mutbuf` variant compiles; this tests the source-language loan boundary.
+External raw ABI aliases, snapshot races and root-pointer provenance remain
+outside this property. An independently dishonest HIA unconditional-admit object must fail
 the oracle's root-admission case.
 
 **This is not authenticated physical RAM or actual CR3 ownership.**
