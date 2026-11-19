@@ -478,7 +478,7 @@ build/pdpt-1g-%.elf: build/boot-pdpt-1g-%.o $(PDPT_1G_BOOT_SUPPORT) arch/x86_64/
 build/pdpt-1g-%-multiboot.elf: build/pdpt-1g-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-boot: build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
+test-boot: test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
 	$(PYTHON) tests/test_boot.py --qemu "$(QEMU)"
 
 test-guard-pages: build/kernel-host.so
@@ -1026,3 +1026,42 @@ test-page-zero: build/page-zero.so build/page-zero-unsafe.so
 	cmp "$$tmp" build/page-zero.o
 	timeout 90 $(PYTHON) tests/test_page_zero.py build/page-zero.so
 	$(PYTHON) tests/test_page_zero.py build/page-zero-unsafe.so --expect-unsafe
+
+# QEMU bare-metal verification of the exact native HIA page-zero object against
+# E820-admitted and HIA-PMM-allocated physical pages in two separate zones.
+# All privilege, firmware transport, PMM coordination and readback are clearly
+# labeled NON-HIA test observer code, not a HIA page-zero ownership proof.
+build/page-zero-boot.o: build/page-zero.o
+	objcopy --redefine-sym f0=page_zero_f0 "$<" "$@"
+
+build/page-zero-dishonest-boot.o: build/page-zero-unsafe.o
+	objcopy --redefine-sym f0=page_zero_f0 "$<" "$@"
+
+build/boot-page-zero-hw.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PAGE_ZERO_HW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-page-zero-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PAGE_ZERO_HW=1 -DHEPTAKERNEL_TEST_PAGE_ZERO_DECOY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+PAGE_ZERO_HW_SUPPORT := build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o
+
+build/page-zero-hw.elf: build/boot-page-zero-hw.o $(PAGE_ZERO_HW_SUPPORT) build/page-zero-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-zero-hw.o $(PAGE_ZERO_HW_SUPPORT) build/page-zero-boot.o
+
+build/page-zero-dishonest.elf: build/boot-page-zero-hw.o $(PAGE_ZERO_HW_SUPPORT) build/page-zero-dishonest-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-zero-hw.o $(PAGE_ZERO_HW_SUPPORT) build/page-zero-dishonest-boot.o
+
+build/page-zero-decoy.elf: build/boot-page-zero-decoy.o $(PAGE_ZERO_HW_SUPPORT) build/page-zero-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-zero-decoy.o $(PAGE_ZERO_HW_SUPPORT) build/page-zero-boot.o
+
+build/page-zero-%-multiboot.elf: build/page-zero-%.elf
+	objcopy -O elf32-i386 "$<" "$@"
+
+.PHONY: test-page-zero-hw
+test-page-zero-hw: build/page-zero-hw-multiboot.elf build/page-zero-dishonest-multiboot.elf build/page-zero-decoy-multiboot.elf
+	@set -eu; original=$$(mktemp build/.page-zero-original.XXXXXX); renamed=$$(mktemp build/.page-zero-renamed.XXXXXX); \
+	  trap 'rm -f "$$original" "$$renamed"' EXIT HUP INT TERM; \
+	  objcopy --dump-section .text="$$original" build/page-zero.o; \
+	  objcopy --dump-section .text="$$renamed" build/page-zero-boot.o; \
+	  cmp "$$original" "$$renamed"
+	$(PYTHON) tests/test_page_zero_qemu.py --qemu "$(QEMU)"
