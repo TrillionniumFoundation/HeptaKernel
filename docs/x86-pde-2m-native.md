@@ -78,3 +78,30 @@ ranges, combined flags, full expected-old mismatch and denied capability
 combinations. Existing PC/Q35 hardware tests still exercise the actual HIA
 writer; they do not establish PAT/MTRR semantics, atomicity, TLB shootdown,
 SMP safety or general Linux huge-page compatibility.
+
+## Exact-old 2 MiB PDE removal (isolated candidate, 2026-11-19)
+
+A **zero** `candidate` is a removal request. The actual HIA Core v8 native
+program now admits it only when the caller-supplied `expected_old` describes
+a present 2 MiB leaf (P=PS=1), has no reserved address/high-key bits,
+fits MAXPHYADDR and does not demand NXE/PGE features absent from the
+caller-supplied CPU snapshot. Slot bounds and the complete eight-byte
+current-word equality check still precede the write. A successful removal
+writes eight zero bytes only at the selected PDE, and returns status 0 and
+value 0. A replay after a prior removal returns status 9; an absent or
+non-huge old entry returns status 6, even if its bytes match.
+
+The independent byte-array oracle now includes positive removals with
+different physical bases, software metadata and neighboring entries, stale
+replays, invalid old-leaf forms, missing CPU features and the original
+nonzero/W^X admissions. `make test-x86-pde-2m` and the complete Foundation
+CI are the required native HIA evidence for the exact candidate; source-only
+edits are not a pass.
+
+This is single-owner quiescent **memory-byte removal**, not an atomic CAS,
+a hardware-verified 2 MiB unmap, TLB invalidation, safe page-frame reuse or
+Linux `munmap`. A later independent PC/Q35 hardware experiment must warm
+the leaf, perform the genuine native removal, invalidate the translation via
+an explicitly identified non-HIA bridge, observe #PF with exact CR2/error
+code/IST, and reject stale and restored-PDE negative controls. Only a
+future genuine HIA privilege/atomics backend can replace that bridge.
