@@ -1,15 +1,15 @@
 # Native HIA x86-64 PML4 root-page admission
 
-The real HIA Core v8 source is \`src/x86_cr3_root.hepta\`. The pinned
-\`selfhost_elf\` compiler emits the native x86-64 ELF used by the independent
+The real HIA Core v8 source is `src/x86_cr3_root.hepta`. The pinned
+`selfhost_elf` compiler emits the native x86-64 ELF used by the independent
 differential test, without libc calls, Linux syscalls or embedded foreign code.
 
 The 24-byte request contains little-endian u64 words
-\`(candidate_cr3, max_physical_address_bits, required_pml4_index)\`.
+`(candidate_cr3, max_physical_address_bits, required_pml4_index)`.
 The third argument is an exactly 4096-byte, caller-provided mutable buffer
 holding the PML4 root. The root is read but never modified. The second
 argument is a reply buffer of at least 16 bytes receiving
-\`(status, present_entry_count)\`; on error the count is zero.
+`(status, present_entry_count)`; on error the count is zero.
 
 This deliberately restricted profile accepts physical-width 32..52,
 nonzero CR3 root address under that width, CR3 low flags limited to
@@ -27,7 +27,7 @@ Statuses: 0 accepted; 1 short reply (no writes); 2 malformed request;
 profile/index; 7 malformed present PML4 entry. The validation is
 *read-only* and no page-table entry is installed.
 
-\`make test-x86-cr3-root\` compiles the exact source with the pinned
+`make test-x86-cr3-root` compiles the exact source with the pinned
 native HIA compiler, checks undefined symbols and empty-PATH deterministic
 ELF bytes, compares the loaded library machine text to the object and
 runs an independent byte-oriented Python oracle with immutable-buffer,
