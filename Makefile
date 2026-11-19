@@ -587,7 +587,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -613,6 +613,29 @@ build/boot-ring3-upper-stale.o: arch/x86_64/boot.S build/boot-cases.bin
 build/ring3-upper-stale-multiboot.elf: build/boot-ring3-upper-stale.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o build/pde-2m-boot.o build/upper-user-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/ring3-upper-stale.elf build/boot-ring3-upper-stale.o build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o build/pde-2m-boot.o build/upper-user-boot.o
 	objcopy -O elf32-i386 build/ring3-upper-stale.elf "$@"
+
+# Genuine HIA read-only 4KiB source -> exclusive mutable destination copy.
+build/page-copy.o: src/page_copy.hepta | build check-compiler
+	@set -eu; tmp=$(mktemp build/.page-copy.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
+	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+
+build/page-copy.so: build/page-copy.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/page-copy-unsafe.o: tests/negative/page_copy_noop.hepta | build check-compiler
+	"$(HEPTA_COMPILER)" < "$<" > "$@"
+
+build/page-copy-unsafe.so: build/page-copy-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+.PHONY: test-page-copy
+test-page-copy: build/page-copy.so build/page-copy-unsafe.so
+	@set -eu; tmp=$(mktemp build/.copy-byte-identity.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/page_copy.hepta > "$tmp"; \
+	cmp "$tmp" build/page-copy.o
+	timeout 90 $(PYTHON) tests/test_page_copy.py build/page-copy.so
+	$(PYTHON) tests/test_page_copy.py build/page-copy-unsafe.so --expect-unsafe
 
 full-acceptance:
 	$(PYTHON) tools/check_closure.py
