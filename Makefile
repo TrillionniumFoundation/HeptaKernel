@@ -140,11 +140,11 @@ test-x86-user-gdt: build/x86-user-gdt.so build/e820-allow-all.so
 # Genuine HIA Core v8 native admission of a narrow, caller-supplied single-page
 # IRQ/PTE/INVLPG effect sequence. No privileged instruction is emitted.
 build/x86-tlb-plan.o: src/x86_tlb_plan.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.x86-tlb-plan.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	set +e; "$(HEPTA_COMPILER)" < "$<" > "$tmp"; status=$?; set -e; \
-	if test "$status" -ne 0; then echo "native HIA tlb-plan compiler exit status=$status (2=invalid source, 3=capacity)" >&2; exit "$status"; fi; \
-	if ! test -s "$tmp"; then echo "native HIA tlb-plan emitted empty object" >&2; exit 1; fi; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.x86-tlb-plan.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	set +e; "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; status=$$?; set -e; \
+	if test "$$status" -ne 0; then echo "native HIA tlb-plan compiler exit status=$$status (2=invalid source, 3=capacity)" >&2; exit "$$status"; fi; \
+	if ! test -s "$$tmp"; then echo "native HIA tlb-plan emitted empty object" >&2; exit 1; fi; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/x86-tlb-plan.so: build/x86-tlb-plan.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -156,9 +156,9 @@ build/x86-tlb-plan-unsafe.so: build/x86-tlb-plan-unsafe.o
 	ld -shared -z noexecstack -o "$@" "$<"
 
 test-x86-tlb-plan: build/x86-tlb-plan.so build/x86-tlb-plan-unsafe.so
-	@set -eu; tmp=$(mktemp build/.tlb-byte-identity.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_tlb_plan.hepta > "$tmp"; \
-	cmp "$tmp" build/x86-tlb-plan.o
+	@set -eu; tmp=$$(mktemp build/.tlb-byte-identity.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_tlb_plan.hepta > "$$tmp"; \
+	cmp "$$tmp" build/x86-tlb-plan.o
 	$(PYTHON) tests/test_x86_tlb_plan.py build/x86-tlb-plan.so
 	$(PYTHON) tests/test_x86_tlb_plan.py build/x86-tlb-plan-unsafe.so --expect-unsafe
 
