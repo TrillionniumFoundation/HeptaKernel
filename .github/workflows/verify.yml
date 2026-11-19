@@ -278,6 +278,12 @@ jobs:
             build/native-report.json
             build/page-zero-recycle-bypass-multiboot.elf
             build/page-zero-hardware-report.json
+            build/page-copy-hardware-report.json
+            build/page-copy-hw-multiboot.elf
+            build/page-copy-dishonest-multiboot.elf
+            build/page-copy-decoy-multiboot.elf
+            build/page-copy-source-decoy-multiboot.elf
+            build/page-copy-boot.o
             build/x86-tlb-plan.o
             build/x86-tlb-plan.so
             build/x86-tlb-plan-unsafe.o

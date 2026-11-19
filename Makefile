@@ -478,7 +478,7 @@ build/pdpt-1g-%.elf: build/boot-pdpt-1g-%.o $(PDPT_1G_BOOT_SUPPORT) arch/x86_64/
 build/pdpt-1g-%-multiboot.elf: build/pdpt-1g-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-boot: test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
+test-boot: test-page-copy-hw test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
 	$(PYTHON) tests/test_boot.py --qemu "$(QEMU)"
 
 test-guard-pages: build/kernel-host.so
@@ -1096,3 +1096,46 @@ test-page-zero-hw: build/page-zero-hw-multiboot.elf build/page-zero-dishonest-mu
 	  objcopy --dump-section .text="$$renamed" build/page-zero-boot.o; \
 	  cmp "$$original" "$$renamed"
 	$(PYTHON) tests/test_page_zero_qemu.py --qemu "$(QEMU)"
+
+# Actual native HIA page_copy on two disjoint E820/HIA-PMM-owned cross-zone
+# physical page pairs; the explicit NON-HIA QEMU bridge is solely observer.
+build/page-copy-boot.o: build/page-copy.o
+	objcopy --redefine-sym f0=page_copy_f0 "$<" "$@"
+
+build/page-copy-dishonest-boot.o: build/page-copy-unsafe.o
+	objcopy --redefine-sym f0=page_copy_f0 "$<" "$@"
+
+build/boot-page-copy-hw.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PAGE_COPY_HW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-page-copy-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PAGE_COPY_HW=1 -DHEPTAKERNEL_TEST_PAGE_COPY_DECOY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-page-copy-source-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PAGE_COPY_HW=1 -DHEPTAKERNEL_TEST_PAGE_COPY_SOURCE_DECOY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+PAGE_COPY_HW_SUPPORT := $(PAGE_ZERO_HW_SUPPORT)
+
+build/page-copy-hw.elf: build/boot-page-copy-hw.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-copy-hw.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o
+
+build/page-copy-dishonest.elf: build/boot-page-copy-hw.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-dishonest-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-copy-hw.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-dishonest-boot.o
+
+build/page-copy-decoy.elf: build/boot-page-copy-decoy.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-copy-decoy.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o
+
+build/page-copy-source-decoy.elf: build/boot-page-copy-source-decoy.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-page-copy-source-decoy.o $(PAGE_COPY_HW_SUPPORT) build/page-copy-boot.o
+
+build/page-copy-%-multiboot.elf: build/page-copy-%.elf
+	objcopy -O elf32-i386 "$<" "$@"
+
+.PHONY: test-page-copy-hw
+test-page-copy-hw: build/page-copy-hw-multiboot.elf build/page-copy-dishonest-multiboot.elf build/page-copy-decoy-multiboot.elf build/page-copy-source-decoy-multiboot.elf
+	@set -eu; original=$$(mktemp build/.page-copy-original.XXXXXX); renamed=$$(mktemp build/.page-copy-renamed.XXXXXX); \
+	  trap 'rm -f "$$original" "$$renamed"' EXIT HUP INT TERM; \
+	  objcopy --dump-section .text="$$original" build/page-copy.o; \
+	  objcopy --dump-section .text="$$renamed" build/page-copy-boot.o; \
+	  cmp "$$original" "$$renamed"
+	$(PYTHON) tests/test_page_copy_qemu.py --qemu "$(QEMU)"
