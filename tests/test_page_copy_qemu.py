@@ -16,6 +16,7 @@ from pathlib import Path
 MAP = "HEPTAKERNEL HIA E820 VERIFIED"
 RESERV = "HEPTAKERNEL HIA RESERVATIONS VERIFIED"
 COPY = "HEPTAKERNEL HIA PHYSICAL PAGE COPY TWO PAIRS VERIFIED"
+DETACH = "HEPTAKERNEL HIA PHYSICAL COPY DETACH ZERO VERIFIED"
 OWNER = "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED"
 PMM = "HEPTAKERNEL HIA PMM PASS"
 FAIL = "HEPTAKERNEL BOOT FAIL"
@@ -39,15 +40,17 @@ def probe(qemu: str, image: Path, machine: str, memory: int, mode: str) -> dict:
                   stdout=result.stdout, stderr=result.stderr)
     assert result.stdout.count(MAP) == 1, json.dumps(record, sort_keys=True)
     assert result.stdout.count(RESERV) == 1, json.dumps(record, sort_keys=True)
-    if mode == "honest":
+    if mode in ("honest", "detach"):
         assert result.returncode == 33, json.dumps(record, sort_keys=True)
         assert result.stdout.count(COPY) == 1, json.dumps(record, sort_keys=True)
+        assert result.stdout.count(DETACH) == (1 if mode == "detach" else 0), json.dumps(record, sort_keys=True)
         assert result.stdout.count(OWNER) == 1, json.dumps(record, sort_keys=True)
         assert result.stdout.count(PMM) == 1, json.dumps(record, sort_keys=True)
         assert FAIL not in result.stdout, json.dumps(record, sort_keys=True)
     else:
         assert result.returncode == 35, json.dumps(record, sort_keys=True)
         assert result.stdout.count(COPY) == 0, json.dumps(record, sort_keys=True)
+        assert result.stdout.count(DETACH) == 0, json.dumps(record, sort_keys=True)
         assert result.stdout.count(OWNER) == 0, json.dumps(record, sort_keys=True)
         assert result.stdout.count(PMM) == 0, json.dumps(record, sort_keys=True)
         assert result.stdout.count(FAIL) == 1, json.dumps(record, sort_keys=True)
@@ -60,11 +63,11 @@ def main() -> None:
     args = parser.parse_args()
     runs = []
     for machine, memory in (("pc", 32), ("q35", 64)):
-        for mode in ("honest", "dishonest", "decoy", "source-decoy"):
+        for mode in ("honest", "dishonest", "decoy", "source-decoy", "detach", "detach-bypass", "detach-source-decoy"):
             suffix = "hw" if mode == "honest" else mode
             image = Path(f"build/page-copy-{suffix}-multiboot.elf")
             runs.append(probe(args.qemu, image, machine, memory, mode))
-    report = {"cases": len(runs), "positive": 2, "negative_controls": 6,
+    report = {"cases": len(runs), "positive": 4, "negative_controls": 10,
               "hardware_status": "PASS", "runs": runs}
     Path("build/page-copy-hardware-report.json").write_text(
         json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")

@@ -2725,6 +2725,70 @@ page_copy_hw_readback:
     addq $24, %r12
     decq %r13
     jnz page_copy_hw_each
+#ifdef HEPTAKERNEL_TEST_PAGE_COPY_DETACH
+    /* Isolated COW data-path prerequisite, NOT a page-fault/COW manager:
+     * after genuine HIA copy, invoke genuine HIA zero on the separately
+     * PMM-owned destination. Independent physical readback must establish
+     * source integrity and destination isolation across both arenas.
+     * The NON-HIA test bridge provides addresses and a quiescent context. */
+    leaq page_copy_hw_pairs(%rip), %r12
+    movq $2, %r13
+page_copy_detach_each:
+    movq (%r12), %r14
+    movq 8(%r12), %r15
+    /* Preseed a plausible success receipt: never use it as the oracle. */
+    movq $0, page_zero_hw_reply(%rip)
+    movq $4096, page_zero_hw_reply+8(%rip)
+    movabsq $0x4773bde155aae991, %rax
+    movq %rax, page_zero_hw_guard_before(%rip)
+    movq %rax, page_zero_hw_guard_after(%rip)
+    leaq page_zero_hw_empty_request(%rip), %rdi
+    xorq %rsi, %rsi
+    leaq page_zero_hw_reply(%rip), %rdx
+    movl $16, %ecx
+    movq %r15, %r8
+    movl $4096, %r9d
+    call page_zero_f0             /* genuine native HIA; bypass swaps a dishonest native HIA */
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, page_zero_hw_reply(%rip)
+    jne fail64
+    cmpq $4096, page_zero_hw_reply+8(%rip)
+    jne fail64
+    movabsq $0x4773bde155aae991, %rax
+    cmpq %rax, page_zero_hw_guard_before(%rip)
+    jne fail64
+    cmpq %rax, page_zero_hw_guard_after(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_PAGE_COPY_DETACH_SOURCE_DECOY
+    /* Hostile observer corrupts the original after HIA zeroes destination. */
+    cmpq $2, %r13
+    jne page_copy_detach_no_source_decoy
+    movb $0xfa, 3171(%r14)
+page_copy_detach_no_source_decoy:
+#endif
+    /* Full 16 KiB physical RAM oracle over the two pairs, not a receipt:
+     * original source must retain every byte; detached destination is zero. */
+    movq 16(%r12), %r10
+    movq %r14, %rdi
+    movq %r15, %rsi
+    movl $512, %ecx
+page_copy_detach_readback:
+    cmpq %r10, (%rdi)
+    jne fail64
+    cmpq $0, (%rsi)
+    jne fail64
+    addq $8, %rdi
+    addq $8, %rsi
+    addq $0x10101, %r10
+    decl %ecx
+    jnz page_copy_detach_readback
+    addq $24, %r12
+    decq %r13
+    jnz page_copy_detach_each
+    leaq message_page_copy_detach_pass(%rip), %rsi
+    call puts64
+#endif
     leaq message_page_copy_hw_pass(%rip), %rsi
     call puts64
 #endif
@@ -3249,6 +3313,8 @@ message_owner_pass:
     .asciz "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED\r\n"
 message_page_copy_hw_pass:
     .asciz "HEPTAKERNEL HIA PHYSICAL PAGE COPY TWO PAIRS VERIFIED\r\n"
+message_page_copy_detach_pass:
+    .asciz "HEPTAKERNEL HIA PHYSICAL COPY DETACH ZERO VERIFIED\r\n"
 message_page_zero_hw_pass:
     .asciz "HEPTAKERNEL HIA PHYSICAL PAGE ZERO FOUR FRAMES VERIFIED\r\n"
 message_page_zero_recycle_pass:
