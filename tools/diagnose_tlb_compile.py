@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+"""Temporary isolation probe: native selfhost compiler vs prefix CFG subsets."""
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+src = Path("src/x86_tlb_plan.hepta").read_text()
+first, helper = src.split("\nfn read_request_u64(", 1)
+head, body = first.split("\nblock start(", 1)
+body = "block start(" + body
+blocks = re.findall(r"(?ms)^block ([A-Za-z_][A-Za-z_0-9]*)\([^\n]*\)\n.*?(?=^block |\Z)", body)
+raw_blocks = re.findall(r"(?ms)^block [A-Za-z_][A-Za-z_0-9]*\([^\n]*\)\n.*?(?=^block |\Z)", body)
+assert len(blocks) == len(raw_blocks) and len(blocks) > 20, len(blocks)
+source_by_name = dict(zip(blocks, raw_blocks))
+assert len(source_by_name)==len(blocks)
+helper="fn read_request_u64("+helper
+for limit in [1, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, len(blocks)]:
+    permitted=set(blocks[:limit])
+    visited=set()
+    todo=["start"]
+    while todo:
+        name=todo.pop()
+        if name in visited: continue
+        visited.add(name)
+        original=source_by_name[name].rstrip()
+        lines=original.splitlines()
+        term=lines[-1].strip()
+        if term.startswith("branch "):
+            targets=re.findall(r"([A-Za-z_][A-Za-z_0-9]*)\(",term)
+        elif term.startswith("jump "):
+            targets=re.findall(r"([A-Za-z_][A-Za-z_0-9]*)\(",term)
+        else: targets=[]
+        if set(targets).issubset(permitted):
+            todo.extend(targets)
+    revised=[]
+    for name in blocks:
+        if name not in visited: continue
+        lines=source_by_name[name].rstrip().splitlines()
+        term=lines[-1].strip()
+        if term.startswith("branch ") or term.startswith("jump "):
+            targets=re.findall(r"([A-Za-z_][A-Za-z_0-9]*)\(",term)
+            if not set(targets).issubset(permitted):
+                lines[-1]="  probe_status:u32 = const() {\"value\":0}"
+                lines.append("  ret(probe_status)")
+        revised.append("\n".join(lines))
+    candidate=head+"\n"+"\n".join(revised)+"\nend\n"+helper
+    command = subprocess.run([sys.argv[1]], input=candidate.encode("ascii"),
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    print("PROBE",limit,"reachable",len(visited),"source_bytes",len(candidate),
+          "exit",command.returncode,"out",len(command.stdout),
+          "stderr",command.stderr[:80].decode("ascii","replace"),flush=True)
