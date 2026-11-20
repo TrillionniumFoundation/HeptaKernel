@@ -117,7 +117,8 @@ def guarded(entry) -> str:
             for offset in (0, PAGE, 2 * PAGE):
                 assert libc.mprotect(base + offset, PAGE,
                                     mmap.PROT_READ | mmap.PROT_WRITE) == 0
-        for region, holder in maps:
+        for i, (region, holder) in enumerate(maps):
+            maps[i] = (region, None)
             del holder
             region.close()
     return "PASS"
