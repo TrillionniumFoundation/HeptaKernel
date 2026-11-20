@@ -587,7 +587,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-cow-frame-binding test-cow-abort-pte-guarded test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-pmm-bitmap-integrity test-cow-frame-binding test-cow-abort-pte-guarded test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -1582,3 +1582,31 @@ test-cow-frame-binding-hw: build/cow-binding-hw-multiboot.elf build/cow-binding-
 	  objcopy --dump-section .text="$$a" build/cow-frame-binding.o; objcopy --dump-section .text="$$b" build/cow-frame-binding-boot.o; cmp "$$a" "$$b"; \
 	  objcopy --dump-section .text="$$a" build/cow-frame-binding-noop.o; objcopy --dump-section .text="$$b" build/cow-frame-binding-dishonest-boot.o; cmp "$$a" "$$b"
 	timeout 180 $(PYTHON) tests/test_cow_frame_binding_qemu.py --qemu "$(QEMU)"
+
+# Genuine native HIA complete PMM bitmap scan; not an atomic/privileged COW path.
+build/pmm-bitmap-integrity.o: src/pmm_bitmap_integrity.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.pmm-bitmap.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/pmm-bitmap-integrity.so: build/pmm-bitmap-integrity.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/pmm-bitmap-unsafe.o: tests/negative/pmm_bitmap_noop.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.pmm-bitmap-unsafe.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/pmm-bitmap-unsafe.so: build/pmm-bitmap-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+.PHONY: test-pmm-bitmap-integrity
+test-pmm-bitmap-integrity: build/pmm-bitmap-integrity.so build/pmm-bitmap-unsafe.so
+	timeout 90 $(PYTHON) tests/test_pmm_bitmap_integrity.py build/pmm-bitmap-integrity.so > build/pmm-bitmap-report.json
+	$(PYTHON) tests/test_pmm_bitmap_integrity.py build/pmm-bitmap-unsafe.so --expect-unsafe
+	@set -eu; compiler=$$(command -v "$(HEPTA_COMPILER)"); \
+	one=$$(mktemp build/.pmm-bitmap-repro1.XXXXXX); two=$$(mktemp build/.pmm-bitmap-repro2.XXXXXX); \
+	trap 'rm -f "$$one" "$$two"' EXIT HUP INT TERM; \
+	env -i PATH='' "$$compiler" < src/pmm_bitmap_integrity.hepta > "$$one"; \
+	env -i PATH='' "$$compiler" < src/pmm_bitmap_integrity.hepta > "$$two"; \
+	cmp build/pmm-bitmap-integrity.o "$$one"; cmp "$$one" "$$two"

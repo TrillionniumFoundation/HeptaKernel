@@ -1,0 +1,178 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn pmm_bitmap_integrity(request:readbuf,state:mutbuf,unused:mutbuf) -> (u32) effects(read,trap) entry(start)
+block start(request:readbuf,state:mutbuf,unused:mutbuf)
+  b_view:readbuf = borrow.read(state)
+  b_result:u32 = call(request,b_view) {"function":"inspect"}
+  _ = loan.end(b_view)
+  ret(b_result)
+end
+fn inspect(request:readbuf,state:readbuf) -> (u32) effects(read,trap) entry(start)
+block start(request:readbuf,state:readbuf)
+  v_req:usize = buffer.len(request)
+  v_24:usize = const() {"value":24}
+  v_ok:bool = compare.eq(v_req,v_24)
+  branch v_ok state_shape(request,state) malformed()
+block state_shape(request_b1:readbuf,state_b1:readbuf)
+  v_state_b1:usize = buffer.len(state_b1)
+  v_64_b1:usize = const() {"value":64}
+  v_ok_b1:bool = compare.ge(v_state_b1,v_64_b1)
+  branch v_ok_b1 metadata(request_b1,state_b1) malformed()
+block malformed()
+  v_bad_b2:u32 = const() {"value":1}
+  ret(v_bad_b2)
+block bad_metadata()
+  v_bad_b3:u32 = const() {"value":2}
+  ret(v_bad_b3)
+block bad_geometry()
+  v_bad_b4:u32 = const() {"value":3}
+  ret(v_bad_b4)
+block bad_bitmap()
+  v_bad_b5:u32 = const() {"value":4}
+  ret(v_bad_b5)
+block metadata(request_b6:readbuf,state_b6:readbuf)
+  m_o0_b6:usize = const() {"value":0}
+  m_o8_b6:usize = const() {"value":8}
+  m_o16_b6:usize = const() {"value":16}
+  m_o24_b6:usize = const() {"value":24}
+  m_o32_b6:usize = const() {"value":32}
+  m_magic_b6:u64 = call(state_b6,m_o0_b6) {"function":"read_word"}
+  m_count_b6:u64 = call(state_b6,m_o8_b6) {"function":"read_word"}
+  m_base_b6:u64 = call(state_b6,m_o16_b6) {"function":"read_word"}
+  m_reserved_b6:u64 = call(state_b6,m_o24_b6) {"function":"read_word"}
+  m_free_b6:u64 = call(state_b6,m_o32_b6) {"function":"read_word"}
+  m_want_base_b6:u64 = call(request_b6,m_o0_b6) {"function":"read_word"}
+  m_want_count_b6:u64 = call(request_b6,m_o8_b6) {"function":"read_word"}
+  m_want_reserved_b6:u64 = call(request_b6,m_o16_b6) {"function":"read_word"}
+  m_magic_target_b6:u64 = const() {"value":3552580688320940353}
+  m_magic_ok_b6:bool = compare.eq(m_magic_b6,m_magic_target_b6)
+  m_count_ok_b6:bool = compare.eq(m_count_b6,m_want_count_b6)
+  m_base_ok_b6:bool = compare.eq(m_base_b6,m_want_base_b6)
+  m_reserved_ok_b6:bool = compare.eq(m_reserved_b6,m_want_reserved_b6)
+  m_pair1_b6:bool = bool.and(m_magic_ok_b6,m_count_ok_b6)
+  m_pair2_b6:bool = bool.and(m_base_ok_b6,m_reserved_ok_b6)
+  m_valid_b6:bool = bool.and(m_pair1_b6,m_pair2_b6)
+  branch m_valid_b6 geometry(state_b6,m_count_b6,m_base_b6,m_reserved_b6,m_free_b6) bad_metadata()
+block geometry(state_b7:readbuf,count_b7:u64,base_b7:u64,reserved_b7:u64,free_b7:u64)
+  g_zero_b7:u64 = const() {"value":0}
+  g_max_b7:u64 = const() {"value":65536}
+  g_limit_b7:u64 = const() {"value":4503599627370496}
+  g_page_b7:u64 = const() {"value":4096}
+  g_mask_b7:u64 = const() {"value":4095}
+  g_pos_b7:bool = compare.gt(count_b7,g_zero_b7)
+  g_bound_b7:bool = compare.le(count_b7,g_max_b7)
+  g_prefix_b7:bool = compare.le(reserved_b7,count_b7)
+  g_low_b7:u64 = bit.and(base_b7,g_mask_b7)
+  g_align_b7:bool = compare.eq(g_low_b7,g_zero_b7)
+  g_under_b7:bool = compare.lt(base_b7,g_limit_b7)
+  g_span_b7:u64 = int.mul.wrap(count_b7,g_page_b7)
+  g_room_b7:u64 = int.sub.wrap(g_limit_b7,base_b7)
+  g_fit_b7:bool = compare.le(g_span_b7,g_room_b7)
+  g_capacity_b7:u64 = int.sub.wrap(count_b7,reserved_b7)
+  g_free_ok_b7:bool = compare.le(free_b7,g_capacity_b7)
+  g_a_b7:bool = bool.and(g_pos_b7,g_bound_b7)
+  g_b_b7:bool = bool.and(g_prefix_b7,g_align_b7)
+  g_c_b7:bool = bool.and(g_under_b7,g_fit_b7)
+  g_d_b7:bool = bool.and(g_a_b7,g_b_b7)
+  g_e_b7:bool = bool.and(g_c_b7,g_free_ok_b7)
+  g_good_b7:bool = bool.and(g_d_b7,g_e_b7)
+  branch g_good_b7 length_check(state_b7,count_b7,reserved_b7,free_b7) bad_geometry()
+block length_check(state_b8:readbuf,count_b8:u64,reserved_b8:u64,free_b8:u64)
+  l_seven_b8:u64 = const() {"value":7}
+  l_round_b8:u64 = int.add.wrap(count_b8,l_seven_b8)
+  l_three_b8:u64 = const() {"value":3}
+  l_bytes_b8:u64 = int.shr.checked(l_round_b8,l_three_b8)
+  l_head_b8:u64 = const() {"value":64}
+  l_min_b8:u64 = int.add.wrap(l_bytes_b8,l_head_b8)
+  l_len_b8:usize = buffer.len(state_b8)
+  l_seen_b8:u64 = int.cast(l_len_b8) {"mode":"wrap"}
+  l_ok_b8:bool = compare.ge(l_seen_b8,l_min_b8)
+  branch l_ok_b8 pad_check(state_b8,count_b8,reserved_b8,free_b8,l_bytes_b8) bad_geometry()
+block pad_check(state_b9:readbuf,count_b9:u64,reserved_b9:u64,free_b9:u64,bytes_b9:u64)
+  p_o40_b9:usize = const() {"value":40}
+  p_o48_b9:usize = const() {"value":48}
+  p_o56_b9:usize = const() {"value":56}
+  p_a_b9:u64 = call(state_b9,p_o40_b9) {"function":"read_word"}
+  p_b_b9:u64 = call(state_b9,p_o48_b9) {"function":"read_word"}
+  p_c_b9:u64 = call(state_b9,p_o56_b9) {"function":"read_word"}
+  p_zero_b9:u64 = const() {"value":0}
+  p_za_b9:bool = compare.eq(p_a_b9,p_zero_b9)
+  p_zb_b9:bool = compare.eq(p_b_b9,p_zero_b9)
+  p_zc_b9:bool = compare.eq(p_c_b9,p_zero_b9)
+  p_ab_b9:bool = bool.and(p_za_b9,p_zb_b9)
+  p_ok_b9:bool = bool.and(p_ab_b9,p_zc_b9)
+  branch p_ok_b9 scan_start(state_b9,count_b9,reserved_b9,free_b9,bytes_b9) bad_bitmap()
+block scan_start(state_b10:readbuf,count_b10:u64,reserved_b10:u64,free_b10:u64,bytes_b10:u64)
+  z_eight_b10:u64 = const() {"value":8}
+  z_end_b10:u64 = int.mul.wrap(bytes_b10,z_eight_b10)
+  z_zero_b10:u64 = const() {"value":0}
+  jump scan(state_b10,count_b10,reserved_b10,free_b10,z_end_b10,z_zero_b10,z_zero_b10)
+block scan(state_b11:readbuf,count_b11:u64,reserved_b11:u64,free_b11:u64,end_b11:u64,index_b11:u64,seen_b11:u64)
+  s_more_b11:bool = compare.lt(index_b11,end_b11)
+  branch s_more_b11 test_bit(state_b11,count_b11,reserved_b11,free_b11,end_b11,index_b11,seen_b11) completed(free_b11,seen_b11)
+block test_bit(state_b12:readbuf,count_b12:u64,reserved_b12:u64,free_b12:u64,end_b12:u64,index_b12:u64,seen_b12:u64)
+  t_three_b12:u64 = const() {"value":3}
+  t_seven_b12:u64 = const() {"value":7}
+  t_64_b12:u64 = const() {"value":64}
+  t_one_b12:u64 = const() {"value":1}
+  t_byte_b12:u64 = int.shr.checked(index_b12,t_three_b12)
+  t_off_b12:u64 = int.add.wrap(t_64_b12,t_byte_b12)
+  t_at_b12:usize = int.cast(t_off_b12) {"mode":"wrap"}
+  t_oct_b12:u8 = buffer.load(state_b12,t_at_b12)
+  t_word_b12:u64 = int.cast(t_oct_b12) {"mode":"wrap"}
+  t_shift_b12:u64 = bit.and(index_b12,t_seven_b12)
+  t_mask_b12:u64 = int.shl.checked(t_one_b12,t_shift_b12)
+  t_bit_b12:u64 = bit.and(t_word_b12,t_mask_b12)
+  t_zero_b12:u64 = const() {"value":0}
+  t_set_b12:bool = compare.ne(t_bit_b12,t_zero_b12)
+  t_active_b12:bool = compare.lt(index_b12,count_b12)
+  branch t_active_b12 active(state_b12,count_b12,reserved_b12,free_b12,end_b12,index_b12,seen_b12,t_set_b12) tail(state_b12,count_b12,reserved_b12,free_b12,end_b12,index_b12,seen_b12,t_set_b12)
+block active(state_b13:readbuf,count_b13:u64,reserved_b13:u64,free_b13:u64,end_b13:u64,index_b13:u64,seen_b13:u64,set_b13:bool)
+  a_prefix_b13:bool = compare.lt(index_b13,reserved_b13)
+  branch a_prefix_b13 protected(state_b13,count_b13,reserved_b13,free_b13,end_b13,index_b13,seen_b13,set_b13) usable(state_b13,count_b13,reserved_b13,free_b13,end_b13,index_b13,seen_b13,set_b13)
+block protected(state_b14:readbuf,count_b14:u64,reserved_b14:u64,free_b14:u64,end_b14:u64,index_b14:u64,seen_b14:u64,set_b14:bool)
+  branch set_b14 next(state_b14,count_b14,reserved_b14,free_b14,end_b14,index_b14,seen_b14) bad_bitmap()
+block usable(state_b15:readbuf,count_b15:u64,reserved_b15:u64,free_b15:u64,end_b15:u64,index_b15:u64,seen_b15:u64,set_b15:bool)
+  branch set_b15 next(state_b15,count_b15,reserved_b15,free_b15,end_b15,index_b15,seen_b15) missing(state_b15,count_b15,reserved_b15,free_b15,end_b15,index_b15,seen_b15)
+block missing(state_b16:readbuf,count_b16:u64,reserved_b16:u64,free_b16:u64,end_b16:u64,index_b16:u64,seen_b16:u64)
+  u_one_b16:u64 = const() {"value":1}
+  u_more_b16:u64 = int.add.wrap(seen_b16,u_one_b16)
+  jump next(state_b16,count_b16,reserved_b16,free_b16,end_b16,index_b16,u_more_b16)
+block tail(state_b17:readbuf,count_b17:u64,reserved_b17:u64,free_b17:u64,end_b17:u64,index_b17:u64,seen_b17:u64,set_b17:bool)
+  branch set_b17 bad_bitmap() next(state_b17,count_b17,reserved_b17,free_b17,end_b17,index_b17,seen_b17)
+block next(state_b18:readbuf,count_b18:u64,reserved_b18:u64,free_b18:u64,end_b18:u64,index_b18:u64,seen_b18:u64)
+  n_one_b18:u64 = const() {"value":1}
+  n_next_b18:u64 = int.add.wrap(index_b18,n_one_b18)
+  jump scan(state_b18,count_b18,reserved_b18,free_b18,end_b18,n_next_b18,seen_b18)
+block completed(expected_b19:u64,actual_b19:u64)
+  d_eq_b19:bool = compare.eq(expected_b19,actual_b19)
+  branch d_eq_b19 accepted() bad_count()
+block bad_count()
+  d_bad_b20:u32 = const() {"value":5}
+  ret(d_bad_b20)
+block accepted()
+  d_ok_b21:u32 = const() {"value":0}
+  ret(d_ok_b21)
+end
+fn read_word(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
+  w_zero:u64 = const() {"value":0}
+  jump word_loop(bytes,offset,w_zero,w_zero)
+block word_loop(bytes_b1:readbuf,offset_b1:usize,index_b1:u64,value_b1:u64)
+  w_eight_b1:u64 = const() {"value":8}
+  w_more_b1:bool = compare.lt(index_b1,w_eight_b1)
+  branch w_more_b1 word_byte(bytes_b1,offset_b1,index_b1,value_b1) word_done(value_b1)
+block word_byte(bytes_b2:readbuf,offset_b2:usize,index_b2:u64,value_b2:u64)
+  w_index_b2:usize = int.cast(index_b2) {"mode":"wrap"}
+  w_at_b2:usize = int.add.wrap(offset_b2,w_index_b2)
+  w_oct_b2:u8 = buffer.load(bytes_b2,w_at_b2)
+  w_wide_b2:u64 = int.cast(w_oct_b2) {"mode":"wrap"}
+  w_8_b2:u64 = const() {"value":8}
+  w_shift_b2:u64 = int.mul.wrap(index_b2,w_8_b2)
+  w_part_b2:u64 = int.shl.checked(w_wide_b2,w_shift_b2)
+  w_new_b2:u64 = bit.or(value_b2,w_part_b2)
+  w_one_b2:u64 = const() {"value":1}
+  w_next_b2:u64 = int.add.wrap(index_b2,w_one_b2)
+  jump word_loop(bytes_b2,offset_b2,w_next_b2,w_new_b2)
+block word_done(value_b3:u64)
+  ret(value_b3)
+end
