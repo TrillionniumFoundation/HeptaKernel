@@ -586,6 +586,8 @@ test-closure:
 
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
+	$(PYTHON) tests/test_linux_kconfig_relations.py
+	$(PYTHON) tests/test_linux_kconfig_scoped.py
 
 test: test-pmm-bitmap-integrity test-cow-frame-binding test-cow-abort-pte-guarded test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 

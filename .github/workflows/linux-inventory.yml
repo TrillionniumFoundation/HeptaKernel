@@ -6,8 +6,10 @@ on:
       - 'tools/linux_inventory.py'
       - 'tools/linux_uapi_tags.py'
       - 'tools/linux_kconfig_relations.py'
+      - 'tools/linux_kconfig_scoped.py'
       - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_kconfig_relations.py'
+      - 'tests/test_linux_kconfig_scoped.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -18,8 +20,10 @@ on:
       - 'tools/linux_inventory.py'
       - 'tools/linux_uapi_tags.py'
       - 'tools/linux_kconfig_relations.py'
+      - 'tools/linux_kconfig_scoped.py'
       - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_kconfig_relations.py'
+      - 'tests/test_linux_kconfig_scoped.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -45,6 +49,7 @@ jobs:
           python3 -I -B tests/test_device_table_spans.py
           python3 -I -B tests/test_linux_uapi_tags.py
           python3 -I -B tests/test_linux_kconfig_relations.py
+          python3 -I -B tests/test_linux_kconfig_scoped.py
 
       - name: Checkout exact pinned upstream Linux (not a moving branch)
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -182,6 +187,53 @@ jobs:
               assert report["counts"].get(key, 0) == count
           print("KCONFIG_RELATION_ORIGINAL_GIT_BYTES: PASS", len(ref))
           print("KCONFIG_SEMANTIC_DEPENDENCY_GRAPH: HOLD")
+          PY
+
+      - name: Verify pinned Kconfig property owner candidates and preserve lexical rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I -B tools/linux_kconfig_scoped.py --repo .upstream/linux --lock compatibility/linux-source-lock.json --out build/linux-inventory
+          python3 - <<'PY'
+          import base64, hashlib, json, re, subprocess
+          from pathlib import Path
+          root = Path("build/linux-inventory")
+          report = json.loads((root / "kconfig-property-scopes-report.json").read_text())
+          payload = (root / "kconfig-property-scopes.jsonl").read_bytes()
+          old = [json.loads(raw) for raw in (root / "kconfig-relation-lines.jsonl").read_bytes().splitlines()]
+          now = [json.loads(raw) for raw in payload.splitlines()]
+          commit = json.loads(Path("compatibility/linux-source-lock.json").read_text())["linux"]["commit"]
+          git = lambda *xs: subprocess.check_output(["git", "-C", ".upstream/linux", *xs])
+          assert report["linux_commit"] == commit == git("rev-parse", "HEAD").strip().decode()
+          assert report["linux_root_tree"] == git("rev-parse", "HEAD^{tree}").strip().decode()
+          assert hashlib.sha256(payload).hexdigest() == report["source_sha256"]
+          assert report["status"] == "PARTIAL_LEXICAL_OWNER_CANDIDATES_NOT_KCONFIG_GRAPH"
+          assert not report["inventory_complete"] and not report["full_rewrite_complete"]
+          assert len(now) == len(old) == report["counts"]["property_candidates"] > 0
+          allowed = {"SCOPED_LEXICAL_CANDIDATE", "HELP_TEXT_LEXICAL_ONLY",
+                     "UNBOUND_LEXICAL_CANDIDATE", "UNRESOLVED_CONTINUATION"}
+          blobs = {}
+          for before, after in zip(old, now):
+              assert all(after[key] == value for key, value in before.items()), (before, after)
+              assert after["scope_status"] in allowed
+              key = after["blob_oid"]
+              if key not in blobs:
+                  blobs[key] = git("cat-file", "blob", key).split(b"\n")
+              lines = blobs[key]
+              assert base64.b64decode(after["raw_b64"]) == lines[after["line"] - 1]
+              if after["scope_status"] == "SCOPED_LEXICAL_CANDIDATE":
+                  decl = after["owner_declaration_line"]
+                  assert isinstance(decl, int) and 1 <= decl < after["line"]
+                  assert isinstance(after["owner"], str) and after["owner"]
+                  statement = lines[decl - 1].lstrip(b" \t")
+                  declaration = re.match(rb"(?:config|menuconfig)[ \t]+([A-Za-z_][A-Za-z0-9_]*)\b", statement)
+                  assert declaration is not None and declaration.group(1) == after["owner"].encode(), (
+                      after["blob_oid"], decl, repr(statement), after["owner"])
+              else:
+                  assert after["owner"] is None and after["owner_declaration_line"] is None
+          assert sum(report["counts"].get(key, 0) for key in allowed) == len(now)
+          print("KCONFIG_SCOPED_IMMUTABLE_ROWS:", len(now), report["counts"])
+          print("KCONFIG_DEPENDENCY_EVALUATION: HOLD")
           PY
 
       - name: Independently check source counts, hashes and unclosed Linux scope
@@ -516,6 +568,8 @@ jobs:
             build/linux-inventory/kconfig-source-edges.jsonl
             build/linux-inventory/kconfig-relation-lines.jsonl
             build/linux-inventory/kconfig-relation-report.json
+            build/linux-inventory/kconfig-property-scopes.jsonl
+            build/linux-inventory/kconfig-property-scopes-report.json
             build/linux-inventory/directory-objects.jsonl
             build/linux-inventory/uapi-paths.jsonl
             build/linux-inventory/uapi-macro-rows.jsonl
