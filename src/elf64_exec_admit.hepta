@@ -1,0 +1,221 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn elf64_exec_admit(image:readbuf,reply:mutbuf,scratch:mutbuf) -> (u32) effects(read,trap) entry(start)
+block start(image:readbuf,reply:mutbuf,scratch:mutbuf)
+  n:usize = buffer.len(image)
+  min:usize = const() {"value":64}
+  long:bool = compare.ge(n,min)
+  branch long magic(image) bad_short()
+block bad_short()
+  err_short:u32 = const() {"value":1}
+  ret(err_short)
+block magic(blk2_image:readbuf)
+  magic_0_off:usize = const() {"value":0}
+  magic_0_expected:u8 = const() {"value":127}
+  magic_0_actual:u8 = buffer.load(blk2_image,magic_0_off)
+  magic_0_ok:bool = compare.eq(magic_0_actual,magic_0_expected)
+  magic_1_off:usize = const() {"value":1}
+  magic_1_expected:u8 = const() {"value":69}
+  magic_1_actual:u8 = buffer.load(blk2_image,magic_1_off)
+  magic_1_ok:bool = compare.eq(magic_1_actual,magic_1_expected)
+  magic_2_off:usize = const() {"value":2}
+  magic_2_expected:u8 = const() {"value":76}
+  magic_2_actual:u8 = buffer.load(blk2_image,magic_2_off)
+  magic_2_ok:bool = compare.eq(magic_2_actual,magic_2_expected)
+  magic_3_off:usize = const() {"value":3}
+  magic_3_expected:u8 = const() {"value":70}
+  magic_3_actual:u8 = buffer.load(blk2_image,magic_3_off)
+  magic_3_ok:bool = compare.eq(magic_3_actual,magic_3_expected)
+  magic_and1:bool = bool.and(magic_0_ok,magic_1_ok)
+  magic_and2:bool = bool.and(magic_and1,magic_2_ok)
+  magic_and3:bool = bool.and(magic_and2,magic_3_ok)
+  branch magic_and3 ident(blk2_image) bad_magic()
+block bad_magic()
+  bad_magic_code:u32 = const() {"value":2}
+  ret(bad_magic_code)
+block ident(blk4_image:readbuf)
+  ident_0_off:usize = const() {"value":4}
+  ident_0_expected:u8 = const() {"value":2}
+  ident_0_actual:u8 = buffer.load(blk4_image,ident_0_off)
+  ident_0_ok:bool = compare.eq(ident_0_actual,ident_0_expected)
+  ident_1_off:usize = const() {"value":5}
+  ident_1_expected:u8 = const() {"value":1}
+  ident_1_actual:u8 = buffer.load(blk4_image,ident_1_off)
+  ident_1_ok:bool = compare.eq(ident_1_actual,ident_1_expected)
+  ident_2_off:usize = const() {"value":6}
+  ident_2_expected:u8 = const() {"value":1}
+  ident_2_actual:u8 = buffer.load(blk4_image,ident_2_off)
+  ident_2_ok:bool = compare.eq(ident_2_actual,ident_2_expected)
+  ident_3_off:usize = const() {"value":8}
+  ident_3_expected:u8 = const() {"value":0}
+  ident_3_actual:u8 = buffer.load(blk4_image,ident_3_off)
+  ident_3_ok:bool = compare.eq(ident_3_actual,ident_3_expected)
+  ident_4_off:usize = const() {"value":9}
+  ident_4_expected:u8 = const() {"value":0}
+  ident_4_actual:u8 = buffer.load(blk4_image,ident_4_off)
+  ident_4_ok:bool = compare.eq(ident_4_actual,ident_4_expected)
+  ident_5_off:usize = const() {"value":10}
+  ident_5_expected:u8 = const() {"value":0}
+  ident_5_actual:u8 = buffer.load(blk4_image,ident_5_off)
+  ident_5_ok:bool = compare.eq(ident_5_actual,ident_5_expected)
+  ident_6_off:usize = const() {"value":11}
+  ident_6_expected:u8 = const() {"value":0}
+  ident_6_actual:u8 = buffer.load(blk4_image,ident_6_off)
+  ident_6_ok:bool = compare.eq(ident_6_actual,ident_6_expected)
+  ident_7_off:usize = const() {"value":12}
+  ident_7_expected:u8 = const() {"value":0}
+  ident_7_actual:u8 = buffer.load(blk4_image,ident_7_off)
+  ident_7_ok:bool = compare.eq(ident_7_actual,ident_7_expected)
+  ident_8_off:usize = const() {"value":13}
+  ident_8_expected:u8 = const() {"value":0}
+  ident_8_actual:u8 = buffer.load(blk4_image,ident_8_off)
+  ident_8_ok:bool = compare.eq(ident_8_actual,ident_8_expected)
+  ident_9_off:usize = const() {"value":14}
+  ident_9_expected:u8 = const() {"value":0}
+  ident_9_actual:u8 = buffer.load(blk4_image,ident_9_off)
+  ident_9_ok:bool = compare.eq(ident_9_actual,ident_9_expected)
+  ident_10_off:usize = const() {"value":15}
+  ident_10_expected:u8 = const() {"value":0}
+  ident_10_actual:u8 = buffer.load(blk4_image,ident_10_off)
+  ident_10_ok:bool = compare.eq(ident_10_actual,ident_10_expected)
+  ident_and1:bool = bool.and(ident_0_ok,ident_1_ok)
+  ident_and2:bool = bool.and(ident_and1,ident_2_ok)
+  ident_and3:bool = bool.and(ident_and2,ident_3_ok)
+  ident_and4:bool = bool.and(ident_and3,ident_4_ok)
+  ident_and5:bool = bool.and(ident_and4,ident_5_ok)
+  ident_and6:bool = bool.and(ident_and5,ident_6_ok)
+  ident_and7:bool = bool.and(ident_and6,ident_7_ok)
+  ident_and8:bool = bool.and(ident_and7,ident_8_ok)
+  ident_and9:bool = bool.and(ident_and8,ident_9_ok)
+  ident_and10:bool = bool.and(ident_and9,ident_10_ok)
+  branch ident_and10 osabi(blk4_image) bad_ident()
+block osabi(blk5_image:readbuf)
+  abi_index:usize = const() {"value":7}
+  abi_zero:u8 = const() {"value":0}
+  abi_three:u8 = const() {"value":3}
+  abi_value:u8 = buffer.load(blk5_image,abi_index)
+  abi_sysv:bool = compare.eq(abi_value,abi_zero)
+  abi_linux:bool = compare.eq(abi_value,abi_three)
+  abi_allowed:bool = bool.or(abi_sysv,abi_linux)
+  branch abi_allowed machine(blk5_image) bad_ident()
+block bad_ident()
+  bad_ident_code:u32 = const() {"value":3}
+  ret(bad_ident_code)
+block machine(blk7_image:readbuf)
+  type_at:usize = const() {"value":16}
+  machine_at:usize = const() {"value":18}
+  version_at:usize = const() {"value":20}
+  etype:u64 = call(blk7_image,type_at) {"function":"read16"}
+  emachine:u64 = call(blk7_image,machine_at) {"function":"read16"}
+  eversion:u64 = call(blk7_image,version_at) {"function":"read32"}
+  et_exec:u64 = const() {"value":2}
+  et_dyn:u64 = const() {"value":3}
+  em_x86:u64 = const() {"value":62}
+  ev_one:u64 = const() {"value":1}
+  is_exec:bool = compare.eq(etype,et_exec)
+  is_dyn:bool = compare.eq(etype,et_dyn)
+  kind_ok:bool = bool.or(is_exec,is_dyn)
+  arch_ok:bool = compare.eq(emachine,em_x86)
+  ver_ok:bool = compare.eq(eversion,ev_one)
+  ma:bool = bool.and(kind_ok,arch_ok)
+  mb:bool = bool.and(ma,ver_ok)
+  branch mb sizes(blk7_image) bad_machine()
+block bad_machine()
+  bad_machine_code:u32 = const() {"value":4}
+  ret(bad_machine_code)
+block sizes(blk9_image:readbuf)
+  eh_at:usize = const() {"value":52}
+  phent_at:usize = const() {"value":54}
+  phnum_at:usize = const() {"value":56}
+  eh:u64 = call(blk9_image,eh_at) {"function":"read16"}
+  phent:u64 = call(blk9_image,phent_at) {"function":"read16"}
+  phnum:u64 = call(blk9_image,phnum_at) {"function":"read16"}
+  eh_expect:u64 = const() {"value":64}
+  phent_expect:u64 = const() {"value":56}
+  phnum_zero:u64 = const() {"value":0}
+  phnum_limit:u64 = const() {"value":65534}
+  eh_ok:bool = compare.eq(eh,eh_expect)
+  phent_ok:bool = compare.eq(phent,phent_expect)
+  phnum_positive:bool = compare.gt(phnum,phnum_zero)
+  phnum_bounded:bool = compare.le(phnum,phnum_limit)
+  sz_pair:bool = bool.and(eh_ok,phent_ok)
+  sz_ph:bool = bool.and(phnum_positive,phnum_bounded)
+  sz_ok:bool = bool.and(sz_pair,sz_ph)
+  branch sz_ok entry(blk9_image,phnum) bad_sizes()
+block bad_sizes()
+  bad_sizes_code:u32 = const() {"value":5}
+  ret(bad_sizes_code)
+block entry(blk11_image:readbuf,blk11_num:u64)
+  entry_at:usize = const() {"value":24}
+  entry_value:u64 = call(blk11_image,entry_at) {"function":"read64"}
+  entry_min:u64 = const() {"value":4096}
+  entry_max:u64 = const() {"value":140737488355328}
+  entry_nonnull:bool = compare.ge(entry_value,entry_min)
+  entry_user:bool = compare.lt(entry_value,entry_max)
+  entry_ok:bool = bool.and(entry_nonnull,entry_user)
+  branch entry_ok bounds(blk11_image,blk11_num) bad_entry()
+block bad_entry()
+  bad_entry_code:u32 = const() {"value":7}
+  ret(bad_entry_code)
+block bounds(blk13_image:readbuf,blk13_num:u64)
+  ph_at:usize = const() {"value":32}
+  phoff:u64 = call(blk13_image,ph_at) {"function":"read64"}
+  full_length:usize = buffer.len(blk13_image)
+  full:u64 = int.cast(full_length) {"mode":"wrap"}
+  min_ph:u64 = const() {"value":64}
+  align_mask:u64 = const() {"value":7}
+  zero:u64 = const() {"value":0}
+  valid_min:bool = compare.ge(phoff,min_ph)
+  valid_max:bool = compare.le(phoff,full)
+  alignment:u64 = bit.and(phoff,align_mask)
+  aligned:bool = compare.eq(alignment,zero)
+  span_a:bool = bool.and(valid_min,valid_max)
+  span_ok:bool = bool.and(span_a,aligned)
+  branch span_ok fit(blk13_num,phoff,full) bad_bounds()
+block fit(blk14_num:u64,blk14_phoff:u64,blk14_full:u64)
+  remaining:u64 = int.sub.wrap(blk14_full,blk14_phoff)
+  entry_size:u64 = const() {"value":56}
+  needed:u64 = int.mul.wrap(blk14_num,entry_size)
+  can_fit:bool = compare.le(needed,remaining)
+  branch can_fit accepted() bad_bounds()
+block bad_bounds()
+  bad_bounds_code:u32 = const() {"value":6}
+  ret(bad_bounds_code)
+block accepted()
+  success:u32 = const() {"value":0}
+  ret(success)
+end
+fn read16(image:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(image:readbuf,offset:usize)
+  octet0:u8 = buffer.load(image,offset)
+  one:usize = const() {"value":1}
+  offset1:usize = int.add.wrap(offset,one)
+  octet1:u8 = buffer.load(image,offset1)
+  word0:u64 = int.cast(octet0) {"mode":"wrap"}
+  word1:u64 = int.cast(octet1) {"mode":"wrap"}
+  shift:u64 = const() {"value":8}
+  upper:u64 = int.shl.checked(word1,shift)
+  result:u64 = bit.or(upper,word0)
+  ret(result)
+end
+fn read32(image:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(image:readbuf,offset:usize)
+  lo:u64 = call(image,offset) {"function":"read16"}
+  step:usize = const() {"value":2}
+  next:usize = int.add.wrap(offset,step)
+  hi:u64 = call(image,next) {"function":"read16"}
+  shift:u64 = const() {"value":16}
+  upper:u64 = int.shl.checked(hi,shift)
+  result:u64 = bit.or(upper,lo)
+  ret(result)
+end
+fn read64(image:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(image:readbuf,offset:usize)
+  lo:u64 = call(image,offset) {"function":"read32"}
+  step:usize = const() {"value":4}
+  next:usize = int.add.wrap(offset,step)
+  hi:u64 = call(image,next) {"function":"read32"}
+  shift:u64 = const() {"value":32}
+  upper:u64 = int.shl.checked(hi,shift)
+  result:u64 = bit.or(upper,lo)
+  ret(result)
+end
