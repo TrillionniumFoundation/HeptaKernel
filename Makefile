@@ -589,7 +589,7 @@ test-linux-inventory:
 	$(PYTHON) tests/test_linux_kconfig_relations.py
 	$(PYTHON) tests/test_linux_kconfig_scoped.py
 
-test: test-pmm-bitmap-integrity test-cow-frame-binding test-cow-abort-pte-guarded test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-elf64-exec-admit test-pmm-bitmap-integrity test-cow-frame-binding test-cow-abort-pte-guarded test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -1681,3 +1681,33 @@ test-pmm-bitmap-hw: build/pmm-bitmap-hw-multiboot.elf build/pmm-bitmap-free-stal
 	  objcopy --dump-section .text="$$a" build/pmm-bitmap-integrity.o; objcopy --dump-section .text="$$b" build/pmm-bitmap-boot.o; cmp "$$a" "$$b"; \
 	  objcopy --dump-section .text="$$a" build/pmm-bitmap-unsafe.o; objcopy --dump-section .text="$$b" build/pmm-bitmap-dishonest-boot.o; cmp "$$a" "$$b"
 	timeout 180 $(PYTHON) tests/test_pmm_bitmap_qemu.py --qemu "$(QEMU)"
+
+# Actual pinned HIA Core v8 native ELF64 x86-64 executable-header admission.
+# This is only a byte-level, caller-supplied image gate, not execve/ELF loading.
+.PHONY: test-elf64-exec-admit
+
+build/elf64-exec-admit.o: src/elf64_exec_admit.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.elf64-native.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/elf64-exec-admit.so: build/elf64-exec-admit.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/elf64-exec-unsafe.o: tests/negative/elf64_exec_allow_all.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.elf64-unsafe.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/elf64-exec-unsafe.so: build/elf64-exec-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+test-elf64-exec-admit: build/elf64-exec-admit.so build/elf64-exec-unsafe.so
+	timeout 90 $(PYTHON) tests/test_elf64_exec_admit.py build/elf64-exec-admit.so --object build/elf64-exec-admit.o
+	$(PYTHON) tests/test_elf64_exec_admit.py build/elf64-exec-unsafe.so --expect-unsafe
+	@set -eu; compiler=$$(command -v "$(HEPTA_COMPILER)"); \
+	a=$$(mktemp build/.elf64-repro1.XXXXXX); b=$$(mktemp build/.elf64-repro2.XXXXXX); \
+	trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH='' "$$compiler" < src/elf64_exec_admit.hepta > "$$a"; \
+	env -i PATH='' "$$compiler" < src/elf64_exec_admit.hepta > "$$b"; \
+	cmp build/elf64-exec-admit.o "$$a"; cmp "$$a" "$$b"
