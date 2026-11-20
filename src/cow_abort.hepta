@@ -97,23 +97,13 @@ block bad_ownership()
   ca_eo:u32 = const() {"value":6}
   ret(ca_eo)
 block clear_page(ca_pd:mutbuf,ca_ps:mutbuf,ca_pi:usize,ca_pj:usize,ca_pe:u8,ca_pz:u8)
-  ca_loopzero:u64 = const() {"value":0}
-  jump zero_loop(ca_pd,ca_ps,ca_pi,ca_pj,ca_pe,ca_pz,ca_loopzero)
-block zero_loop(ca_zd:mutbuf,ca_zs:mutbuf,ca_zi:usize,ca_zj:usize,ca_ze:u8,ca_zz:u8,ca_zk:u64)
-  ca_end:u64 = const() {"value":4096}
-  ca_more_zero_loop:bool = compare.lt(ca_zk,ca_end)
-  branch ca_more_zero_loop zero_one(ca_zd,ca_zs,ca_zi,ca_zj,ca_ze,ca_zz,ca_zk) finish(ca_zs,ca_zi,ca_zj,ca_ze,ca_zz)
-block zero_one(ca_bd:mutbuf,ca_bs:mutbuf,ca_bi:usize,ca_bj:usize,ca_be:u8,ca_bz:u8,ca_bk:u64)
-  ca_at_zero_one:usize = int.cast(ca_bk) {"mode":"wrap"}
-  _ = buffer.store(ca_bd,ca_at_zero_one,ca_bz)
-  ca_one_zero_one:u64 = const() {"value":1}
-  ca_next_zero_one:u64 = int.add.wrap(ca_bk,ca_one_zero_one)
-  jump zero_loop(ca_bd,ca_bs,ca_bi,ca_bj,ca_be,ca_bz,ca_next_zero_one)
-block finish(ca_fs:mutbuf,ca_fi:usize,ca_fj:usize,ca_fe:u8,ca_fz:u8)
-  ca_one_finish:u8 = const() {"value":1}
-  ca_restored:u8 = int.add.wrap(ca_fe,ca_one_finish)
-  _ = buffer.store(ca_fs,ca_fi,ca_restored)
-  _ = buffer.store(ca_fs,ca_fj,ca_fz)
-  ca_ok_finish:u32 = const() {"value":0}
-  ret(ca_ok_finish)
+  ca_page_begin:usize = const() {"value":0}
+  ca_page_bytes:usize = const() {"value":4096}
+  _ = buffer.fill_range(ca_pd,ca_page_begin,ca_page_bytes,ca_pz)
+  ca_restore_one:u8 = const() {"value":1}
+  ca_restored:u8 = int.add.wrap(ca_pe,ca_restore_one)
+  _ = buffer.store(ca_ps,ca_pi,ca_restored)
+  _ = buffer.store(ca_ps,ca_pj,ca_pz)
+  ca_success:u32 = const() {"value":0}
+  ret(ca_success)
 end
