@@ -3475,6 +3475,11 @@ owner_exercise64:
     movq $0, (%rsi)
     movq $0, PAGE_BYTES(%rsi)
 
+#ifdef HEPTAKERNEL_TEST_ELF_PAGE_HW
+    /* Isolated HIA-native file/BSS fill on real E820/PMM-owned physical pages.
+     * This is NON-HIA fixture dispatch, not Linux execve or a page mapper. */
+    call elf_page_hw_exercise64
+#endif
 
 #if defined(HEPTAKERNEL_TEST_COW_REFCOUNT_HW)
     /* Quiescent, explicitly NON-HIA hardware observer. These two slots
@@ -4162,6 +4167,183 @@ page_zero_recycle_check:
     call puts64
     ret
 
+
+/* Real guest RAM byte oracle for genuine native HIA ELF64 page filling.
+ * Both pages belong to the zone-B two-page run allocated by HIA PMM.
+ * The non-HIA bridge alone arranges the fixture, checks ownership and
+ * observes physical memory. No kernel ELF loader/privilege claim. */
+#ifdef HEPTAKERNEL_TEST_ELF_PAGE_HW
+elf_page_hw_exercise64:
+    leaq owner_descriptors+24(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    movq $14, %rdx
+    call owner_bind64
+    /* Copy immutable on-image file bytes and request to a guarded envelope. */
+    movabsq $0x9dc743a160b2e58f, %rax
+    movq %rax, elf_hw_guard_before(%rip)
+    movq %rax, elf_hw_guard_after(%rip)
+    movq %rax, elf_hw_receipt_guard_before(%rip)
+    movq %rax, elf_hw_receipt_guard_after(%rip)
+    leaq elf_page_fixture(%rip), %rsi
+    leaq elf_hw_envelope(%rip), %rdi
+    movl $390, %ecx
+    cld
+    rep movsq
+    movq $0x601000, %r14
+    movq %r14, %rdi
+    movabsq $0xe7e7e7e7e7e7e7e7, %rax
+    movl $512, %ecx
+    rep stosq
+    /* Deliberately seed a plausible SUCCESS receipt, so an HIA no-op is
+     * caught by full physical RAM rather than a missing receipt. */
+    movq $0xa5, elf_hw_receipt(%rip)
+    movq $0, elf_hw_receipt+8(%rip)
+    leaq elf_hw_envelope(%rip), %rdi
+#ifdef HEPTAKERNEL_TEST_ELF_PAGE_TRUNCATED
+    /* Same real source bytes but the final file byte is inaccessible.
+     * HIA must refuse *before* writing even one physical byte. */
+    movl $3119, %esi
+#else
+    movl $3120, %esi
+#endif
+    leaq elf_hw_receipt(%rip), %rdx
+    movl $16, %ecx
+    movq %r14, %r8
+    movl $4096, %r9d
+    call elf_page_f0          /* original HIA selfhost_elf .text */
+#ifdef HEPTAKERNEL_TEST_ELF_PAGE_TRUNCATED
+    cmpl $5, %eax
+    jne fail64
+    cmpq $0xa5, elf_hw_receipt(%rip)
+    jne fail64
+    cmpq $0, elf_hw_receipt+8(%rip)
+    jne fail64
+    xorq %rcx, %rcx
+elf_hw_refusal_scan:
+    cmpb $0xe7, (%r14,%rcx)
+    jne fail64
+    incq %rcx
+    cmpq $4096, %rcx
+    jb elf_hw_refusal_scan
+    leaq message_elf_hw_truncated(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0xa5, elf_hw_receipt(%rip)
+    jne fail64
+    cmpq $0, elf_hw_receipt+8(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_ELF_PAGE_NOOP
+    /* Dishonest native HIA returns success but leaves both physical ends
+     * at the original dirty sentinel. The independent observer detects it. */
+    cmpb $0xe7, (%r14)
+    jne fail64
+    cmpb $0xe7, 4095(%r14)
+    jne fail64
+    leaq message_elf_hw_noop(%rip), %rsi
+    call puts64
+    jmp fail64
+#endif
+#ifdef HEPTAKERNEL_TEST_ELF_PAGE_DECOY
+    /* A malicious NON-HIA post-call store must defeat the byte oracle,
+     * notwithstanding correct HIA return, receipt and original object. */
+    movb $0xec, 2048(%r14)
+    cmpb $0xec, 2048(%r14)
+    jne fail64
+    cmpb $0x66, 2048(%r14)     /* file byte (2048 - 123) % 8 = 5 */
+    je fail64
+    leaq message_elf_hw_decoy(%rip), %rsi
+    call puts64
+    jmp fail64
+#endif
+    /* Independent expected bytes: 123 leading zeroes, 3073 file bytes
+     * with a known eight-byte pattern, 900 BSS/unused zeroes. */
+    xorq %r12, %r12
+elf_hw_file_scan:
+    xorq %r10, %r10
+    cmpq $123, %r12
+    jb elf_hw_file_compare
+    cmpq $3196, %r12
+    jae elf_hw_file_compare
+    movq %r12, %r10
+    subq $123, %r10
+    andq $7, %r10
+    leaq elf_page_pattern(%rip), %r11
+    movzbl (%r11,%r10,1), %r10d
+elf_hw_file_compare:
+    cmpb %r10b, (%r14,%r12,1)
+    jne fail64
+    incq %r12
+    cmpq $4096, %r12
+    jb elf_hw_file_scan
+    /* HIA must not modify either red zone or source file payload. */
+    movabsq $0x9dc743a160b2e58f, %rax
+    cmpq %rax, elf_hw_guard_before(%rip)
+    jne fail64
+    cmpq %rax, elf_hw_guard_after(%rip)
+    jne fail64
+    cmpq %rax, elf_hw_receipt_guard_before(%rip)
+    jne fail64
+    cmpq %rax, elf_hw_receipt_guard_after(%rip)
+    jne fail64
+    leaq elf_page_fixture+40(%rip), %rsi
+    leaq elf_hw_envelope+40(%rip), %rdi
+    movl $385, %ecx
+    repe cmpsq
+    jne fail64
+
+    /* Fill the *second* PMM-owned physical frame from the same real bytes.
+     * It is entirely BSS because 123+3073 fits into the first page. */
+    movq $1, elf_hw_envelope+32(%rip)
+    movq $0x602000, %r14
+    movq %r14, %rdi
+    movabsq $0xe7e7e7e7e7e7e7e7, %rax
+    movl $512, %ecx
+    rep stosq
+    movq $0xa5, elf_hw_receipt(%rip)
+    movq $0, elf_hw_receipt+8(%rip)
+    leaq elf_hw_envelope(%rip), %rdi
+    movl $3120, %esi
+    leaq elf_hw_receipt(%rip), %rdx
+    movl $16, %ecx
+    movq %r14, %r8
+    movl $4096, %r9d
+    call elf_page_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0xa5, elf_hw_receipt(%rip)
+    jne fail64
+    cmpq $0, elf_hw_receipt+8(%rip)
+    jne fail64
+    xorq %rcx, %rcx
+elf_hw_bss_scan:
+    cmpb $0, (%r14,%rcx,1)
+    jne fail64
+    incq %rcx
+    cmpq $4096, %rcx
+    jb elf_hw_bss_scan
+    movabsq $0x9dc743a160b2e58f, %rax
+    cmpq %rax, elf_hw_guard_before(%rip)
+    jne fail64
+    cmpq %rax, elf_hw_guard_after(%rip)
+    jne fail64
+    cmpq %rax, elf_hw_receipt_guard_before(%rip)
+    jne fail64
+    cmpq %rax, elf_hw_receipt_guard_after(%rip)
+    jne fail64
+    leaq elf_page_fixture+40(%rip), %rsi
+    leaq elf_hw_envelope+40(%rip), %rdi
+    movl $385, %ecx
+    repe cmpsq
+    jne fail64
+    leaq message_elf_hw_pass(%rip), %rsi
+    call puts64
+    ret
+#endif
+#endif
+
 /* Input: physical base in rdi, page count in rsi. The existing bounded
  * firmware-record bytes at e820_request+24 remain unchanged. */
 owner_admit64:
@@ -4530,6 +4712,14 @@ message_cow_split_hw_pass:
     .asciz "HEPTAKERNEL HIA COW SPLIT PHYSICAL RAM AND COUNTS VERIFIED\r\n"
 message_cow_split_stale:
     .asciz "HEPTAKERNEL HIA COW SPLIT STALE EXPECTED-OLD REFUSED\r\n"
+message_elf_hw_pass:
+    .asciz "HEPTAKERNEL HIA ELF64 PMM PHYSICAL PAGE FILE BSS VERIFIED\\r\\n"
+message_elf_hw_truncated:
+    .asciz "HEPTAKERNEL HIA ELF64 TRUNCATED REFUSED PHYSICAL UNCHANGED\\r\\n"
+message_elf_hw_noop:
+    .asciz "HEPTAKERNEL HIA ELF64 DISHONEST NOOP PHYSICAL MISMATCH DETECTED\\r\\n"
+message_elf_hw_decoy:
+    .asciz "HEPTAKERNEL HIA ELF64 POST-CALL PHYSICAL DECOY DETECTED\\r\\n"
 message_page_copy_hw_pass:
     .asciz "HEPTAKERNEL HIA PHYSICAL PAGE COPY TWO PAIRS VERIFIED\r\n"
 message_page_copy_detach_pass:
@@ -4560,6 +4750,21 @@ message_newline:
     .asciz "\r\n"
 hex_digits:
     .ascii "0123456789abcdef"
+.balign 8
+elf_page_pattern:
+    .byte 0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88
+.balign 8
+elf_page_fixture:
+    .quad 7, 3073, 8192, 123, 0
+    .fill 7,1,0xe9
+    .rept 384
+        .byte 0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88
+    .endr
+    .byte 0x11
+elf_page_fixture_end:
+.if (elf_page_fixture_end - elf_page_fixture) != 3120
+.error "ELF page fill physical fixture length mismatch"
+.endif
 .balign 8
 boot_cases:
     .incbin "build/boot-cases.bin"
@@ -4806,6 +5011,14 @@ page_zero_hw_guard_before: .skip 8
 page_zero_hw_reply:        .skip 16
 page_zero_hw_guard_after:  .skip 8
 page_zero_hw_empty_request: .skip 1
+/* The NON-HIA fixture is mutable; only genuine HIA fills allocated RAM. */
+.balign 8
+elf_hw_guard_before: .skip 8
+elf_hw_envelope: .skip 3120
+elf_hw_guard_after: .skip 8
+elf_hw_receipt_guard_before: .skip 8
+elf_hw_receipt: .skip 16
+elf_hw_receipt_guard_after: .skip 8
 case_cursor:      .skip 8
 case_index:       .skip 8
 physical_probes:  .skip 8
