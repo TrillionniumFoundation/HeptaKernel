@@ -15,7 +15,11 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import sys
 
+# CI invokes this source with -I: admit only our adjacent audited tools,
+# never a caller-controlled PYTHONPATH or current working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from linux_inventory import enumerate_entries, is_kconfig, git, json_line
 from linux_kconfig_relations import extract
 
