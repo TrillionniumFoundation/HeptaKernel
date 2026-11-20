@@ -93,6 +93,11 @@ jobs:
         run: |
           make test-pmm-bitmap-integrity HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Verify live native HIA complete PMM bitmap and independent QEMU negative controls
+        shell: bash
+        run: |
+          make test-pmm-bitmap-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify native HIA live-PMM and COW PTE frame binding, including malicious control
         shell: bash
         run: |
@@ -338,6 +343,14 @@ jobs:
             build/pmm-bitmap-integrity.so
             build/pmm-bitmap-unsafe.o
             build/pmm-bitmap-unsafe.so
+            build/pmm-bitmap-hardware-report.json
+            build/pmm-bitmap-hw-multiboot.elf
+            build/pmm-bitmap-free-stale-multiboot.elf
+            build/pmm-bitmap-reserved-missing-multiboot.elf
+            build/pmm-bitmap-tail-dirty-multiboot.elf
+            build/pmm-bitmap-noop-multiboot.elf
+            build/pmm-bitmap-boot.o
+            build/pmm-bitmap-dishonest-boot.o
             build/cow-frame-binding-qemu-report.json
             build/cow-binding-hw-multiboot.elf
             build/cow-binding-pte-stale-multiboot.elf

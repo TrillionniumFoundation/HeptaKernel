@@ -478,7 +478,7 @@ build/pdpt-1g-%.elf: build/boot-pdpt-1g-%.o $(PDPT_1G_BOOT_SUPPORT) arch/x86_64/
 build/pdpt-1g-%-multiboot.elf: build/pdpt-1g-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-boot: test-cow-frame-binding-hw test-cow-integrated-hw test-cow-pte-hw test-cow-split-hw test-cow-refcount-hw test-page-copy-hw test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
+test-boot: test-pmm-bitmap-hw test-cow-frame-binding-hw test-cow-integrated-hw test-cow-pte-hw test-cow-split-hw test-cow-refcount-hw test-page-copy-hw test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
 	$(PYTHON) tests/test_boot.py --qemu "$(QEMU)"
 
 test-guard-pages: build/kernel-host.so
@@ -1610,3 +1610,55 @@ test-pmm-bitmap-integrity: build/pmm-bitmap-integrity.so build/pmm-bitmap-unsafe
 	env -i PATH='' "$$compiler" < src/pmm_bitmap_integrity.hepta > "$$one"; \
 	env -i PATH='' "$$compiler" < src/pmm_bitmap_integrity.hepta > "$$two"; \
 	cmp build/pmm-bitmap-integrity.o "$$one"; cmp "$$one" "$$two"
+
+
+# Real HIA PMM integrity scan gates the QEMU hardware COW path.
+# The x86 privileged setup, exception return and observer remain NON-HIA.
+.PHONY: test-pmm-bitmap-hw
+build/pmm-bitmap-boot.o: build/pmm-bitmap-integrity.o
+	objcopy --redefine-sym f0=pmm_bitmap_integrity_f0 "$<" "$@"
+
+build/pmm-bitmap-dishonest-boot.o: build/pmm-bitmap-unsafe.o
+	objcopy --redefine-sym f0=pmm_bitmap_integrity_f0 "$<" "$@"
+
+PMM_BITMAP_HW_FLAGS := -DHEPTAKERNEL_TEST_COW_PTE_HW=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED=1 -DHEPTAKERNEL_TEST_COW_FRAME_BINDING_HW=1 -DHEPTAKERNEL_TEST_PMM_BITMAP_COW_HW=1
+build/boot-pmm-bitmap-hw.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc $(PMM_BITMAP_HW_FLAGS) -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-pmm-bitmap-free-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc $(PMM_BITMAP_HW_FLAGS) -DHEPTAKERNEL_TEST_PMM_BITMAP_FREE_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-pmm-bitmap-reserved-missing.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc $(PMM_BITMAP_HW_FLAGS) -DHEPTAKERNEL_TEST_PMM_BITMAP_RESERVED_MISSING=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-pmm-bitmap-tail-dirty.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc $(PMM_BITMAP_HW_FLAGS) -DHEPTAKERNEL_TEST_PMM_BITMAP_TAIL_DIRTY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-pmm-bitmap-noop.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc $(PMM_BITMAP_HW_FLAGS) -DHEPTAKERNEL_TEST_PMM_BITMAP_FREE_STALE=1 -DHEPTAKERNEL_TEST_PMM_BITMAP_NOOP=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+PMM_BITMAP_HW_SUPPORT := $(COW_BINDING_HW_SUPPORT) build/cow-frame-binding-boot.o
+build/pmm-bitmap-hw.elf: build/boot-pmm-bitmap-hw.o $(PMM_BITMAP_HW_SUPPORT) build/pmm-bitmap-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-pmm-bitmap-hw.o $(PMM_BITMAP_HW_SUPPORT) build/pmm-bitmap-boot.o
+
+build/pmm-bitmap-free-stale.elf: build/boot-pmm-bitmap-free-stale.o $(PMM_BITMAP_HW_SUPPORT) build/pmm-bitmap-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-pmm-bitmap-free-stale.o $(PMM_BITMAP_HW_SUPPORT) build/pmm-bitmap-boot.o
+
+build/pmm-bitmap-reserved-missing.elf: build/boot-pmm-bitmap-reserved-missing.o $(PMM_BITMAP_HW_SUPPORT) build/pmm-bitmap-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-pmm-bitmap-reserved-missing.o $(PMM_BITMAP_HW_SUPPORT) build/pmm-bitmap-boot.o
+
+build/pmm-bitmap-tail-dirty.elf: build/boot-pmm-bitmap-tail-dirty.o $(PMM_BITMAP_HW_SUPPORT) build/pmm-bitmap-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-pmm-bitmap-tail-dirty.o $(PMM_BITMAP_HW_SUPPORT) build/pmm-bitmap-boot.o
+
+build/pmm-bitmap-noop.elf: build/boot-pmm-bitmap-noop.o $(PMM_BITMAP_HW_SUPPORT) build/pmm-bitmap-dishonest-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-pmm-bitmap-noop.o $(PMM_BITMAP_HW_SUPPORT) build/pmm-bitmap-dishonest-boot.o
+
+build/pmm-bitmap-%-multiboot.elf: build/pmm-bitmap-%.elf
+	objcopy -O elf32-i386 "$<" "$@"
+
+test-pmm-bitmap-hw: build/pmm-bitmap-hw-multiboot.elf build/pmm-bitmap-free-stale-multiboot.elf build/pmm-bitmap-reserved-missing-multiboot.elf build/pmm-bitmap-tail-dirty-multiboot.elf build/pmm-bitmap-noop-multiboot.elf
+	@set -eu; a=$$(mktemp build/.pmm-bitmap-qemu-a.XXXXXX); b=$$(mktemp build/.pmm-bitmap-qemu-b.XXXXXX); \
+	  trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	  objcopy --dump-section .text="$$a" build/pmm-bitmap-integrity.o; objcopy --dump-section .text="$$b" build/pmm-bitmap-boot.o; cmp "$$a" "$$b"; \
+	  objcopy --dump-section .text="$$a" build/pmm-bitmap-unsafe.o; objcopy --dump-section .text="$$b" build/pmm-bitmap-dishonest-boot.o; cmp "$$a" "$$b"
+	timeout 180 $(PYTHON) tests/test_pmm_bitmap_qemu.py --qemu "$(QEMU)"

@@ -2587,6 +2587,79 @@ cow_pte_hardware_exercise64:
     cmpb $7, owner_b_state+64(%rip)
     jne fail64
 
+#ifdef HEPTAKERNEL_TEST_PMM_BITMAP_COW_HW
+    /* Actual HIA PMM bitmap, not a synthetic copy; NON-HIA observer only. */
+    movq $0x600000, pmm_bitmap_live_request(%rip)
+    movq $17, pmm_bitmap_live_request+8(%rip)
+    movq $1, pmm_bitmap_live_request+16(%rip)
+#ifdef HEPTAKERNEL_TEST_PMM_BITMAP_FREE_STALE
+    movq $13, owner_b_state+32(%rip) /* true free count remains 14 */
+#endif
+#ifdef HEPTAKERNEL_TEST_PMM_BITMAP_RESERVED_MISSING
+    xorb $1, owner_b_state+64(%rip) /* forbidden missing reserved page */
+#endif
+#ifdef HEPTAKERNEL_TEST_PMM_BITMAP_TAIL_DIRTY
+    orb $0x80, owner_b_state+66(%rip) /* bit 23 past page count 17 */
+#endif
+    /* Full-byte snapshot AFTER injection proves scanner never mutates PMM. */
+    leaq owner_b_state(%rip), %rsi
+    leaq cow_frame_binding_snapshot(%rip), %rdi
+    movl $(STATE_BYTES / 8), %ecx
+    rep movsq
+    movq page_table_4m(%rip), %r12
+    leaq pmm_bitmap_live_request(%rip), %rdi
+    movl $24, %esi
+    leaq owner_b_state(%rip), %rdx
+    movl $STATE_BYTES, %ecx
+    leaq pmm_bitmap_live_unused(%rip), %r8
+    movl $8, %r9d
+    call pmm_bitmap_integrity_f0 /* unchanged HIA selfhost native object */
+    movl %eax, %r14d
+    leaq owner_b_state(%rip), %rsi
+    leaq cow_frame_binding_snapshot(%rip), %rdi
+    movl $(STATE_BYTES / 8), %ecx
+    repe cmpsq
+    jne fail64
+    cmpq %r12, page_table_4m(%rip)
+    jne fail64
+    cmpq $0x600000, pmm_bitmap_live_request(%rip)
+    jne fail64
+    cmpq $17, pmm_bitmap_live_request+8(%rip)
+    jne fail64
+    cmpq $1, pmm_bitmap_live_request+16(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_PMM_BITMAP_NOOP
+    cmpl $0, %r14d
+    jne fail64
+    leaq message_pmm_bitmap_noop(%rip), %rsi
+    call puts64
+    jmp fail64
+#elif defined(HEPTAKERNEL_TEST_PMM_BITMAP_FREE_STALE)
+    cmpl $5, %r14d
+    jne fail64
+    leaq message_pmm_bitmap_free_stale(%rip), %rsi
+    call puts64
+    jmp fail64
+#elif defined(HEPTAKERNEL_TEST_PMM_BITMAP_RESERVED_MISSING)
+    cmpl $4, %r14d
+    jne fail64
+    leaq message_pmm_bitmap_reserved_missing(%rip), %rsi
+    call puts64
+    jmp fail64
+#elif defined(HEPTAKERNEL_TEST_PMM_BITMAP_TAIL_DIRTY)
+    cmpl $4, %r14d
+    jne fail64
+    leaq message_pmm_bitmap_tail_dirty(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %r14d, %r14d
+    jne fail64
+    leaq message_pmm_bitmap_live(%rip), %rsi
+    call puts64
+#endif
+#endif /* HEPTAKERNEL_TEST_PMM_BITMAP_COW_HW */
+
     movq $0x601000, cow_frame_binding_request(%rip)
     movq $0x602000, cow_frame_binding_request+8(%rip)
     movq cow_pte_old(%rip), %rax
@@ -4264,6 +4337,16 @@ message_cow_pte_dishonest:
     .asciz "HEPTAKERNEL HIA COW PTE DISHONEST NOOP REJECTED\r\n"
 message_cow_pte_bypass:
     .asciz "HEPTAKERNEL HIA COW PTE RESTORE BYPASS REFAULT VERIFIED\r\n"
+message_pmm_bitmap_live:
+    .asciz "HEPTAKERNEL HIA PMM LIVE COMPLETE BITMAP VERIFIED\r\n"
+message_pmm_bitmap_free_stale:
+    .asciz "HEPTAKERNEL HIA PMM STALE FREE COUNT REFUSED UNCHANGED\r\n"
+message_pmm_bitmap_reserved_missing:
+    .asciz "HEPTAKERNEL HIA PMM MISSING RESERVED BIT REFUSED UNCHANGED\r\n"
+message_pmm_bitmap_tail_dirty:
+    .asciz "HEPTAKERNEL HIA PMM TAIL BIT REFUSED UNCHANGED\r\n"
+message_pmm_bitmap_noop:
+    .asciz "HEPTAKERNEL HIA PMM DISHONEST ACCEPT DETECTED\r\n"
 message_cow_frame_binding_live:
     .asciz "HEPTAKERNEL HIA COW FRAME BINDING LIVE PMM PTE VERIFIED\r\n"
 message_cow_frame_binding_bitmap:
@@ -4526,6 +4609,8 @@ cow_integrated_guard_before: .skip 8
 cow_integrated_state:        .skip 4096
 cow_integrated_guard_after:  .skip 8
 /* 48-byte HIA request; actual current PTE and HIA PMM are NOT snapshots. */
+pmm_bitmap_live_request: .skip 24
+pmm_bitmap_live_unused: .skip 8
 cow_frame_binding_request: .skip 48
 .balign 16
 cow_frame_binding_snapshot: .skip STATE_BYTES
