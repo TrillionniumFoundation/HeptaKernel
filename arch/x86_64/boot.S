@@ -3850,17 +3850,17 @@ message_pt_nx_stale:
 message_pt_nx_bypass:
     .asciz "HEPTAKERNEL HIA PT NX BYPASS EXECUTED\r\n"
 message_cow_pte_mapped:
-    .asciz "HEPTAKERNEL HIA COW PTE SOURCE MAPPING VERIFIED\\r\\n"
+    .asciz "HEPTAKERNEL HIA COW PTE SOURCE MAPPING VERIFIED\r\n"
 message_cow_pte_fault_observed:
-    .asciz "HEPTAKERNEL COW PTE REAL WRITE PROTECT FAULT OBSERVED\\r\\n"
+    .asciz "HEPTAKERNEL COW PTE REAL WRITE PROTECT FAULT OBSERVED\r\n"
 message_cow_pte_remap_success:
-    .asciz "HEPTAKERNEL HIA COW PTE HARDWARE REMAP AND PHYSICAL RAM VERIFIED\\r\\n"
+    .asciz "HEPTAKERNEL HIA COW PTE HARDWARE REMAP AND PHYSICAL RAM VERIFIED\r\n"
 message_cow_pte_stale:
-    .asciz "HEPTAKERNEL HIA COW PTE STALE EXPECTED OLD REJECTED\\r\\n"
+    .asciz "HEPTAKERNEL HIA COW PTE STALE EXPECTED OLD REJECTED\r\n"
 message_cow_pte_dishonest:
-    .asciz "HEPTAKERNEL HIA COW PTE DISHONEST NOOP REJECTED\\r\\n"
+    .asciz "HEPTAKERNEL HIA COW PTE DISHONEST NOOP REJECTED\r\n"
 message_cow_pte_bypass:
-    .asciz "HEPTAKERNEL HIA COW PTE RESTORE BYPASS REFAULT VERIFIED\\r\\n"
+    .asciz "HEPTAKERNEL HIA COW PTE RESTORE BYPASS REFAULT VERIFIED\r\n"
 message_pt_protect_pass:
     .asciz "HEPTAKERNEL HIA LIVE PT WRITE PROTECT VERIFIED\r\n"
 message_pt_protect_fault:
