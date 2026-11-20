@@ -552,11 +552,13 @@ hia_idt_next64:
     incq %r12
     cmpq $256, %r12
     jb hia_idt_next64
-#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS) || defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT) || defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT) || defined(HEPTAKERNEL_TEST_PT_NX_FAULT) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT) || defined(HEPTAKERNEL_TEST_PDE_2M_UNMAP_FAULT)
+#if defined(HEPTAKERNEL_TEST_NX_FETCH) || defined(HEPTAKERNEL_TEST_NX_BYPASS) || defined(HEPTAKERNEL_TEST_WP_STORE) || defined(HEPTAKERNEL_TEST_WP_BYPASS) || defined(HEPTAKERNEL_TEST_PT_REVOKE_FAULT) || defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT) || defined(HEPTAKERNEL_TEST_PT_NX_FAULT) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT) || defined(HEPTAKERNEL_TEST_PDE_2M_UNMAP_FAULT || defined(HEPTAKERNEL_TEST_COW_PTE_HW)
     /* HIA also owns updating the #PF descriptor, conditional on old bytes. */
     movq $14, idt_gate_request(%rip)
 #ifdef HEPTAKERNEL_TEST_US_FAULT
     leaq us_page_fault64(%rip), %rax
+#elif defined(HEPTAKERNEL_TEST_COW_PTE_HW)
+    leaq cow_pte_page_fault64(%rip), %rax
 #elif defined(HEPTAKERNEL_TEST_PT_NX_FAULT)
     leaq pt_nx_page_fault64(%rip), %rax
 #elif defined(HEPTAKERNEL_TEST_PT_PROTECT_FAULT)
@@ -682,6 +684,11 @@ hia_idt_next64:
     call pte_live_exercise64
     leaq message_pte_pass(%rip), %rsi
     call puts64
+#ifdef HEPTAKERNEL_TEST_COW_PTE_HW
+    /* Terminal CPU fault/IRET test of the ORIGINAL native HIA PTE switch. */
+    call cow_pte_hardware_exercise64
+    jmp fail64
+#endif
 
     /* Genuine HIA multi-arena router, after the E820 admission gate.
      * Each read-only fixture includes independent expected return fields.
@@ -1148,6 +1155,125 @@ pt_nx_page_fault64:
     call puts64
     movl $0x1d, %eax             /* QEMU debug exit 59 */
     jmp debug_exit64
+#endif
+
+
+/* Isolated real supervisor write-protection fault. HIA performs the exact-old
+ * COW PTE remap INSIDE the hardware fault path. IDT, CR2, INVLPG and IRETQ
+ * belong exclusively to this non-HIA test bridge. This is not a Linux VM. */
+#ifdef HEPTAKERNEL_TEST_COW_PTE_HW
+cow_pte_page_fault64:
+    cli
+    leaq ist_stack_base(%rip), %rax
+    cmpq %rax, %rsp
+    jbe exception64
+    leaq ist_stack_top(%rip), %rax
+    cmpq %rax, %rsp
+    jae exception64
+    cmpq $3, (%rsp)                 /* hardware #PF P=1, W=1, U=0 */
+    jne exception64
+    leaq cow_pte_store_insn(%rip), %rax
+    cmpq %rax, 8(%rsp)              /* retry EXACT faulting store */
+    jne exception64
+    cmpq $0x08, 16(%rsp)
+    jne exception64
+    movq %cr2, %rax
+    cmpq $ARENA_MIN, %rax
+    jne exception64
+    cmpq $1, cow_pte_stage(%rip)
+    je cow_pte_second_fault64
+    cmpq $0, cow_pte_stage(%rip)
+    jne exception64
+    movq %rdi, cow_pte_saved_rdi(%rip)
+    movq %r10, cow_pte_saved_r10(%rip)
+    movq %rsp, cow_pte_fault_rsp(%rip)
+    leaq emergency_stack_top(%rip), %rsp
+    andq $-16, %rsp
+    leaq message_cow_pte_fault_observed(%rip), %rsi
+    call puts64
+    /* A legitimate read-only fault must leave the original frame pristine. */
+    movabsq $0x1122334455667788, %rax
+    cmpq %rax, 0x601000
+    jne fail64
+    movabsq $0x8899aabbccddeeff, %rax
+    cmpq %rax, 0x602000
+    jne fail64
+    movq $-1, cow_pte_reply(%rip)
+    movq $-1, cow_pte_reply+8(%rip)
+#ifdef HEPTAKERNEL_TEST_COW_PTE_STALE
+    /* Both fields remain a VALID transition, but expected-old is stale. */
+    xorq $8, cow_pte_request+8(%rip)
+    xorq $8, cow_pte_request+16(%rip)
+#endif
+    leaq cow_pte_request(%rip), %rdi
+    movl $32, %esi
+    leaq cow_pte_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq page_table_4m(%rip), %r8
+    movl $4096, %r9d
+    call cow_pte_f0                 /* ORIGINAL selfhost-compiled HIA .text */
+#ifdef HEPTAKERNEL_TEST_COW_PTE_STALE
+    cmpl $9, %eax
+    jne fail64
+    cmpq $9, cow_pte_reply(%rip)
+    jne fail64
+    cmpq $0, cow_pte_reply+8(%rip)
+    jne fail64
+    movq cow_pte_old(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+    movabsq $0x1122334455667788, %rax
+    cmpq %rax, 0x601000
+    jne fail64
+    movabsq $0x8899aabbccddeeff, %rax
+    cmpq %rax, 0x602000
+    jne fail64
+    leaq message_cow_pte_stale(%rip), %rsi
+    call puts64
+    jmp fail64                    /* expected rejection, exit 35 */
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, cow_pte_reply(%rip)
+    jne cow_pte_dishonest64
+    movq cow_pte_request+16(%rip), %rax
+    cmpq %rax, cow_pte_reply+8(%rip)
+    jne cow_pte_dishonest64
+    cmpq %rax, page_table_4m(%rip)
+    jne cow_pte_dishonest64
+    movq $1, cow_pte_stage(%rip)
+#ifdef HEPTAKERNEL_TEST_COW_PTE_BYPASS
+    /* Test-only adversarial restoration after HIA's successful commit. */
+    movq cow_pte_old(%rip), %rax
+    movq %rax, page_table_4m(%rip)
+#endif
+    movq $ARENA_MIN, %rax
+    invlpg (%rax)                 /* explicitly NON-HIA privileged bridge */
+    movq cow_pte_saved_rdi(%rip), %rdi
+    movq cow_pte_saved_r10(%rip), %r10
+    movq cow_pte_fault_rsp(%rip), %rsp
+    addq $8, %rsp                 /* skip CPU #PF error code */
+    iretq                         /* retry identical store with new mapping */
+    jmp fail64
+#endif
+cow_pte_dishonest64:
+    leaq message_cow_pte_dishonest(%rip), %rsi
+    call puts64
+    jmp fail64
+cow_pte_second_fault64:
+#ifdef HEPTAKERNEL_TEST_COW_PTE_BYPASS
+    movq cow_pte_old(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne exception64
+    leaq emergency_stack_top(%rip), %rsp
+    andq $-16, %rsp
+    leaq message_cow_pte_bypass(%rip), %rsi
+    call puts64
+    movl $0x2f, %eax              /* QEMU exit 95, retry fault enforced */
+    jmp debug_exit64
+#else
+    jmp exception64
+#endif
 #endif
 
 /* Independent MMU observer for a real native HIA RW->RO downgrade.
@@ -2065,6 +2191,122 @@ debug_exit64:
     jmp 8b
 
 
+
+
+#ifdef HEPTAKERNEL_TEST_COW_PTE_HW
+/* Genuine HIA page-table data operation; non-HIA hardware observer only.
+ * Two physically separate E820-admitted 4KiB frames live in 6–8MiB RAM.
+ * Source and target page contents are initialized by the test fixture, not
+ * claimed to have been allocated/copied by HIA in this experiment. */
+cow_pte_hardware_exercise64:
+    movq $0x601000, %rdi
+    movq $1, %rsi
+    call owner_admit64
+    movq $0x602000, %rdi
+    movq $1, %rsi
+    call owner_admit64
+    movq $0x601000, %rdi
+    movabsq $0x1122334455667788, %rax
+    movl $512, %ecx
+    rep stosq
+    movq $0x602000, %rdi
+    movabsq $0x8899aabbccddeeff, %rax
+    movl $512, %ecx
+    rep stosq
+    /* The initial 4MiB leaf was already installed by native HIA.
+     * Native HIA now installs the shared user/RO/NX source mapping. */
+    movq $0, pt_commit_request(%rip)
+    movq page_table_4m(%rip), %rax
+    movq %rax, pt_commit_request+8(%rip)
+    movabsq $0x8000000000601005, %rax
+    movq %rax, pt_commit_request+16(%rip)
+    movl pte_caps(%rip), %eax
+    movq %rax, pt_commit_request+24(%rip)
+    movq $-1, pt_commit_reply(%rip)
+    movq $-1, pt_commit_reply+8(%rip)
+    leaq pt_commit_request(%rip), %rdi
+    movl $32, %esi
+    leaq pt_commit_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq page_table_4m(%rip), %r8
+    movl $4096, %r9d
+    call pt_commit_f0               /* pre-fault PTE installed by native HIA */
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, pt_commit_reply(%rip)
+    jne fail64
+    movabsq $0x8000000000601005, %rax
+    cmpq %rax, pt_commit_reply+8(%rip)
+    jne fail64
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+    movq %cr3, %rax
+    movq %rax, %cr3               /* NON-HIA test-only TLB invalidation */
+    movq $ARENA_MIN, %rdi
+    movabsq $0x1122334455667788, %rax
+    cmpq %rax, (%rdi)              /* warm original physical mapping */
+    jne fail64
+    movq page_table_4m(%rip), %rax /* CPU may set Accessed bit */
+    testq $1, %rax
+    jz fail64
+    testq $4, %rax
+    jz fail64
+    testq $2, %rax
+    jnz fail64
+    movq %rax, cow_pte_old(%rip)
+    movq $0, cow_pte_request(%rip)
+    movq %rax, cow_pte_request+8(%rip)
+    movabsq $0x000ffffffffff000, %rdx
+    notq %rdx
+    andq %rax, %rdx
+    movabsq $0x602000, %rax
+    orq %rdx, %rax
+    orq $2, %rax
+    movq %rax, cow_pte_request+16(%rip)
+    movl pte_caps(%rip), %eax
+    movq %rax, cow_pte_request+24(%rip)
+    movq $0, cow_pte_stage(%rip)
+    leaq message_cow_pte_mapped(%rip), %rsi
+    call puts64
+    movq $ARENA_MIN, %rdi
+    movabsq $0xd4c3b2a1908f7e6d, %r10
+cow_pte_store_insn:
+    movq %r10, (%rdi)             /* MUST first #PF at CPL0, P=1,W=1 */
+    cmpq $1, cow_pte_stage(%rip)
+    jne fail64
+    movabsq $0xd4c3b2a1908f7e6d, %rax
+    cmpq %rax, (%rdi)             /* actual VA now targets private frame */
+    jne fail64
+    movq cow_pte_request+16(%rip), %rax
+    orq $64, %rax                 /* actual CPU sets PTE.Dirty on retry */
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+    movq $0x601000, %r8
+    movq $0x602000, %r9
+    movabsq $0x1122334455667788, %r11
+    movabsq $0x8899aabbccddeeff, %r12
+    movabsq $0xd4c3b2a1908f7e6d, %r13
+    xorq %rcx, %rcx
+cow_pte_bytes_oracle_loop:
+    cmpq %r11, (%r8,%rcx,8)       /* source page ALL 4096 bytes intact */
+    jne fail64
+    testq %rcx, %rcx
+    jnz cow_pte_oracle_unwritten
+    cmpq %r13, (%r9,%rcx,8)
+    jne fail64
+    jmp cow_pte_oracle_next
+cow_pte_oracle_unwritten:
+    cmpq %r12, (%r9,%rcx,8)       /* destination's remaining 4088 bytes */
+    jne fail64
+cow_pte_oracle_next:
+    incq %rcx
+    cmpq $512, %rcx
+    jb cow_pte_bytes_oracle_loop
+    leaq message_cow_pte_remap_success(%rip), %rsi
+    call puts64
+    movl $0x25, %eax              /* QEMU exit 75 */
+    jmp debug_exit64
+#endif
 
 /* One active 4KiB PTE is native HIA generated. The parent PDE and other
  * leaves remain in the explicitly non-HIA test bridge. */
@@ -3607,6 +3849,18 @@ message_pt_nx_stale:
     .asciz "HEPTAKERNEL HIA PT NX STALE OLD REJECTED\r\n"
 message_pt_nx_bypass:
     .asciz "HEPTAKERNEL HIA PT NX BYPASS EXECUTED\r\n"
+message_cow_pte_mapped:
+    .asciz "HEPTAKERNEL HIA COW PTE SOURCE MAPPING VERIFIED\\r\\n"
+message_cow_pte_fault_observed:
+    .asciz "HEPTAKERNEL COW PTE REAL WRITE PROTECT FAULT OBSERVED\\r\\n"
+message_cow_pte_remap_success:
+    .asciz "HEPTAKERNEL HIA COW PTE HARDWARE REMAP AND PHYSICAL RAM VERIFIED\\r\\n"
+message_cow_pte_stale:
+    .asciz "HEPTAKERNEL HIA COW PTE STALE EXPECTED OLD REJECTED\\r\\n"
+message_cow_pte_dishonest:
+    .asciz "HEPTAKERNEL HIA COW PTE DISHONEST NOOP REJECTED\\r\\n"
+message_cow_pte_bypass:
+    .asciz "HEPTAKERNEL HIA COW PTE RESTORE BYPASS REFAULT VERIFIED\\r\\n"
 message_pt_protect_pass:
     .asciz "HEPTAKERNEL HIA LIVE PT WRITE PROTECT VERIFIED\r\n"
 message_pt_protect_fault:
@@ -3834,6 +4088,13 @@ pt_nx_request:       .skip 32
 pt_nx_reply:         .skip 16
 pt_nx_observed:      .skip 8
 pt_nx_armed:         .skip 8
+cow_pte_request:      .skip 32
+cow_pte_reply:        .skip 16
+cow_pte_old:          .skip 8
+cow_pte_stage:        .skip 8
+cow_pte_fault_rsp:    .skip 8
+cow_pte_saved_rdi:    .skip 8
+cow_pte_saved_r10:    .skip 8
 pt_protect_request:  .skip 32
 pt_protect_reply:    .skip 16
 pt_protect_observed: .skip 8
