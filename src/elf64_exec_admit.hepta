@@ -1,10 +1,10 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
 fn elf64_exec_admit(image:readbuf,reply:mutbuf,scratch:mutbuf) -> (u32) effects(read,trap) entry(start)
-block start(blk0_image:readbuf,blk0_reply:mutbuf,blk0_scratch:mutbuf)
-  n:usize = buffer.len(blk0_image)
+block start(image:readbuf,reply:mutbuf,scratch:mutbuf)
+  n:usize = buffer.len(image)
   min:usize = const() {"value":64}
   long:bool = compare.ge(n,min)
-  branch long magic(blk0_image) bad_short()
+  branch long magic(image) bad_short()
 block bad_short()
   err_short:u32 = const() {"value":1}
   ret(err_short)
@@ -185,11 +185,11 @@ block accepted()
   ret(success)
 end
 fn read16(image:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
-block start(blk17_image:readbuf,blk17_offset:usize)
-  octet0:u8 = buffer.load(blk17_image,blk17_offset)
+block start(image:readbuf,offset:usize)
+  octet0:u8 = buffer.load(image,offset)
   one:usize = const() {"value":1}
-  offset1:usize = int.add.wrap(blk17_offset,one)
-  octet1:u8 = buffer.load(blk17_image,offset1)
+  offset1:usize = int.add.wrap(offset,one)
+  octet1:u8 = buffer.load(image,offset1)
   word0:u64 = int.cast(octet0) {"mode":"wrap"}
   word1:u64 = int.cast(octet1) {"mode":"wrap"}
   shift:u64 = const() {"value":8}
@@ -198,22 +198,22 @@ block start(blk17_image:readbuf,blk17_offset:usize)
   ret(result)
 end
 fn read32(image:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
-block start(blk18_image:readbuf,blk18_offset:usize)
-  lo:u64 = call(blk18_image,blk18_offset) {"function":"read16"}
+block start(image:readbuf,offset:usize)
+  lo:u64 = call(image,offset) {"function":"read16"}
   step:usize = const() {"value":2}
-  next:usize = int.add.wrap(blk18_offset,step)
-  hi:u64 = call(blk18_image,next) {"function":"read16"}
+  next:usize = int.add.wrap(offset,step)
+  hi:u64 = call(image,next) {"function":"read16"}
   shift:u64 = const() {"value":16}
   upper:u64 = int.shl.checked(hi,shift)
   result:u64 = bit.or(upper,lo)
   ret(result)
 end
 fn read64(image:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
-block start(blk19_image:readbuf,blk19_offset:usize)
-  lo:u64 = call(blk19_image,blk19_offset) {"function":"read32"}
+block start(image:readbuf,offset:usize)
+  lo:u64 = call(image,offset) {"function":"read32"}
   step:usize = const() {"value":4}
-  next:usize = int.add.wrap(blk19_offset,step)
-  hi:u64 = call(blk19_image,next) {"function":"read32"}
+  next:usize = int.add.wrap(offset,step)
+  hi:u64 = call(image,next) {"function":"read32"}
   shift:u64 = const() {"value":32}
   upper:u64 = int.shl.checked(hi,shift)
   result:u64 = bit.or(upper,lo)
