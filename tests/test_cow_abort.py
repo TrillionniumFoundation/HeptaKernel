@@ -186,7 +186,7 @@ def main() -> None:
             data = data[:rng.choice((0, 4095, 4097))]
         elif shape == 1:
             state = state[:rng.choice((0, 4095, 4097))]
-        accepted += oracle(data, state)[0] == 0
+        accepted += oracle(b"", data, state)[0] == 0
         mismatches += not invoke(abort, data, state)
         cases += 1
     for payload in (b"x", b"\x00" * 16):
