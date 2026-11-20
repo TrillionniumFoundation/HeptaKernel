@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn cow_abort_noop(request:readbuf,destination:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,destination:mutbuf,state:mutbuf)
+  ca_noop:u32 = const() {"value":0}
+  ret(ca_noop)
+end

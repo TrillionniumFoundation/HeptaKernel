@@ -1300,6 +1300,13 @@ cow_integrated_compare_byte64:
     xorq $8, cow_pte_request+8(%rip)
     xorq $8, cow_pte_request+16(%rip)
 #endif
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_ABORT
+    /* Late failure injection: mutate only the request's cache flag, preserving
+     * a valid requested COW transformation but making expected-old stale.
+     * The real PTE and original source frame remain untouched. */
+    xorq $8, cow_pte_request+8(%rip)
+    xorq $8, cow_pte_request+16(%rip)
+#endif
     leaq cow_pte_request(%rip), %rdi
     movl $32, %esi
     leaq cow_pte_reply(%rip), %rdx
@@ -1307,6 +1314,90 @@ cow_integrated_compare_byte64:
     leaq page_table_4m(%rip), %r8
     movl $4096, %r9d
     call cow_pte_f0                 /* ORIGINAL selfhost-compiled HIA .text */
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_ABORT
+    /* Real native HIA PTE switch must refuse late stale expected-old after
+     * the earlier native HIA split already copied 4096 bytes and changed
+     * counts. The bridge is responsible for recognizing this failure. */
+    cmpl $9, %eax
+    jne fail64
+    cmpq $9, cow_pte_reply(%rip)
+    jne fail64
+    cmpq $0, cow_pte_reply+8(%rip)
+    jne fail64
+    movq cow_pte_old(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+
+    /* Adapt the caller-owned header from pre-split to post-split counts:
+     * source count 1, destination count 1. Nothing is published by the PTE. */
+    movb $1, cow_integrated_state+4(%rip)
+    movb $1, cow_integrated_state+5(%rip)
+    leaq cow_integrated_state(%rip), %rdi  /* valid empty readbuf request */
+    xorq %rsi, %rsi
+    movq $0x602000, %rdx
+    movl $4096, %ecx
+    leaq cow_integrated_state(%rip), %r8
+    movl $4096, %r9d
+    call cow_abort_f0                    /* exact selfhost HIA native object */
+    testl %eax, %eax
+    jne cow_integrated_abort_reject64
+    movabsq $0x1122334455667788, %r10
+    movq $0x601000, %r8
+    movq $0x602000, %r9
+    xorq %rcx, %rcx
+cow_integrated_abort_pages64:
+    cmpq %r10, (%r8,%rcx,8)
+    jne cow_integrated_abort_reject64
+    cmpq $0, (%r9,%rcx,8)               /* all private frame bytes zero */
+    jne cow_integrated_abort_reject64
+    incq %rcx
+    cmpq $512, %rcx
+    jb cow_integrated_abort_pages64
+    movabsq $0xa55aa55a5aa55aa5, %rax
+    cmpq %rax, cow_integrated_guard_before(%rip)
+    jne cow_integrated_abort_reject64
+    cmpq %rax, cow_integrated_guard_after(%rip)
+    jne cow_integrated_abort_reject64
+    leaq cow_integrated_state(%rip), %r8
+    xorq %rcx, %rcx
+cow_integrated_abort_table64:
+    xorl %edx, %edx
+    cmpq $0, %rcx
+    je cow_integrated_abort_slot2
+    cmpq $2, %rcx
+    je cow_integrated_abort_slot17
+    cmpq $4, %rcx
+    je cow_integrated_abort_one
+    cmpq $5, %rcx
+    je cow_integrated_abort_one
+    cmpq $18, %rcx
+    je cow_integrated_abort_slot2
+    jmp cow_integrated_abort_compare
+cow_integrated_abort_slot2:
+    movb $2, %dl
+    jmp cow_integrated_abort_compare
+cow_integrated_abort_slot17:
+    movb $17, %dl
+    jmp cow_integrated_abort_compare
+cow_integrated_abort_one:
+    movb $1, %dl
+cow_integrated_abort_compare:
+    cmpb %dl, (%r8,%rcx,1)             /* entire 4096-byte table oracle */
+    jne cow_integrated_abort_reject64
+    incq %rcx
+    cmpq $4096, %rcx
+    jb cow_integrated_abort_table64
+    movq cow_pte_old(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne cow_integrated_abort_reject64
+    leaq message_cow_integrated_aborted(%rip), %rsi
+    call puts64
+    jmp fail64                           /* expected status 35 after abort */
+cow_integrated_abort_reject64:
+    leaq message_cow_integrated_abort_rejected(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
 #ifdef HEPTAKERNEL_TEST_COW_PTE_STALE
     cmpl $9, %eax
     jne fail64
@@ -1351,6 +1442,7 @@ cow_integrated_compare_byte64:
     iretq                         /* retry identical store with new mapping */
     jmp fail64
 #endif
+#endif /* HEPTAKERNEL_TEST_COW_INTEGRATED_ABORT */
 #ifdef HEPTAKERNEL_TEST_COW_INTEGRATED
 cow_integrated_reject64:
     leaq message_cow_integrated_rejected(%rip), %rsi
@@ -3994,6 +4086,10 @@ message_cow_pte_dishonest:
     .asciz "HEPTAKERNEL HIA COW PTE DISHONEST NOOP REJECTED\r\n"
 message_cow_pte_bypass:
     .asciz "HEPTAKERNEL HIA COW PTE RESTORE BYPASS REFAULT VERIFIED\r\n"
+message_cow_integrated_aborted:
+    .asciz "HEPTAKERNEL HIA COW INTEGRATED LATE PTE REJECT ABORT ZERO COUNTS RESTORED\r\n"
+message_cow_integrated_abort_rejected:
+    .asciz "HEPTAKERNEL HIA COW INTEGRATED ABORT DISHONEST OR CORRUPT REJECTED\r\n"
 message_cow_integrated_prepared:
     .asciz "HEPTAKERNEL HIA COW INTEGRATED PAGE COPY AND COUNTS VERIFIED\r\n"
 message_cow_integrated_verified:

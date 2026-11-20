@@ -587,7 +587,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -1243,6 +1243,29 @@ test-cow-refcount-hw: build/cow-refcount-hw-multiboot.elf build/cow-refcount-dis
 	timeout 130 $(PYTHON) tests/test_cow_refcount_qemu.py --qemu "$(QEMU)"
 
 
+
+# Genuine HIA Core v8 unpublished COW split abort (page zero + refcount restore).
+build/cow-abort.o: src/cow_abort.hepta | build check-compiler
+	@set -eu; tmp=$(mktemp build/.cow-abort.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
+	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+
+build/cow-abort.so: build/cow-abort.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/cow-abort-unsafe.o: tests/negative/cow_abort_noop.hepta | build check-compiler
+	"$(HEPTA_COMPILER)" < "$<" > "$@"
+
+build/cow-abort-unsafe.so: build/cow-abort-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+.PHONY: test-cow-abort
+test-cow-abort: build/cow-abort.so build/cow-abort-unsafe.so build/cow-split.so
+	@set -eu; tmp=$(mktemp build/.cow-abort-identity.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/cow_abort.hepta > "$tmp"; cmp "$tmp" build/cow-abort.o
+	timeout 90 $(PYTHON) tests/test_cow_abort.py build/cow-abort.so --split-library build/cow-split.so
+	$(PYTHON) tests/test_cow_abort.py build/cow-abort-unsafe.so --expect-unsafe
+
 # Genuine HIA Core v8 single-owner shared-page detach+copy (not atomic COW).
 build/cow-split.o: src/cow_split.hepta | build check-compiler
 	@set -eu; tmp=$$(mktemp build/.cow-split.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
@@ -1408,12 +1431,28 @@ build/cow-integrated-dishonest.elf: build/boot-cow-integrated-hw.o $(COW_INTEGRA
 build/cow-integrated-decoy.elf: build/boot-cow-integrated-decoy.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-decoy.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o
 
+build/cow-abort-boot.o: build/cow-abort.o
+	objcopy --redefine-sym f0=cow_abort_f0 "$<" "$@"
+
+build/cow-abort-dishonest-boot.o: build/cow-abort-unsafe.o
+	objcopy --redefine-sym f0=cow_abort_f0 "$<" "$@"
+
+build/boot-cow-integrated-abort.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_PTE_HW=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED_ABORT=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/cow-integrated-abort.elf: build/boot-cow-integrated-abort.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o build/cow-abort-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-abort.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o build/cow-abort-boot.o
+
+build/cow-integrated-abort-noop.elf: build/boot-cow-integrated-abort.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o build/cow-abort-dishonest-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-abort.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o build/cow-abort-dishonest-boot.o
+
 build/cow-integrated-%-multiboot.elf: build/cow-integrated-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-cow-integrated-hw: build/cow-integrated-hw-multiboot.elf build/cow-integrated-stale-multiboot.elf build/cow-integrated-dishonest-multiboot.elf build/cow-integrated-decoy-multiboot.elf
+test-cow-integrated-hw: build/cow-integrated-hw-multiboot.elf build/cow-integrated-stale-multiboot.elf build/cow-integrated-dishonest-multiboot.elf build/cow-integrated-decoy-multiboot.elf build/cow-integrated-abort-multiboot.elf build/cow-integrated-abort-noop-multiboot.elf
 	@set -eu; a=$$(mktemp build/.cow-integrated-split-a.XXXXXX); b=$$(mktemp build/.cow-integrated-split-b.XXXXXX); c=$$(mktemp build/.cow-integrated-pte-a.XXXXXX); d=$$(mktemp build/.cow-integrated-pte-b.XXXXXX); \
 	  trap 'rm -f "$$a" "$$b" "$$c" "$$d"' EXIT HUP INT TERM; \
 	  objcopy --dump-section .text="$$a" build/cow-split.o; objcopy --dump-section .text="$$b" build/cow-split-boot.o; cmp "$$a" "$$b"; \
-	  objcopy --dump-section .text="$$c" build/cow-pte-swap.o; objcopy --dump-section .text="$$d" build/cow-pte-boot.o; cmp "$$c" "$$d"
-	timeout 180 $(PYTHON) tests/test_cow_integrated_qemu.py --qemu "$(QEMU)"
+	  objcopy --dump-section .text="$$c" build/cow-pte-swap.o; objcopy --dump-section .text="$$d" build/cow-pte-boot.o; cmp "$$c" "$$d"; \
+	  objcopy --dump-section .text="$$a" build/cow-abort.o; objcopy --dump-section .text="$$b" build/cow-abort-boot.o; cmp "$$a" "$$b"
+	timeout 240 $(PYTHON) tests/test_cow_integrated_qemu.py --qemu "$(QEMU)"
