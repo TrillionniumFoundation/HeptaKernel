@@ -1764,12 +1764,10 @@ build/elf64-page-plan-unsafe.so: build/elf64-page-plan-unsafe.o
 test-elf64-page-plan: build/elf64-page-plan.so build/elf64-page-plan-unsafe.so build/elf64-page-fill.so
 	timeout 90 $(PYTHON) tests/test_elf64_page_plan.py build/elf64-page-plan.so --object build/elf64-page-plan.o --fill build/elf64-page-fill.so
 	$(PYTHON) tests/test_elf64_page_plan.py build/elf64-page-plan-unsafe.so --expect-unsafe
-	@set -eu; compiler=$(command -v "$(HEPTA_COMPILER)"); \
-	a=$(mktemp build/.elf64-plan-repro1.XXXXXX); b=$(mktemp build/.elf64-plan-repro2.XXXXXX); \
-	trap 'rm -f "$a" "$b"' EXIT HUP INT TERM; \
-	env -i PATH='' "$compiler" < src/elf64_page_plan.hepta > "$a"; \
-	env -i PATH='' "$compiler" < src/elf64_page_plan.hepta > "$b"; \
-	cmp build/elf64-page-plan.o "$a"; cmp "$a" "$b"
+	env -i PATH='' "$(HEPTA_COMPILER)" < src/elf64_page_plan.hepta > build/elf64-page-plan-repro-a.o
+	env -i PATH='' "$(HEPTA_COMPILER)" < src/elf64_page_plan.hepta > build/elf64-page-plan-repro-b.o
+	cmp build/elf64-page-plan.o build/elf64-page-plan-repro-a.o
+	cmp build/elf64-page-plan-repro-a.o build/elf64-page-plan-repro-b.o
 
 # Native HIA ELF64 per-page segment bytes and BSS zeroing. A test component,
 # not a general loader or an authorized page-table operation.
