@@ -164,8 +164,8 @@ block start(request:readbuf,pa:u64)
   cp_base:u64 = call(request,cp_off24) {"function":"read_word"}
   cp_at_least:bool = compare.ge(pa,cp_base)
   branch cp_at_least calculate(request,pa,cp_base) bad()
-block calculate(cp_rc:readbuf,cp_pa:u64,cp_base:u64)
-  cp_delta:u64 = int.sub.wrap(cp_pa,cp_base)
+block calculate(cp_rc:readbuf,cp_pa:u64,cp_start_base:u64)
+  cp_delta:u64 = int.sub.wrap(cp_pa,cp_start_base)
   cp_o32:usize = const() {"value":32}
   cp_pages:u64 = call(cp_rc,cp_o32) {"function":"read_word"}
   cp_page_bytes:u64 = const() {"value":4096}
