@@ -3575,6 +3575,8 @@ page_zero_recycle_check:
 /* Input: physical base in rdi, page count in rsi. The existing bounded
  * firmware-record bytes at e820_request+24 remain unchanged. */
 owner_admit64:
+    pushq %r12
+    movq %rsi, %r12                /* retain exact HIA admission page count */
     movq %rdi, e820_request(%rip)
     movq %rsi, e820_request+8(%rip)
     movq $-1, e820_reply(%rip)
@@ -3592,8 +3594,9 @@ owner_admit64:
     jne fail64
     cmpq $0, e820_reply(%rip)
     jne fail64
-    cmpq $17, e820_reply+8(%rip)
+    cmpq %r12, e820_reply+8(%rip) /* HIA reply must match this request */
     jne fail64
+    popq %r12
     ret
 
 /* Input: rdi=requested absolute page address, rsi=length in pages.
