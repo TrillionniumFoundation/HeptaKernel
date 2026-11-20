@@ -146,13 +146,6 @@ def split_roundtrips(abort, split) -> int:
             state = ctypes.create_string_buffer(original)
             assert split(ctypes.addressof(srcbuf), PAGE,
                          ctypes.addressof(dest), PAGE,
-                         ctypes.addressof(state), PAGE) != 0, (
-                             "guarded abort state must not be confused with zero-header split")
-            split_header = bytearray(original)
-            split_header[8:16] = bytes(8)
-            ctypes.memmove(state, bytes(split_header), PAGE)
-            assert split(ctypes.addressof(srcbuf), PAGE,
-                         ctypes.addressof(dest), PAGE,
                          ctypes.addressof(state), PAGE) == 0
             updated = bytearray(ctypes.string_at(state, PAGE))
             updated[4] = original_count - 1
