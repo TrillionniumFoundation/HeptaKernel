@@ -314,9 +314,9 @@ block accepted(fr_accept_r:readbuf,fr_accept_p:readbuf,fr_accept_s:readbuf)
   ret(f_success)
 end
 fn bitmap_invariant(owner:readbuf,count:u64,reserved:u64,declared_free:u64) -> (bool) effects(read,trap) entry(start)
-block start(oi_owner:readbuf,oi_count:u64,oi_reserved:u64,oi_free:u64)
+block start(owner:readbuf,count:u64,reserved:u64,declared_free:u64)
   oi_first:u64 = const() {"value":40}
-  jump padding(oi_owner,oi_count,oi_reserved,oi_free,oi_first)
+  jump padding(owner,count,reserved,declared_free,oi_first)
 block padding(op_owner:readbuf,op_count:u64,op_reserved:u64,op_free:u64,op_offset:u64)
   op_last:u64 = const() {"value":64}
   op_more:bool = compare.lt(op_offset,op_last)
