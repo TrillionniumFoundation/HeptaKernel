@@ -1355,7 +1355,7 @@ build/boot-cow-pte-stale.o: arch/x86_64/boot.S build/boot-cases.bin
 build/boot-cow-pte-bypass.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_COW_PTE_HW=1 -DHEPTAKERNEL_TEST_COW_PTE_BYPASS=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
-COW_PTE_HW_SUPPORT := $(PAGE_ZERO_HW_SUPPORT) build/pt-commit-boot.o
+COW_PTE_HW_SUPPORT := $(PAGE_ZERO_HW_SUPPORT)
 
 build/cow-pte-hw.elf: build/boot-cow-pte-hw.o $(COW_PTE_HW_SUPPORT) build/cow-pte-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-pte-hw.o $(COW_PTE_HW_SUPPORT) build/cow-pte-boot.o
