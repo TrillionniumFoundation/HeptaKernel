@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn elf64_page_plan_fake(image:readbuf,selector:mutbuf,plan:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(image:readbuf,selector:mutbuf,plan:mutbuf)
+  success:u32 = const() {"value":0}
+  ret(success)
+end
