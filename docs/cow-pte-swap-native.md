@@ -26,3 +26,25 @@ other CPUs, implement memory reclamation or establish hardware user-mode
 behavior. Hardware fault and TLB effects remain unverified for this new
 component. All 17 full Linux acceptance gates and 422 syscall rows
 remain HOLD. The non-HIA `boot.S` test bridge remains explicitly separate.
+
+## Isolated actual hardware-fault experiment
+
+The original HIA `cow_pte_swap.hepta` machine code is renamed for the
+linker without modifying its `.text`. An E820-admitted QEMU guest first
+maps a source physical page (0x601000) read-only and NX at virtual 0x400000.
+A real CPL0 store produces a precisely checked hardware #PF (P=1,W=1,U=0)
+on an IST1 exception stack. Only then does the original HIA machine code
+change the real 4KiB PTE to a different, already initialized destination
+frame (0x602000), preserving the CPU-updated Accessed bit. The explicitly
+**non-HIA** handler performs INVLPG and IRETQ to retry the same CPU store.
+The independent observer checks both complete 4096-byte physical pages,
+virtual readback and the hardware Dirty bit.
+
+PC/32 MiB and Q35/64 MiB run four cases each: true remap; a syntactically
+valid but stale expected-old; a compiled malicious HIA no-op; and a
+post-HIA test-bridge restoration that must re-fault. These are separate
+isolated hardware experiments, not a claim to have implemented Linux
+COW. The source/destination physical pages are E820 admitted but still
+have no authenticated PMM/refcount owner in this test. Page copying,
+allocation, atomic PTE writes, concurrent faults, SMP TLB shootdown,
+signal delivery and user-mode Linux execution are not covered.
