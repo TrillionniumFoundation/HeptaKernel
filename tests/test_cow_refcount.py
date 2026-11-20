@@ -69,7 +69,7 @@ def guarded(entry):
     for side in (base, base+2*SIZE):
         assert libc.mprotect(side,SIZE,0)==0
     try:
-        receipt=ctypes.create_string_buffer(b"\xd5"*16)
+        receipt=ctypes.create_string_buffer(16)  # exactly 16 bytes; no trailing C-string NUL
         for index,old,op,new in ((0,1,1,2),(4095,2,2,1),(4095,1,3,0)):
             ctypes.memset(base+SIZE+index,old,1)
             request = (index.to_bytes(2,"little")+bytes([op,old])+bytes(12))
