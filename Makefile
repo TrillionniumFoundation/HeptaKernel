@@ -587,7 +587,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -1314,3 +1314,25 @@ test-cow-split-hw: build/cow-split-hw-multiboot.elf build/cow-split-dishonest-mu
 	  objcopy --dump-section .text="$$renamed" build/cow-split-boot.o; \
 	  cmp "$$original" "$$renamed"
 	timeout 180 $(PYTHON) tests/test_cow_split_qemu.py --qemu "$(QEMU)"
+
+# HIA-native restricted COW private-frame PTE transition, single-owner only.
+build/cow-pte-swap.o: src/cow_pte_swap.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.cow-pte-swap.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/cow-pte-swap.so: build/cow-pte-swap.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/cow-pte-swap-unsafe.o: tests/negative/cow_pte_swap_noop.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.cow-pte-swap-unsafe.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/cow-pte-swap-unsafe.so: build/cow-pte-swap-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+.PHONY: test-cow-pte-swap
+test-cow-pte-swap: build/cow-pte-swap.so build/cow-pte-swap-unsafe.so
+	@set -eu; tmp=$$(mktemp build/.cow-pte-swap-byte.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/cow_pte_swap.hepta > "$$tmp"; cmp "$$tmp" build/cow-pte-swap.o
+	timeout 90 $(PYTHON) tests/test_cow_pte_swap.py build/cow-pte-swap.so
+	$(PYTHON) tests/test_cow_pte_swap.py build/cow-pte-swap-unsafe.so --expect-unsafe

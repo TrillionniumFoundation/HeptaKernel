@@ -1,0 +1,28 @@
+# Restricted native HIA COW private-frame PTE switch
+
+`src/cow_pte_swap.hepta` specializes the existing genuine HIA Core v8
+`selfhost_elf` 4 KiB PTE committer. It admits only a shared user leaf that
+is present, read-only, NX, nonglobal and not a huge page. The replacement
+must have a different nonzero 4 KiB physical frame within the declared
+32–52-bit physical width and be **exactly the old PTE with its frame
+substituted and writable bit set**; all other A/D, cache, PAT, user and
+software bits are preserved. Unsupported NXE, malformed reserved bits and
+out-of-range physical frames are refused.
+
+The native HIA function reads and compares the live 64-bit table entry
+before storing the new one. Failure statuses and the 32-byte request /
+16-byte reply interface match `src/x86_pt_commit.hepta`.
+`tests/test_cow_pte_swap.py` uses an independent byte-level Python oracle,
+boundary, stale, invalid-bit and randomized cases. A separate compiled HIA
+always-success no-op is required to fail the oracle. The original compiler
+lock, empty-PATH byte-for-byte rebuild and complete baseline checks remain.
+
+**This is not Linux COW closure.** The caller must authenticate and
+exclusively own the page table and destination physical frame, stop
+concurrent readers and mask interrupts. Writes are ordinary sequential
+byte stores, not 64-bit CAS. This component does not copy a frame,
+perform the fault handler, change CR3, invalidate TLB entries, synchronize
+other CPUs, implement memory reclamation or establish hardware user-mode
+behavior. Hardware fault and TLB effects remain unverified for this new
+component. All 17 full Linux acceptance gates and 422 syscall rows
+remain HOLD. The non-HIA `boot.S` test bridge remains explicitly separate.
