@@ -165,7 +165,8 @@ block fields(im9:readbuf,out9:mutbuf,size9:u64,base9:u64,pg9:u64)
   clean9:u64 = const() {"value":7}
   write9:u64 = const() {"value":2}
   exec9:u64 = const() {"value":1}
-  no_other:bool = compare.eq(flags9,bit.and(flags9,clean9))
+  clean_flags:u64 = bit.and(flags9,clean9)
+  no_other:bool = compare.eq(flags9,clean_flags)
   wb:u64 = bit.and(flags9,write9)
   xb:u64 = bit.and(flags9,exec9)
   wz:u64 = const() {"value":0}
@@ -211,15 +212,15 @@ block alignment(im12:readbuf,out12:mutbuf,pg12:u64,off12:u64,va12:u64,fs12:u64,m
 block align_optional(im13:readbuf,out13:mutbuf,pg13:u64,off13:u64,va13:u64,fs13:u64,ms13:u64,align13:u64,lead13:u64)
   one13:u64 = const() {"value":1}
   required:bool = compare.gt(align13,one13)
-  branch required align_power(im13,out13,pg13,off13,fs13,ms13,align13,lead13) page_range(out13,pg13,off13,fs13,ms13,lead13)
-block align_power(im14:readbuf,out14:mutbuf,pg14:u64,off14:u64,fs14:u64,ms14:u64,align14:u64,lead14:u64)
+  branch required align_power(im13,out13,pg13,off13,va13,fs13,ms13,align13,lead13) page_range(out13,pg13,off13,fs13,ms13,lead13)
+block align_power(im14:readbuf,out14:mutbuf,pg14:u64,off14:u64,va14:u64,fs14:u64,ms14:u64,align14:u64,lead14:u64)
   minus14:u64 = const() {"value":1}
   mask14:u64 = int.sub.wrap(align14,minus14)
   powbits:u64 = bit.and(align14,mask14)
   zero14:u64 = const() {"value":0}
   power:bool = compare.eq(powbits,zero14)
   offmask:u64 = bit.and(off14,mask14)
-  targetmask:u64 = bit.and(lead14,mask14)
+  targetmask:u64 = bit.and(va14,mask14)
   aligned_value:bool = compare.eq(offmask,targetmask)
   both14:bool = bool.and(power,aligned_value)
   branch both14 page_range(out14,pg14,off14,fs14,ms14,lead14) bad_segment()
