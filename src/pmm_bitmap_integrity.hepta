@@ -158,7 +158,7 @@ block start(bytes:readbuf,offset:usize)
   w_zero:u64 = const() {"value":0}
   jump word_loop(bytes,offset,w_zero,w_zero)
 block word_loop(bytes_b1:readbuf,offset_b1:usize,index_b1:u64,value_b1:u64)
-  w_eight_b1:u64 = const() {"value_b1":8}
+  w_eight_b1:u64 = const() {"value":8}
   w_more_b1:bool = compare.lt(index_b1,w_eight_b1)
   branch w_more_b1 word_byte(bytes_b1,offset_b1,index_b1,value_b1) word_done(value_b1)
 block word_byte(bytes_b2:readbuf,offset_b2:usize,index_b2:u64,value_b2:u64)
@@ -166,11 +166,11 @@ block word_byte(bytes_b2:readbuf,offset_b2:usize,index_b2:u64,value_b2:u64)
   w_at_b2:usize = int.add.wrap(offset_b2,w_index_b2)
   w_oct_b2:u8 = buffer.load(bytes_b2,w_at_b2)
   w_wide_b2:u64 = int.cast(w_oct_b2) {"mode":"wrap"}
-  w_8_b2:u64 = const() {"value_b2":8}
+  w_8_b2:u64 = const() {"value":8}
   w_shift_b2:u64 = int.mul.wrap(index_b2,w_8_b2)
   w_part_b2:u64 = int.shl.checked(w_wide_b2,w_shift_b2)
   w_new_b2:u64 = bit.or(value_b2,w_part_b2)
-  w_one_b2:u64 = const() {"value_b2":1}
+  w_one_b2:u64 = const() {"value":1}
   w_next_b2:u64 = int.add.wrap(index_b2,w_one_b2)
   jump word_loop(bytes_b2,offset_b2,w_next_b2,w_new_b2)
 block word_done(value_b3:u64)
