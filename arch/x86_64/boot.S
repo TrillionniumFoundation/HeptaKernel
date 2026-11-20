@@ -2643,6 +2643,159 @@ owner_exercise64:
     movq $0, (%rsi)
     movq $0, PAGE_BYTES(%rsi)
 
+
+#if defined(HEPTAKERNEL_TEST_COW_REFCOUNT_HW)
+    /* Quiescent, explicitly NON-HIA hardware observer. These two slots
+     * represent the two distinct E820-admitted HIA PMM physical zones.
+     * The mapping into the refcount table is TEST-ONLY; it is not a kernel
+     * capability, concurrent COW manager, atomic count or ownership proof.
+     * Genuine selfhost_elf HIA performs EVERY refcount table mutation. */
+    leaq owner_descriptors(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    movq $13, %rdx
+    call owner_bind64
+    leaq owner_descriptors+24(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    movq $14, %rdx
+    call owner_bind64
+
+    leaq cow_refcount_hw_table(%rip), %rdi
+    movabsq $0x5b5b5b5b5b5b5b5b, %rax
+    movl $512, %ecx
+    rep stosq
+    movb $1, cow_refcount_hw_table+2(%rip)
+    movb $1, cow_refcount_hw_table+17(%rip)
+    movabsq $0xa17be4c6d30f9285, %rax
+    movq %rax, cow_refcount_hw_guard_before(%rip)
+    movq %rax, cow_refcount_hw_guard_after(%rip)
+    leaq cow_refcount_hw_slots(%rip), %r12
+    movl $2, %r13d
+cow_refcount_hw_each:
+    movzwq (%r12), %r14
+    movw %r14w, cow_refcount_hw_request(%rip)
+    movb $1, cow_refcount_hw_request+2(%rip)
+    movb $1, cow_refcount_hw_request+3(%rip)
+    movq $0, cow_refcount_hw_reply(%rip)
+    movq $2, cow_refcount_hw_reply+8(%rip)
+    leaq cow_refcount_hw_request(%rip), %rdi
+    movl $16, %esi
+    leaq cow_refcount_hw_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq cow_refcount_hw_table(%rip), %r8
+    movl $4096, %r9d
+    call cow_refcount_f0             /* original compiled HIA native code */
+    testl %eax, %eax
+    jne fail64
+    leaq cow_refcount_hw_table(%rip), %r15
+    cmpb $2, (%r15,%r14,1)           /* independent actual RAM observer */
+    jne fail64
+    cmpq $0, cow_refcount_hw_reply(%rip)
+    jne fail64
+    cmpq $2, cow_refcount_hw_reply+8(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_COW_REFCOUNT_STALE
+    /* Attempt detach with an explicitly stale expected-old count 1.
+     * Success requires an actual HIA status 7, unchanged count and
+     * unchanged 16-byte receipt, not a generic failure/timeout. */
+    movb $2, cow_refcount_hw_request+2(%rip)
+    movb $1, cow_refcount_hw_request+3(%rip)
+    movabsq $0xd3a1792ee3b1558a, %rax
+    movq %rax, cow_refcount_hw_reply(%rip)
+    movq %rax, cow_refcount_hw_reply+8(%rip)
+    leaq cow_refcount_hw_request(%rip), %rdi
+    movl $16, %esi
+    leaq cow_refcount_hw_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq cow_refcount_hw_table(%rip), %r8
+    movl $4096, %r9d
+    call cow_refcount_f0
+    cmpl $7, %eax
+    jne fail64
+    cmpb $2, (%r15,%r14,1)
+    jne fail64
+    movabsq $0xd3a1792ee3b1558a, %rax
+    cmpq %rax, cow_refcount_hw_reply(%rip)
+    jne fail64
+    cmpq %rax, cow_refcount_hw_reply+8(%rip)
+    jne fail64
+    leaq message_cow_refcount_stale(%rip), %rsi
+    call puts64
+    jmp fail64
+#endif
+    /* Detach 2 -> 1 and release 1 -> 0 via the SAME native HIA code. */
+    movb $2, cow_refcount_hw_request+2(%rip)
+    movb $2, cow_refcount_hw_request+3(%rip)
+    movq $0, cow_refcount_hw_reply(%rip)
+    movq $1, cow_refcount_hw_reply+8(%rip)
+    leaq cow_refcount_hw_request(%rip), %rdi
+    movl $16, %esi
+    leaq cow_refcount_hw_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq cow_refcount_hw_table(%rip), %r8
+    movl $4096, %r9d
+    call cow_refcount_f0
+    testl %eax, %eax
+    jne fail64
+    cmpb $1, (%r15,%r14,1)
+    jne fail64
+    cmpq $0, cow_refcount_hw_reply(%rip)
+    jne fail64
+    cmpq $1, cow_refcount_hw_reply+8(%rip)
+    jne fail64
+    movb $3, cow_refcount_hw_request+2(%rip)
+    movb $1, cow_refcount_hw_request+3(%rip)
+    movq $0, cow_refcount_hw_reply(%rip)
+    movq $0, cow_refcount_hw_reply+8(%rip)
+    leaq cow_refcount_hw_request(%rip), %rdi
+    movl $16, %esi
+    leaq cow_refcount_hw_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq cow_refcount_hw_table(%rip), %r8
+    movl $4096, %r9d
+    call cow_refcount_f0
+    testl %eax, %eax
+    jne fail64
+    cmpb $0, (%r15,%r14,1)
+    jne fail64
+    cmpq $0, cow_refcount_hw_reply(%rip)
+    jne fail64
+    cmpq $0, cow_refcount_hw_reply+8(%rip)
+    jne fail64
+    addq $2, %r12
+    decq %r13
+    jnz cow_refcount_hw_each
+#ifdef HEPTAKERNEL_TEST_COW_REFCOUNT_DECOY
+    /* Even with every HIA return/receipt valid, a NON-HIA adversary
+     * corrupts an unrelated byte. Full-table RAM readback must reject. */
+    movb $0x11, cow_refcount_hw_table+317(%rip)
+#endif
+    /* Full 4KiB byte oracle, including all 4094 unchanged slots.
+     * Neither the HIA return value nor its receipt substitutes for RAM. */
+    leaq cow_refcount_hw_table(%rip), %r15
+    xorq %rcx, %rcx
+cow_refcount_hw_scan:
+    movb $0x5b, %al
+    cmpq $2, %rcx
+    je cow_refcount_hw_expected_zero
+    cmpq $17, %rcx
+    jne cow_refcount_hw_compare
+cow_refcount_hw_expected_zero:
+    xorb %al, %al
+cow_refcount_hw_compare:
+    cmpb %al, (%r15,%rcx,1)
+    jne fail64
+    incq %rcx
+    cmpq $4096, %rcx
+    jb cow_refcount_hw_scan
+    movabsq $0xa17be4c6d30f9285, %rax
+    cmpq %rax, cow_refcount_hw_guard_before(%rip)
+    jne fail64
+    cmpq %rax, cow_refcount_hw_guard_after(%rip)
+    jne fail64
+    leaq message_cow_refcount_hw_pass(%rip), %rsi
+    call puts64
+#endif
+
 #if defined(HEPTAKERNEL_TEST_PAGE_COPY_HW)
     /* Recheck both actual native HIA PMM states after allocating both
      * cross-zone runs, immediately before providing the physical addresses
@@ -3335,6 +3488,10 @@ message_router_pass:
     .asciz "HEPTAKERNEL HIA ARENA ROUTER VERIFIED\r\n"
 message_owner_pass:
     .asciz "HEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED\r\n"
+message_cow_refcount_hw_pass:
+    .asciz "HEPTAKERNEL HIA COW REFCOUNT QEMU TRANSITIONS VERIFIED\r\n"
+message_cow_refcount_stale:
+    .asciz "HEPTAKERNEL HIA COW REFCOUNT STALE EXPECTED-OLD REFUSED\r\n"
 message_page_copy_hw_pass:
     .asciz "HEPTAKERNEL HIA PHYSICAL PAGE COPY TWO PAIRS VERIFIED\r\n"
 message_page_copy_detach_pass:
@@ -3435,6 +3592,8 @@ arena_cases_end:
 owner_descriptors:
     .quad 0x400000, 17, 2
     .quad 0x600000, 17, 1
+cow_refcount_hw_slots:
+    .word 2, 17
 page_copy_hw_pairs:
     .quad 0x402000, 0x601000, 0x125a73de6789abcd
     .quad 0x403000, 0x602000, 0x39be1247f0ca8865
@@ -3566,6 +3725,14 @@ owner_route_request:      .skip 80
 owner_choice_a:           .skip 8
 owner_choice_b:           .skip 8
 .balign 8
+/* A real guest-RAM 4096-byte table; the bridge is an observer only. */
+.balign 8
+cow_refcount_hw_guard_before: .skip 8
+.balign 4096
+cow_refcount_hw_table:        .skip 4096
+cow_refcount_hw_guard_after:  .skip 8
+cow_refcount_hw_request:      .skip 16
+cow_refcount_hw_reply:        .skip 16
 page_copy_hw_guard_before: .skip 8
 page_copy_hw_reply:        .skip 16
 page_copy_hw_guard_after:  .skip 8
