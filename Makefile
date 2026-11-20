@@ -1477,10 +1477,27 @@ build/cow-integrated-guarded-published.elf: build/boot-cow-integrated-guarded-pu
 build/cow-integrated-guarded-noop.elf: build/boot-cow-integrated-guarded.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o build/cow-abort-pte-guarded-dishonest-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-guarded.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o build/cow-abort-pte-guarded-dishonest-boot.o
 
+
+# Native HIA PMM release/reissue after genuine HIA live-PTE-guarded abort.
+COW_RECYCLE_FLAGS := -DHEPTAKERNEL_TEST_COW_PTE_HW=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED=1 -DHEPTAKERNEL_TEST_COW_FRAME_BINDING_HW=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED_ABORT=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED_ABORT_GUARDED=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED_RECYCLE=1
+COW_RECYCLE_SUPPORT := $(COW_GUARDED_SUPPORT) build/cow-frame-binding-boot.o
+
+build/boot-cow-integrated-recycle.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc $(COW_RECYCLE_FLAGS) -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-cow-integrated-recycle-double.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc $(COW_RECYCLE_FLAGS) -DHEPTAKERNEL_TEST_COW_INTEGRATED_RECYCLE_DOUBLE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/cow-integrated-recycle.elf: build/boot-cow-integrated-recycle.o $(COW_RECYCLE_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-recycle.o $(COW_RECYCLE_SUPPORT)
+
+build/cow-integrated-recycle-double.elf: build/boot-cow-integrated-recycle-double.o $(COW_RECYCLE_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-recycle-double.o $(COW_RECYCLE_SUPPORT)
+
 build/cow-integrated-%-multiboot.elf: build/cow-integrated-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-cow-integrated-hw: build/cow-integrated-hw-multiboot.elf build/cow-integrated-stale-multiboot.elf build/cow-integrated-dishonest-multiboot.elf build/cow-integrated-decoy-multiboot.elf build/cow-integrated-abort-multiboot.elf build/cow-integrated-abort-noop-multiboot.elf build/cow-integrated-guarded-multiboot.elf build/cow-integrated-guarded-noop-multiboot.elf build/cow-integrated-guarded-stale-multiboot.elf build/cow-integrated-guarded-published-multiboot.elf
+test-cow-integrated-hw: build/cow-integrated-hw-multiboot.elf build/cow-integrated-stale-multiboot.elf build/cow-integrated-dishonest-multiboot.elf build/cow-integrated-decoy-multiboot.elf build/cow-integrated-abort-multiboot.elf build/cow-integrated-abort-noop-multiboot.elf build/cow-integrated-guarded-multiboot.elf build/cow-integrated-guarded-noop-multiboot.elf build/cow-integrated-guarded-stale-multiboot.elf build/cow-integrated-guarded-published-multiboot.elf build/cow-integrated-recycle-multiboot.elf build/cow-integrated-recycle-double-multiboot.elf
 	@set -eu; a=$$(mktemp build/.cow-integrated-split-a.XXXXXX); b=$$(mktemp build/.cow-integrated-split-b.XXXXXX); c=$$(mktemp build/.cow-integrated-pte-a.XXXXXX); d=$$(mktemp build/.cow-integrated-pte-b.XXXXXX); \
 	  trap 'rm -f "$$a" "$$b" "$$c" "$$d"' EXIT HUP INT TERM; \
 	  objcopy --dump-section .text="$$a" build/cow-split.o; objcopy --dump-section .text="$$b" build/cow-split-boot.o; cmp "$$a" "$$b"; \

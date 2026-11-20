@@ -1459,6 +1459,123 @@ cow_integrated_abort_compare:
     movq cow_pte_old(%rip), %rax
     cmpq %rax, page_table_4m(%rip)
     jne cow_integrated_abort_reject64
+
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_RECYCLE
+    /* Actual HIA PMM owns both E820-admitted frames; a successful guarded
+     * abort must precede physical release. Privilege and quiescent ownership
+     * remain NON-HIA test-bridge assumptions, not kernel implementation. */
+    cmpq $14, owner_b_state+32(%rip)
+    jne cow_integrated_abort_reject64
+    cmpb $7, owner_b_state+64(%rip)
+    jne cow_integrated_abort_reject64
+    movq $-1, owner_alloc_reply(%rip)
+    movq $-1, owner_alloc_reply+8(%rip)
+    leaq owner_cow_free_target(%rip), %rdi
+    movl $32, %esi
+    leaq owner_alloc_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq owner_b_state(%rip), %r8
+    movl $STATE_BYTES, %r9d
+    call f0                          /* locked native HIA PMM free_page */
+    testl %eax, %eax
+    jne cow_integrated_abort_reject64
+    cmpq $0, owner_alloc_reply(%rip)
+    jne cow_integrated_abort_reject64
+    cmpq $0, owner_alloc_reply+8(%rip)
+    jne cow_integrated_abort_reject64
+    cmpq $15, owner_b_state+32(%rip)
+    jne cow_integrated_abort_reject64
+    cmpb $3, owner_b_state+64(%rip)
+    jne cow_integrated_abort_reject64
+    movq cow_pte_old(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne cow_integrated_abort_reject64
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_RECYCLE_DOUBLE
+    /* Native HIA must reject double free, preserving all PMM bytes. */
+    leaq owner_b_state(%rip), %rsi
+    leaq cow_frame_binding_snapshot(%rip), %rdi
+    movl $(STATE_BYTES / 8), %ecx
+    rep movsq
+    movq $-1, owner_alloc_reply(%rip)
+    movq $-1, owner_alloc_reply+8(%rip)
+    leaq owner_cow_free_target(%rip), %rdi
+    movl $32, %esi
+    leaq owner_alloc_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq owner_b_state(%rip), %r8
+    movl $STATE_BYTES, %r9d
+    call f0
+    cmpl $7, %eax
+    jne cow_integrated_abort_reject64
+    cmpq $7, owner_alloc_reply(%rip)
+    jne cow_integrated_abort_reject64
+    cmpq $0, owner_alloc_reply+8(%rip)
+    jne cow_integrated_abort_reject64
+    leaq owner_b_state(%rip), %rsi
+    leaq cow_frame_binding_snapshot(%rip), %rdi
+    movl $(STATE_BYTES / 8), %ecx
+    repe cmpsq
+    jne cow_integrated_abort_reject64
+    movq cow_pte_old(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne cow_integrated_abort_reject64
+    /* Verify the actual physical contents again AFTER native HIA PMM
+     * processing; a successful allocator reply cannot certify memory. */
+    movq $0x601000, %rdi
+    movabsq $0x1122334455667788, %rax
+    movl $512, %ecx
+    repe scasq
+    jne cow_integrated_abort_reject64
+    movq $0x602000, %rdi
+    xorq %rax, %rax
+    movl $512, %ecx
+    repe scasq
+    jne cow_integrated_abort_reject64
+    leaq message_cow_pmm_double_free(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    /* Exact physical frame is reissued; all PMM bytes match the saved
+     * post-initial-allocation image, which is independent of return codes. */
+    movq $-1, owner_alloc_reply(%rip)
+    movq $-1, owner_alloc_reply+8(%rip)
+    leaq owner_cow_reallocate(%rip), %rdi
+    movl $32, %esi
+    leaq owner_alloc_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq owner_b_state(%rip), %r8
+    movl $STATE_BYTES, %r9d
+    call f0                          /* locked native HIA PMM allocate_page */
+    testl %eax, %eax
+    jne cow_integrated_abort_reject64
+    cmpq $0, owner_alloc_reply(%rip)
+    jne cow_integrated_abort_reject64
+    cmpq $0x602000, owner_alloc_reply+8(%rip)
+    jne cow_integrated_abort_reject64
+    leaq owner_b_state(%rip), %rsi
+    leaq cow_frame_binding_snapshot(%rip), %rdi
+    movl $(STATE_BYTES / 8), %ecx
+    repe cmpsq
+    jne cow_integrated_abort_reject64
+    movq cow_pte_old(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne cow_integrated_abort_reject64
+    /* Verify the actual physical contents again AFTER native HIA PMM
+     * processing; a successful allocator reply cannot certify memory. */
+    movq $0x601000, %rdi
+    movabsq $0x1122334455667788, %rax
+    movl $512, %ecx
+    repe scasq
+    jne cow_integrated_abort_reject64
+    movq $0x602000, %rdi
+    xorq %rax, %rax
+    movl $512, %ecx
+    repe scasq
+    jne cow_integrated_abort_reject64
+    leaq message_cow_pmm_reissued(%rip), %rsi
+    call puts64
+#endif
+#endif
     leaq message_cow_integrated_aborted(%rip), %rsi
     call puts64
     jmp fail64                           /* expected status 35 after abort */
@@ -4355,6 +4472,10 @@ message_cow_frame_binding_pte_stale:
     .asciz "HEPTAKERNEL HIA COW FRAME BINDING STALE PTE REFUSED UNCHANGED\r\n"
 message_cow_frame_binding_noop:
     .asciz "HEPTAKERNEL HIA COW FRAME BINDING DISHONEST ACCEPT DETECTED\r\n"
+message_cow_pmm_reissued:
+    .asciz "HEPTAKERNEL HIA COW PMM FRAME FREED REISSUED ZERO VERIFIED\r\n"
+message_cow_pmm_double_free:
+    .asciz "HEPTAKERNEL HIA COW PMM DOUBLE FREE REFUSED STATE UNCHANGED\r\n"
 message_cow_integrated_aborted:
     .asciz "HEPTAKERNEL HIA COW INTEGRATED LATE PTE REJECT ABORT ZERO COUNTS RESTORED\r\n"
 message_cow_integrated_guard_refused:
@@ -4521,6 +4642,8 @@ owner_state_table:
 owner_init_a:    .quad 0, 17, 0x400000, 2
 owner_init_b:    .quad 0, 17, 0x600000, 1
 owner_alloc_two: .quad 4, 2, 1, 0
+owner_cow_free_target: .quad 2, 0x602000, 0, 0
+owner_cow_reallocate: .quad 1, 1, 0, 0
 owner_claim_a:   .quad 6, 0x402000, 1, 0
 owner_claim_b:   .quad 6, 0x601000, 1, 0
 owner_query_a:   .quad 7, 0x402000, 2, 0
