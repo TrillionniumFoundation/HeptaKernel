@@ -1,9 +1,11 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn cow_frame_binding(request:readbuf,pte:readbuf,owner:mutbuf) -> (u32) effects(read,trap) entry(start)
-block start(request:readbuf,pte:readbuf,owner:mutbuf)
+fn cow_frame_binding(request:readbuf,pte:mutbuf,owner:mutbuf) -> (u32) effects(read,trap) entry(start)
+block start(request:readbuf,pte:mutbuf,owner:mutbuf)
+  fc_pte_view:readbuf = borrow.read(pte)
   fc_view:readbuf = borrow.read(owner)
-  fc_status:u32 = call(request,pte,fc_view) {"function":"inspect"}
+  fc_status:u32 = call(request,fc_pte_view,fc_view) {"function":"inspect"}
   _ = loan.end(fc_view)
+  _ = loan.end(fc_pte_view)
   ret(fc_status)
 end
 fn inspect(request:readbuf,pte:readbuf,owner:readbuf) -> (u32) effects(read,trap) entry(start)

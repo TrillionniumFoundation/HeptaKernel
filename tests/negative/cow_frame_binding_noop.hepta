@@ -1,6 +1,6 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn cow_frame_binding(request:readbuf,pte:readbuf,owner:mutbuf) -> (u32) effects(read,trap) entry(start)
-block start(request:readbuf,pte:readbuf,owner:mutbuf)
+fn cow_frame_binding(request:readbuf,pte:mutbuf,owner:mutbuf) -> (u32) effects(read,trap) entry(start)
+block start(request:readbuf,pte:mutbuf,owner:mutbuf)
   cf_unsafe:u32 = const() {"value":0}
   ret(cf_unsafe)
 end
