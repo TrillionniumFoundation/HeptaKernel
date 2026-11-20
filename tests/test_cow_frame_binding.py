@@ -50,6 +50,20 @@ def reference(req: bytes, pte: bytes, state: bytes) -> int:
     for slot in (src_index, dst_index):
         if not (state[64 + slot // 8] & (1 << (slot % 8))):
             return 6
+    # Independently implement the native PMM header, reserved bit,
+    # free-count and padding invariants. The two allocated bits alone
+    # do not prove the entire live arena state is internally consistent.
+    if any(state[40:64]):
+        return 6
+    if any(not (state[64 + i // 8] & (1 << (i % 8)))
+           for i in range(reserved)):
+        return 6
+    if count % 8 and (state[64 + count // 8] >> (count % 8)):
+        return 6
+    observed_free = sum(not (state[64 + i // 8] & (1 << (i % 8)))
+                        for i in range(reserved, count))
+    if observed_free != free:
+        return 6
     return 0
 
 
@@ -130,6 +144,36 @@ def main():
         samples.append((req, pte[:n], state))
     for n in (0, 31, 63, 64, 65, 66):
         samples.append((req, pte, state[:n]))
+    # Additional positive geometries and a free-counter integrity attack.
+    # The first two owners are consistent; the following cases preserve both
+    # source and target ownership while corrupting another invariant.
+    for bits, free_count in ((0b00000111, 14), (0b00001111, 13)):
+        r, p, st = payload(bitmap=bits)
+        table = bytearray(st)
+        struct.pack_into("<Q", table, 32, free_count)
+        samples.append((r, p, bytes(table)))
+    for free_count in (0, 1, 13, 15, 16):
+        table = bytearray(state)
+        struct.pack_into("<Q", table, 32, free_count)
+        samples.append((req, pte, bytes(table)))
+    for offset in (40, 55, 63):
+        table = bytearray(state)
+        table[offset] = 1
+        samples.append((req, pte, bytes(table)))
+    for bitmap_offset, bit in ((64, 0b11111111), (65, 0b00000001),
+                               (66, 0b00000001)):
+        table = bytearray(state)
+        table[bitmap_offset] = bit
+        samples.append((req, pte, bytes(table)))
+    for reserved_value in (0, 2, 3):
+        r, p, st = payload(reserved=reserved_value)
+        # Keep the claimed free-count coherent with the actual non-reserved
+        # slots for these independent reserved-prefix cases.
+        table = bytearray(st)
+        struct.pack_into("<Q", table, 32,
+                         sum(not (table[64 + i // 8] & (1 << (i % 8)))
+                             for i in range(reserved_value, 17)))
+        samples.append((r, p, bytes(table)))
     # Stable deterministic randomized mutations with an independent oracle.
     for _ in range(640):
         r, pte_mut, owner = payload()

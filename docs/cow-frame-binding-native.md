@@ -22,9 +22,9 @@ the oracle. `make test-cow-frame-binding` checks empty-PATH original
 HIA object byte identity. The Foundation CI binds source, verification
 and native execution; no change to the HIA toolchain lock is made.
 
-A read-only capability check is not a proof of exclusive ownership.
+The binding gate additionally rechecks the live PMM's entire valid bitmap range against its declared free-page counter, requires all reserved-prefix bits to remain set, checks bitmap tail padding and rejects nonzero header padding bytes 40–63. This uses real HIA bounded loads; a forged free counter or unrelated allocation bit cannot be silently admitted. The independent oracle includes valid alternative allocations and negative mutations of each invariant. No claim of atomic observation follows from this scan: another CPU could change bits while it runs.\n\nA read-only capability check is not a proof of exclusive ownership.
 In particular this primitive does **not** verify the CR3 walk or provenance
-of input pointers, validate all PMM bitmap bits/free-count consistency,
+of input pointers, authenticate PMM pointer provenance,
 perform a COW transaction, make a PTE update atomic, invalidate any TLB,
 prevent concurrent mutation, or supply HIA privilege/exception backends.
 Passing this narrow test does not close Linux memory management. The
