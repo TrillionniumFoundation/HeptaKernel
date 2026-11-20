@@ -195,7 +195,7 @@ jobs:
           set -euo pipefail
           python3 -I -B tools/linux_kconfig_scoped.py --repo .upstream/linux --lock compatibility/linux-source-lock.json --out build/linux-inventory
           python3 - <<'PY'
-          import base64, hashlib, json, subprocess
+          import base64, hashlib, json, re, subprocess
           from pathlib import Path
           root = Path("build/linux-inventory")
           report = json.loads((root / "kconfig-property-scopes-report.json").read_text())
@@ -226,12 +226,9 @@ jobs:
                   assert isinstance(decl, int) and 1 <= decl < after["line"]
                   assert isinstance(after["owner"], str) and after["owner"]
                   statement = lines[decl - 1].lstrip(b" \t")
-                  assert statement.startswith((b"config " + after["owner"].encode() + b" ",
-                                               b"config " + after["owner"].encode() + b"\t",
-                                               b"menuconfig " + after["owner"].encode() + b" ",
-                                               b"menuconfig " + after["owner"].encode() + b"\t")) or statement in (
-                                                   b"config " + after["owner"].encode(),
-                                                   b"menuconfig " + after["owner"].encode())
+                  declaration = re.match(rb"(?:config|menuconfig)[ \t]+([A-Za-z_][A-Za-z0-9_]*)\b", statement)
+                  assert declaration is not None and declaration.group(1) == after["owner"].encode(), (
+                      after["blob_oid"], decl, repr(statement), after["owner"])
               else:
                   assert after["owner"] is None and after["owner_declaration_line"] is None
           assert sum(report["counts"].get(key, 0) for key in allowed) == len(now)
