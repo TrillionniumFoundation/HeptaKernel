@@ -1453,6 +1453,6 @@ test-cow-integrated-hw: build/cow-integrated-hw-multiboot.elf build/cow-integrat
 	@set -eu; a=$$(mktemp build/.cow-integrated-split-a.XXXXXX); b=$$(mktemp build/.cow-integrated-split-b.XXXXXX); c=$$(mktemp build/.cow-integrated-pte-a.XXXXXX); d=$$(mktemp build/.cow-integrated-pte-b.XXXXXX); \
 	  trap 'rm -f "$$a" "$$b" "$$c" "$$d"' EXIT HUP INT TERM; \
 	  objcopy --dump-section .text="$$a" build/cow-split.o; objcopy --dump-section .text="$$b" build/cow-split-boot.o; cmp "$$a" "$$b"; \
-	  objcopy --dump-section .text="$c" build/cow-pte-swap.o; objcopy --dump-section .text="$d" build/cow-pte-boot.o; cmp "$c" "$d"; \
-	  objcopy --dump-section .text="$a" build/cow-abort.o; objcopy --dump-section .text="$b" build/cow-abort-boot.o; cmp "$a" "$b"
+	  objcopy --dump-section .text="$$c" build/cow-pte-swap.o; objcopy --dump-section .text="$$d" build/cow-pte-boot.o; cmp "$$c" "$$d"; \
+	  objcopy --dump-section .text="$$a" build/cow-abort.o; objcopy --dump-section .text="$$b" build/cow-abort-boot.o; cmp "$$a" "$$b"
 	timeout 240 $(PYTHON) tests/test_cow_integrated_qemu.py --qemu "$(QEMU)"
