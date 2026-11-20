@@ -110,6 +110,7 @@ block frame_bounds(cf_leaf_f:readbuf,cf_state_f:readbuf,cf_len_f:usize,cf_src_f:
 block pte_check(cf_leaf_p:readbuf,cf_state_p:readbuf,cf_len_p:usize,cf_src_p:u64,cf_exp_p:u64,cf_src_delta_p:u64,cf_dst_delta_p:u64,cf_reserved_p:u64,cf_pages_p:u64)
   cf_o_p:usize = const() {"value":0}
   cf_seen:u64 = call(cf_leaf_p,cf_o_p) {"function":"read_word"}
+  cf_zero_p:u64 = const() {"value":0}
   cf_same_pte:bool = compare.eq(cf_seen,cf_exp_p)
   cf_flags:u64 = const() {"value":263}
   cf_expected_flags:u64 = const() {"value":5}
@@ -117,10 +118,10 @@ block pte_check(cf_leaf_p:readbuf,cf_state_p:readbuf,cf_len_p:usize,cf_src_p:u64
   cf_flags_ok:bool = compare.eq(cf_bits,cf_expected_flags)
   cf_nx_mask:u64 = const() {"value":9223372036854775808}
   cf_nx:u64 = bit.and(cf_seen,cf_nx_mask)
-  cf_nx_ok:bool = compare.ne(cf_nx,cf_o_p)
+  cf_nx_ok:bool = compare.ne(cf_nx,cf_zero_p)
   cf_reserved_mask:u64 = const() {"value":9218868437227405312}
   cf_reserved_bits:u64 = bit.and(cf_seen,cf_reserved_mask)
-  cf_reserved_zero:bool = compare.eq(cf_reserved_bits,cf_o_p)
+  cf_reserved_zero:bool = compare.eq(cf_reserved_bits,cf_zero_p)
   cf_address_mask:u64 = const() {"value":4503599627366400}
   cf_frame:u64 = bit.and(cf_seen,cf_address_mask)
   cf_frame_ok:bool = compare.eq(cf_frame,cf_src_p)
