@@ -359,6 +359,8 @@ jobs:
             build/cow-frame-binding-boot.o
             build/cow-frame-binding-dishonest-boot.o
             build/cow-integrated-hardware-report.json
+            build/cow-integrated-recycle-multiboot.elf
+            build/cow-integrated-recycle-double-multiboot.elf
             build/cow-integrated-hw-multiboot.elf
             build/cow-integrated-stale-multiboot.elf
             build/cow-integrated-dishonest-multiboot.elf
