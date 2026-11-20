@@ -233,12 +233,11 @@ block read_load(im3:readbuf,p3:u64,n3:u64,total3:u64,entry3:u64,index3:u64,exec3
   w:u64 = bit.and(flags,wmask)
   x:u64 = bit.and(flags,xmask)
   zero3:u64 = const() {"value":0}
-  writable:bool = compare.ne(w,zero3)
   executable:bool = compare.ne(x,zero3)
-  wx:bool = bool.and(writable,executable)
-  no_wx:bool = compare.eq(w,x)
-  no_wx2:bool = bool.not(wx)
-  flags_safe:bool = bool.and(valid_flags,no_wx2)
+  nowrite:bool = compare.eq(w,zero3)
+  noexec:bool = compare.eq(x,zero3)
+  no_wx:bool = bool.or(nowrite,noexec)
+  flags_safe:bool = bool.and(valid_flags,no_wx)
   branch flags_safe load_shape(im3,p3,n3,total3,entry3,index3,exec3,fileoff,va,filesz,memsz,align,executable) bad_flags()
 block load_shape(im4:readbuf,p4:u64,n4:u64,total4:u64,entry4:u64,index4:u64,exec4:bool,off4:u64,va4:u64,fs4:u64,ms4:u64,al4:u64,x4:bool)
   zero4:u64 = const() {"value":0}
