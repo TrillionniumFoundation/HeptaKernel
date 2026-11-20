@@ -1,0 +1,114 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn cow_split(source:readbuf,destination:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(source:readbuf,destination:mutbuf,state:mutbuf)
+  cs_sl:usize = buffer.len(source)
+  cs_page:usize = const() {"value":4096}
+  cs_so:bool = compare.eq(cs_sl,cs_page)
+  branch cs_so dest_shape(source,destination,state) bad_source()
+block bad_source()
+  cs_s_err:u32 = const() {"value":1}
+  ret(cs_s_err)
+block dest_shape(cs_ds:readbuf,cs_dd:mutbuf,cs_dt:mutbuf)
+  cs_dl:usize = buffer.len(cs_dd)
+  cs_page_d:usize = const() {"value":4096}
+  cs_do:bool = compare.eq(cs_dl,cs_page_d)
+  branch cs_do state_shape(cs_ds,cs_dd,cs_dt) bad_dest()
+block bad_dest()
+  cs_d_err:u32 = const() {"value":2}
+  ret(cs_d_err)
+block state_shape(cs_ss:readbuf,cs_sd:mutbuf,cs_st:mutbuf)
+  cs_tl:usize = buffer.len(cs_st)
+  cs_page_t:usize = const() {"value":4096}
+  cs_to:bool = compare.eq(cs_tl,cs_page_t)
+  branch cs_to decode(cs_ss,cs_sd,cs_st) bad_state()
+block bad_state()
+  cs_t_err:u32 = const() {"value":3}
+  ret(cs_t_err)
+block decode(cs_src:readbuf,cs_dst:mutbuf,cs_tab:mutbuf)
+  cs_o0:usize = const() {"value":0}
+  cs_o1:usize = const() {"value":1}
+  cs_o2:usize = const() {"value":2}
+  cs_o3:usize = const() {"value":3}
+  cs_o4:usize = const() {"value":4}
+  cs_o5:usize = const() {"value":5}
+  cs_b0:u8 = buffer.load(cs_tab,cs_o0)
+  cs_b1:u8 = buffer.load(cs_tab,cs_o1)
+  cs_b2:u8 = buffer.load(cs_tab,cs_o2)
+  cs_b3:u8 = buffer.load(cs_tab,cs_o3)
+  cs_expected:u8 = buffer.load(cs_tab,cs_o4)
+  cs_dest_old:u8 = buffer.load(cs_tab,cs_o5)
+  cs_b0w:u64 = int.cast(cs_b0) {"mode":"wrap"}
+  cs_b1w:u64 = int.cast(cs_b1) {"mode":"wrap"}
+  cs_b2w:u64 = int.cast(cs_b2) {"mode":"wrap"}
+  cs_b3w:u64 = int.cast(cs_b3) {"mode":"wrap"}
+  cs_eight:u64 = const() {"value":8}
+  cs_s_hi:u64 = int.shl.checked(cs_b1w,cs_eight)
+  cs_d_hi:u64 = int.shl.checked(cs_b3w,cs_eight)
+  cs_s_slot:u64 = bit.or(cs_s_hi,cs_b0w)
+  cs_d_slot:u64 = bit.or(cs_d_hi,cs_b2w)
+  cs_first:u64 = const() {"value":6}
+  jump scan_reserved(cs_src,cs_dst,cs_tab,cs_s_slot,cs_d_slot,cs_expected,cs_dest_old,cs_first)
+block scan_reserved(cs_rsrc:readbuf,cs_rdst:mutbuf,cs_rtab:mutbuf,cs_rs:u64,cs_rd:u64,cs_re:u8,cs_rdo:u8,cs_ri:u64)
+  cs_end:u64 = const() {"value":16}
+  cs_more:bool = compare.lt(cs_ri,cs_end)
+  branch cs_more check_reserved(cs_rsrc,cs_rdst,cs_rtab,cs_rs,cs_rd,cs_re,cs_rdo,cs_ri) check_slots(cs_rsrc,cs_rdst,cs_rtab,cs_rs,cs_rd,cs_re,cs_rdo)
+block check_reserved(cs_xsrc:readbuf,cs_xdst:mutbuf,cs_xtab:mutbuf,cs_xs:u64,cs_xd:u64,cs_xe:u8,cs_xdo:u8,cs_xi:u64)
+  cs_at:usize = int.cast(cs_xi) {"mode":"wrap"}
+  cs_byte:u8 = buffer.load(cs_xtab,cs_at)
+  cs_z:u8 = const() {"value":0}
+  cs_clear:bool = compare.eq(cs_byte,cs_z)
+  branch cs_clear advance(cs_xsrc,cs_xdst,cs_xtab,cs_xs,cs_xd,cs_xe,cs_xdo,cs_xi) bad_reserved()
+block advance(cs_asrc:readbuf,cs_adst:mutbuf,cs_atab:mutbuf,cs_as:u64,cs_ad:u64,cs_ae:u8,cs_ado:u8,cs_ai:u64)
+  cs_one:u64 = const() {"value":1}
+  cs_next:u64 = int.add.wrap(cs_ai,cs_one)
+  jump scan_reserved(cs_asrc,cs_adst,cs_atab,cs_as,cs_ad,cs_ae,cs_ado,cs_next)
+block bad_reserved()
+  cs_res_err:u32 = const() {"value":4}
+  ret(cs_res_err)
+block check_slots(cs_lsrc:readbuf,cs_ldst:mutbuf,cs_ltab:mutbuf,cs_ls:u64,cs_ld:u64,cs_le:u8,cs_ldo:u8)
+  cs_limit:u64 = const() {"value":4080}
+  cs_sok:bool = compare.lt(cs_ls,cs_limit)
+  cs_dok:bool = compare.lt(cs_ld,cs_limit)
+  cs_distinct:bool = compare.ne(cs_ls,cs_ld)
+  cs_both:bool = bool.and(cs_sok,cs_dok)
+  cs_good:bool = bool.and(cs_both,cs_distinct)
+  branch cs_good check_state(cs_lsrc,cs_ldst,cs_ltab,cs_ls,cs_ld,cs_le,cs_ldo) bad_slots()
+block bad_slots()
+  cs_slots_err:u32 = const() {"value":5}
+  ret(cs_slots_err)
+block check_state(cs_csrc:readbuf,cs_cdst:mutbuf,cs_ctab:mutbuf,cs_ci:u64,cs_cj:u64,cs_ce:u8,cs_cdold:u8)
+  cs_base:u64 = const() {"value":16}
+  cs_sidx:u64 = int.add.wrap(cs_ci,cs_base)
+  cs_didx:u64 = int.add.wrap(cs_cj,cs_base)
+  cs_spos:usize = int.cast(cs_sidx) {"mode":"wrap"}
+  cs_dpos:usize = int.cast(cs_didx) {"mode":"wrap"}
+  cs_actual_s:u8 = buffer.load(cs_ctab,cs_spos)
+  cs_actual_d:u8 = buffer.load(cs_ctab,cs_dpos)
+  cs_old_ok:bool = compare.eq(cs_actual_s,cs_ce)
+  cs_dest_ok:bool = compare.eq(cs_actual_d,cs_cdold)
+  cs_stale:bool = bool.and(cs_old_ok,cs_dest_ok)
+  branch cs_stale check_ownership(cs_csrc,cs_cdst,cs_ctab,cs_spos,cs_dpos,cs_ce,cs_cdold) bad_stale()
+block bad_stale()
+  cs_stale_err:u32 = const() {"value":6}
+  ret(cs_stale_err)
+block check_ownership(cs_osrc:readbuf,cs_odst:mutbuf,cs_otab:mutbuf,cs_osp:usize,cs_odp:usize,cs_oe:u8,cs_ode:u8)
+  cs_two:u8 = const() {"value":2}
+  cs_zero:u8 = const() {"value":0}
+  cs_shared:bool = compare.ge(cs_oe,cs_two)
+  cs_fresh:bool = compare.eq(cs_ode,cs_zero)
+  cs_allowed:bool = bool.and(cs_shared,cs_fresh)
+  branch cs_allowed commit(cs_osrc,cs_odst,cs_otab,cs_osp,cs_odp,cs_oe) bad_ownership()
+block bad_ownership()
+  cs_owner_err:u32 = const() {"value":7}
+  ret(cs_owner_err)
+block commit(cs_copy_src:readbuf,cs_copy_dst:mutbuf,cs_copy_tab:mutbuf,cs_copy_si:usize,cs_copy_di:usize,cs_copy_old:u8)
+  cs_zerooff:usize = const() {"value":0}
+  cs_length:usize = const() {"value":4096}
+  _ = buffer.copy_range(cs_copy_dst,cs_copy_src,cs_zerooff,cs_zerooff,cs_length)
+  cs_one:u8 = const() {"value":1}
+  cs_next:u8 = int.sub.wrap(cs_copy_old,cs_one)
+  _ = buffer.store(cs_copy_tab,cs_copy_si,cs_next)
+  _ = buffer.store(cs_copy_tab,cs_copy_di,cs_one)
+  cs_ok:u32 = const() {"value":0}
+  ret(cs_ok)
+end
