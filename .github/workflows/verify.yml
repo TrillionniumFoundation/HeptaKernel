@@ -101,7 +101,7 @@ jobs:
         run: |
           make test-cow-split-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
-      - name: Verify complete single-CPU HIA COW copy and PTE switch on actual QEMU page fault
+      - name: Verify single-CPU HIA COW fault, PTE switch and live-PTE-guarded abort controls
         shell: bash
         run: |
           make test-cow-integrated-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
@@ -325,7 +325,13 @@ jobs:
             build/cow-integrated-decoy-multiboot.elf
             build/cow-integrated-abort-multiboot.elf
             build/cow-integrated-abort-noop-multiboot.elf
+            build/cow-integrated-guarded-multiboot.elf
+            build/cow-integrated-guarded-noop-multiboot.elf
+            build/cow-integrated-guarded-stale-multiboot.elf
+            build/cow-integrated-guarded-published-multiboot.elf
             build/cow-abort-pte-guarded.o
+            build/cow-abort-pte-guarded-boot.o
+            build/cow-abort-pte-guarded-dishonest-boot.o
             build/cow-abort-boot.o
             build/cow-abort-dishonest-boot.o
             build/cow-split-boot.o
