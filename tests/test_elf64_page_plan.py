@@ -117,7 +117,7 @@ def campaign(library: Path, fill_path: Path | None, unsafe: bool) -> dict:
                                ctypes.addressof(receipt), 16,
                                ctypes.addressof(page), PAGE)
             assert fill_result == 0, ("HIA fill rejected verified plan", count)
-            assert bytes(receipt) == b"\xa5" + bytes(15)
+            assert bytes(receipt)[:16] == b"\xa5" + bytes(15)
             assert bytes(page)[:PAGE] == physical_page(image, data), (
                 "file-backed/BSS page bytes", count)
             assert bytes(envelope)[:len(data) + len(image)] == data + image
