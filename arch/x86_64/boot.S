@@ -1332,15 +1332,73 @@ cow_integrated_compare_byte64:
      * source count 1, destination count 1. Nothing is published by the PTE. */
     movb $1, cow_integrated_state+4(%rip)
     movb $1, cow_integrated_state+5(%rip)
-    leaq cow_integrated_state(%rip), %rdi  /* valid empty readbuf request */
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_ABORT_GUARDED
+    /* The readbuf points at the actual live CPU PTE, not a copied fixture.
+     * The frozen original PTE is kept separately in the HIA state header. */
+    movq cow_pte_old(%rip), %rax
+    movq %rax, cow_integrated_state+8(%rip)
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_GUARD_STALE
+    /* A different but still well-formed frozen expected PTE must refuse. */
+    xorq $8, cow_integrated_state+8(%rip)
+#endif
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_GUARD_PUBLISHED
+    /* Simulate a later publisher by changing the LIVE PTE cache attribute.
+     * The actual CPU mapping is not accessed again before terminating. */
+    xorq $8, page_table_4m(%rip)
+#endif
+#if defined(HEPTAKERNEL_TEST_COW_INTEGRATED_GUARD_STALE) || defined(HEPTAKERNEL_TEST_COW_INTEGRATED_GUARD_PUBLISHED)
+    /* Independent full-byte state snapshot before an expected refusal. */
+    leaq cow_integrated_state(%rip), %rsi
+    leaq cow_integrated_guard_snapshot(%rip), %rdi
+    movl $512, %ecx
+    rep movsq
+#endif
+    leaq page_table_4m(%rip), %rdi  /* 8 bytes of real active page-table RAM */
+    movl $8, %esi
+#else
+    leaq cow_integrated_state(%rip), %rdi  /* legacy empty request */
     xorq %rsi, %rsi
+#endif
     movq $0x602000, %rdx
     movl $4096, %ecx
     leaq cow_integrated_state(%rip), %r8
     movl $4096, %r9d
-    call cow_abort_f0                    /* exact selfhost HIA native object */
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_ABORT_GUARDED
+    call cow_abort_pte_guarded_f0        /* genuine original HIA Core v8 */
+#else
+    call cow_abort_f0                    /* original legacy HIA cleanup */
+#endif
+#if defined(HEPTAKERNEL_TEST_COW_INTEGRATED_GUARD_STALE) || defined(HEPTAKERNEL_TEST_COW_INTEGRATED_GUARD_PUBLISHED)
+    cmpl $8, %eax                       /* exact PTE mismatch refusal */
+    jne cow_integrated_abort_reject64
+    leaq cow_integrated_state(%rip), %rsi
+    leaq cow_integrated_guard_snapshot(%rip), %rdi
+    movl $512, %ecx
+    repe cmpsq                          /* all 4096 state bytes untouched */
+    jne cow_integrated_abort_reject64
+    movq $0x601000, %rsi
+    movq $0x602000, %rdi
+    movl $512, %ecx
+    repe cmpsq                          /* copied page NOT cleared on refusal */
+    jne cow_integrated_abort_reject64
+    movq cow_pte_old(%rip), %rax
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_GUARD_PUBLISHED
+    xorq $8, %rax
+#endif
+    cmpq %rax, page_table_4m(%rip)      /* verify real PTE was not rewritten */
+    jne cow_integrated_abort_reject64
+    movabsq $0xa55aa55a5aa55aa5, %rax
+    cmpq %rax, cow_integrated_guard_before(%rip)
+    jne cow_integrated_abort_reject64
+    cmpq %rax, cow_integrated_guard_after(%rip)
+    jne cow_integrated_abort_reject64
+    leaq message_cow_integrated_guard_refused(%rip), %rsi
+    call puts64
+    jmp fail64                           /* required negative control exit 35 */
+#else
     testl %eax, %eax
     jne cow_integrated_abort_reject64
+#endif
     movabsq $0x1122334455667788, %r10
     movq $0x601000, %r8
     movq $0x602000, %r9
@@ -1362,6 +1420,17 @@ cow_integrated_abort_pages64:
     xorq %rcx, %rcx
 cow_integrated_abort_table64:
     xorl %edx, %edx
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_ABORT_GUARDED
+    cmpq $8, %rcx
+    jb cow_integrated_abort_header_checked
+    cmpq $16, %rcx
+    jae cow_integrated_abort_header_checked
+    /* A genuine HIA abort must preserve every byte of the frozen PTE. */
+    leaq cow_pte_old(%rip), %r11
+    movb -8(%r11,%rcx,1), %dl
+    jmp cow_integrated_abort_compare
+cow_integrated_abort_header_checked:
+#endif
     cmpq $0, %rcx
     je cow_integrated_abort_slot2
     cmpq $2, %rcx
@@ -4088,6 +4157,8 @@ message_cow_pte_bypass:
     .asciz "HEPTAKERNEL HIA COW PTE RESTORE BYPASS REFAULT VERIFIED\r\n"
 message_cow_integrated_aborted:
     .asciz "HEPTAKERNEL HIA COW INTEGRATED LATE PTE REJECT ABORT ZERO COUNTS RESTORED\r\n"
+message_cow_integrated_guard_refused:
+    .asciz "HEPTAKERNEL HIA COW INTEGRATED LIVE PTE GUARDED ABORT REFUSED UNCHANGED\r\n"
 message_cow_integrated_abort_rejected:
     .asciz "HEPTAKERNEL HIA COW INTEGRATED ABORT DISHONEST OR CORRUPT REJECTED\r\n"
 message_cow_integrated_prepared:
@@ -4337,6 +4408,9 @@ cow_integrated_guard_before: .skip 8
 .balign 4096
 cow_integrated_state:        .skip 4096
 cow_integrated_guard_after:  .skip 8
+/* Non-HIA independent full-byte pre-refusal snapshot. */
+.balign 4096
+cow_integrated_guard_snapshot: .skip 4096
 pt_protect_request:  .skip 32
 pt_protect_reply:    .skip 16
 pt_protect_observed: .skip 8
