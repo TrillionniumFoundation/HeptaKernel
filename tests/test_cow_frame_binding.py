@@ -50,6 +50,8 @@ def reference(req: bytes, pte: bytes, state: bytes) -> int:
     for slot in (src_index, dst_index):
         if not (state[64 + slot // 8] & (1 << (slot % 8))):
             return 6
+    if any(state[40:64]):
+        return 6
     return 0
 
 
@@ -130,6 +132,16 @@ def main():
         samples.append((req, pte[:n], state))
     for n in (0, 31, 63, 64, 65, 66):
         samples.append((req, pte, state[:n]))
+    # Header padding must remain all-zero: the original PMM initializer
+    # writes zero there; corrupting an unconsumed header byte is not safe.
+    for offset in (40, 41, 47, 48, 53, 55, 56, 61, 63):
+        table = bytearray(state)
+        table[offset] = 1 << (offset % 8)
+        samples.append((req, pte, bytes(table)))
+    for value in (0, 1, 255):
+        table = bytearray(state)
+        table[40:64] = bytes([value]) * 24
+        samples.append((req, pte, bytes(table)))
     # Stable deterministic randomized mutations with an independent oracle.
     for _ in range(640):
         r, pte_mut, owner = payload()

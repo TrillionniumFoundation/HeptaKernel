@@ -300,7 +300,21 @@ block dst_bit(fr_dst_bit_r:readbuf,fr_dst_bit_p:readbuf,fr_dst_bit_s:readbuf)
   db_hit:u64 = bit.and(db_wide,db_mask)
   db_zero:u64 = const() {"value":0}
   db_ok:bool = compare.ne(db_hit,db_zero)
-  branch db_ok accepted(fr_dst_bit_r,fr_dst_bit_p,fr_dst_bit_s) bad_owner()
+  branch db_ok header_padding(fr_dst_bit_r,fr_dst_bit_p,fr_dst_bit_s) bad_owner()
+block header_padding(hp_request:readbuf,hp_pte:readbuf,hp_state:readbuf)
+  hp_o40:usize = const() {"value":40}
+  hp_o48:usize = const() {"value":48}
+  hp_o56:usize = const() {"value":56}
+  hp_w40:u64 = call(hp_state,hp_o40) {"function":"read_word"}
+  hp_w48:u64 = call(hp_state,hp_o48) {"function":"read_word"}
+  hp_w56:u64 = call(hp_state,hp_o56) {"function":"read_word"}
+  hp_zero:u64 = const() {"value":0}
+  hp_good40:bool = compare.eq(hp_w40,hp_zero)
+  hp_good48:bool = compare.eq(hp_w48,hp_zero)
+  hp_good56:bool = compare.eq(hp_w56,hp_zero)
+  hp_both:bool = bool.and(hp_good40,hp_good48)
+  hp_good:bool = bool.and(hp_both,hp_good56)
+  branch hp_good accepted(hp_request,hp_pte,hp_state) bad_owner()
 block accepted(fr_accept_r:readbuf,fr_accept_p:readbuf,fr_accept_s:readbuf)
   f_success:u32 = const() {"value":0}
   ret(f_success)
