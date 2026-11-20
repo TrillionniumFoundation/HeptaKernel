@@ -48,3 +48,28 @@ COW. The source/destination physical pages are E820 admitted but still
 have no authenticated PMM/refcount owner in this test. Page copying,
 allocation, atomic PTE writes, concurrent faults, SMP TLB shootdown,
 signal delivery and user-mode Linux execution are not covered.
+
+## HIA split plus PTE switch in the same real hardware fault (staged)
+
+The isolated QEMU CPL0 test now attempts two **separate unchanged HIA Core v8
+native** calls in the *same* observed hardware #PF: first `cow_split_f0`
+clones the full source physical page into the destination and changes 2->1 /
+0->1 counts in an independent guest RAM table; then `cow_pte_f0` changes
+one live 4KiB user RO/NX PTE to the private writable frame. After the
+explicitly non-HIA INVLPG/IRETQ, the CPU must retry the same store and the
+observer must inspect the full source and destination pages. All 4KiB of the
+refcount table are checked before the PTE mutation. No new HIA opcode or
+compiler replacement is implied.
+
+Two QEMU machines each exercise successful copy/remap, exact status-6 stale
+refcount refusal with no state mutation, a separately compiled malicious
+HIA copy no-op, and a post-HIA destination corruption. The last two must
+be independently rejected before PTE installation. Both HIA `.text` sections
+must be byte-identical to their stand-alone source-compiled objects.
+
+**Unclosed:** this is neither a transaction nor a complete Linux COW fault
+handler. The non-HIA bridge still supplies PMM correspondence, source and
+destination addresses, CPL0/exception entry, IRQ masking, INVLPG and IRETQ;
+there is no authenticated ownership, rollback on a later PTE failure, CAS,
+lock-free/SMP safety, TLB shootdown, process VM, or complete syscall ABI.
+Do not close any of the 17 global gates or 422 syscall obligations.

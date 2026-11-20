@@ -93,6 +93,11 @@ jobs:
         run: |
           make test-cow-split-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Verify complete single-CPU HIA COW copy and PTE switch on actual QEMU page fault
+        shell: bash
+        run: |
+          make test-cow-integrated-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify native HIA bounded COW reference-count transition and dishonest control
         shell: bash
         run: |
@@ -305,6 +310,11 @@ jobs:
             build/page-zero-hardware-report.json
             build/cow-refcount-hardware-report.json
             build/cow-split-hardware-report.json
+            build/cow-integrated-hardware-report.json
+            build/cow-integrated-hw-multiboot.elf
+            build/cow-integrated-stale-multiboot.elf
+            build/cow-integrated-dishonest-multiboot.elf
+            build/cow-integrated-decoy-multiboot.elf
             build/cow-split-boot.o
             build/cow-split-hw-multiboot.elf
             build/cow-split-dishonest-multiboot.elf

@@ -478,7 +478,7 @@ build/pdpt-1g-%.elf: build/boot-pdpt-1g-%.o $(PDPT_1G_BOOT_SUPPORT) arch/x86_64/
 build/pdpt-1g-%-multiboot.elf: build/pdpt-1g-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-boot: test-cow-pte-hw test-cow-split-hw test-cow-refcount-hw test-page-copy-hw test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
+test-boot: test-cow-integrated-hw test-cow-pte-hw test-cow-split-hw test-cow-refcount-hw test-page-copy-hw test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
 	$(PYTHON) tests/test_boot.py --qemu "$(QEMU)"
 
 test-guard-pages: build/kernel-host.so
@@ -1380,3 +1380,40 @@ test-cow-pte-hw: build/cow-pte-hw-multiboot.elf build/cow-pte-stale-multiboot.el
 	  objcopy --dump-section .text="$$boot" build/cow-pte-boot.o; \
 	  cmp "$$orig" "$$boot"
 	timeout 160 $(PYTHON) tests/test_cow_pte_swap_qemu.py --qemu "$(QEMU)"
+
+# One actual QEMU #PF: unmodified HIA cow_split clones full 4KiB plus counts,
+# then unmodified HIA cow_pte_swap replaces the live PTE. Privilege/IRET is
+# explicitly the non-HIA assembly oracle, not a HIA kernel implementation.
+.PHONY: test-cow-integrated-hw
+build/boot-cow-integrated-hw.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_PTE_HW=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-cow-integrated-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_PTE_HW=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-cow-integrated-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_PTE_HW=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED_DECOY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+COW_INTEGRATED_SUPPORT := $(COW_PTE_HW_SUPPORT) build/cow-pte-boot.o
+
+build/cow-integrated-hw.elf: build/boot-cow-integrated-hw.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-hw.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o
+
+build/cow-integrated-stale.elf: build/boot-cow-integrated-stale.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-stale.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o
+
+build/cow-integrated-dishonest.elf: build/boot-cow-integrated-hw.o $(COW_INTEGRATED_SUPPORT) build/cow-split-dishonest-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-hw.o $(COW_INTEGRATED_SUPPORT) build/cow-split-dishonest-boot.o
+
+build/cow-integrated-decoy.elf: build/boot-cow-integrated-decoy.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-decoy.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o
+
+build/cow-integrated-%-multiboot.elf: build/cow-integrated-%.elf
+	objcopy -O elf32-i386 "$<" "$@"
+
+test-cow-integrated-hw: build/cow-integrated-hw-multiboot.elf build/cow-integrated-stale-multiboot.elf build/cow-integrated-dishonest-multiboot.elf build/cow-integrated-decoy-multiboot.elf
+	@set -eu; a=$$(mktemp build/.cow-integrated-split-a.XXXXXX); b=$$(mktemp build/.cow-integrated-split-b.XXXXXX); c=$$(mktemp build/.cow-integrated-pte-a.XXXXXX); d=$$(mktemp build/.cow-integrated-pte-b.XXXXXX); \
+	  trap 'rm -f "$$a" "$$b" "$$c" "$$d"' EXIT HUP INT TERM; \
+	  objcopy --dump-section .text="$$a" build/cow-split.o; objcopy --dump-section .text="$$b" build/cow-split-boot.o; cmp "$$a" "$$b"; \
+	  objcopy --dump-section .text="$$c" build/cow-pte-swap.o; objcopy --dump-section .text="$$d" build/cow-pte-boot.o; cmp "$$c" "$$d"
+	timeout 180 $(PYTHON) tests/test_cow_integrated_qemu.py --qemu "$(QEMU)"

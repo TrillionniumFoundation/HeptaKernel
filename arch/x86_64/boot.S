@@ -1198,6 +1198,101 @@ cow_pte_page_fault64:
     movabsq $0x8899aabbccddeeff, %rax
     cmpq %rax, 0x602000
     jne fail64
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED
+    /* Exact unmodified HIA cow_split native code runs INSIDE the first real
+     * #PF before the independent HIA PTE swap. The physical allocation,
+     * emergency stack, interrupt mask and subsequent INVLPG remain NON-HIA. */
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_STALE
+    /* The caller's expected count is 2, but actual source count is 1. */
+    movb $1, cow_integrated_state+18(%rip)
+#endif
+    movq $0x601000, %rdi
+    movl $4096, %esi
+    movq $0x602000, %rdx
+    movl $4096, %ecx
+    leaq cow_integrated_state(%rip), %r8
+    movl $4096, %r9d
+    call cow_split_f0
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_STALE
+    cmpl $6, %eax
+    jne fail64
+#else
+    testl %eax, %eax
+    jne cow_integrated_reject64
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_DECOY
+    /* Test bridge changes ONE destination byte after genuine HIA copied. */
+    xorq $8, 0x602008
+#endif
+#endif
+    movabsq $0xa55aa55a5aa55aa5, %rax
+    cmpq %rax, cow_integrated_guard_before(%rip)
+    jne cow_integrated_reject64
+    cmpq %rax, cow_integrated_guard_after(%rip)
+    jne cow_integrated_reject64
+    movq $0x601000, %r8
+    movq $0x602000, %r9
+    movabsq $0x1122334455667788, %r10
+    xorq %rcx, %rcx
+cow_integrated_page_scan64:
+    cmpq %r10, (%r8,%rcx,8)
+    jne cow_integrated_reject64
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_STALE
+    movabsq $0x8899aabbccddeeff, %rax
+#else
+    movq %r10, %rax
+#endif
+    cmpq %rax, (%r9,%rcx,8)
+    jne cow_integrated_reject64
+    incq %rcx
+    cmpq $512, %rcx
+    jb cow_integrated_page_scan64
+    /* Examine ALL 4096 state bytes, not the two returned counters alone. */
+    leaq cow_integrated_state(%rip), %r8
+    xorq %rcx, %rcx
+cow_integrated_state_scan64:
+    xorl %edx, %edx
+    cmpq $0, %rcx
+    je cow_integrated_expect_two64
+    cmpq $2, %rcx
+    je cow_integrated_expect_seventeen64
+    cmpq $4, %rcx
+    je cow_integrated_expect_two64
+    cmpq $18, %rcx
+    je cow_integrated_expect_one64
+    cmpq $33, %rcx
+    je cow_integrated_expect_dest64
+    jmp cow_integrated_compare_byte64
+cow_integrated_expect_two64:
+    movb $2, %dl
+    jmp cow_integrated_compare_byte64
+cow_integrated_expect_seventeen64:
+    movb $17, %dl
+    jmp cow_integrated_compare_byte64
+cow_integrated_expect_one64:
+    movb $1, %dl
+    jmp cow_integrated_compare_byte64
+cow_integrated_expect_dest64:
+#ifndef HEPTAKERNEL_TEST_COW_INTEGRATED_STALE
+    movb $1, %dl
+#endif
+cow_integrated_compare_byte64:
+    cmpb %dl, (%r8,%rcx,1)
+    jne cow_integrated_reject64
+    incq %rcx
+    cmpq $4096, %rcx
+    jb cow_integrated_state_scan64
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED_STALE
+    movq cow_pte_old(%rip), %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+    leaq message_cow_integrated_stale(%rip), %rsi
+    call puts64
+    jmp fail64                 /* exact status-6, no-write rejection */
+#else
+    leaq message_cow_integrated_prepared(%rip), %rsi
+    call puts64
+#endif
+#endif
     movq $-1, cow_pte_reply(%rip)
     movq $-1, cow_pte_reply+8(%rip)
 #ifdef HEPTAKERNEL_TEST_COW_PTE_STALE
@@ -1254,6 +1349,12 @@ cow_pte_page_fault64:
     movq cow_pte_fault_rsp(%rip), %rsp
     addq $8, %rsp                 /* skip CPU #PF error code */
     iretq                         /* retry identical store with new mapping */
+    jmp fail64
+#endif
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED
+cow_integrated_reject64:
+    leaq message_cow_integrated_rejected(%rip), %rsi
+    call puts64
     jmp fail64
 #endif
 cow_pte_dishonest64:
@@ -2265,6 +2366,21 @@ cow_pte_hardware_exercise64:
     movq %rax, cow_pte_request+16(%rip)
     movl pte_caps(%rip), %eax
     movq %rax, cow_pte_request+24(%rip)
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED
+    /* The NON-HIA fixture declares table slots. HIA alone will detach,
+     * clone the physical bytes, and later replace the PTE. */
+    leaq cow_integrated_state(%rip), %rdi
+    xorq %rax, %rax
+    movl $512, %ecx
+    rep stosq
+    movabsq $0xa55aa55a5aa55aa5, %rax
+    movq %rax, cow_integrated_guard_before(%rip)
+    movq %rax, cow_integrated_guard_after(%rip)
+    movw $2, cow_integrated_state(%rip)
+    movw $17, cow_integrated_state+2(%rip)
+    movb $2, cow_integrated_state+4(%rip)
+    movb $2, cow_integrated_state+18(%rip)
+#endif
     movq $0, cow_pte_stage(%rip)
     leaq message_cow_pte_mapped(%rip), %rsi
     call puts64
@@ -2284,7 +2400,11 @@ cow_pte_store_insn:
     movq $0x601000, %r8
     movq $0x602000, %r9
     movabsq $0x1122334455667788, %r11
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED
+    movabsq $0x1122334455667788, %r12 /* copied, then first qword dirtied */
+#else
     movabsq $0x8899aabbccddeeff, %r12
+#endif
     movabsq $0xd4c3b2a1908f7e6d, %r13
     xorq %rcx, %rcx
 cow_pte_bytes_oracle_loop:
@@ -2304,6 +2424,16 @@ cow_pte_oracle_next:
     jb cow_pte_bytes_oracle_loop
     leaq message_cow_pte_remap_success(%rip), %rsi
     call puts64
+#ifdef HEPTAKERNEL_TEST_COW_INTEGRATED
+    /* Split/refcount and PTE were both performed by two HIA native calls;
+     * only the non-HIA bridge supplied fault/IRET/TLB hardware effects. */
+    cmpb $1, cow_integrated_state+18(%rip)
+    jne fail64
+    cmpb $1, cow_integrated_state+33(%rip)
+    jne fail64
+    leaq message_cow_integrated_verified(%rip), %rsi
+    call puts64
+#endif
     movl $0x25, %eax              /* QEMU exit 75 */
     jmp debug_exit64
 #endif
@@ -3864,6 +3994,14 @@ message_cow_pte_dishonest:
     .asciz "HEPTAKERNEL HIA COW PTE DISHONEST NOOP REJECTED\r\n"
 message_cow_pte_bypass:
     .asciz "HEPTAKERNEL HIA COW PTE RESTORE BYPASS REFAULT VERIFIED\r\n"
+message_cow_integrated_prepared:
+    .asciz "HEPTAKERNEL HIA COW INTEGRATED PAGE COPY AND COUNTS VERIFIED\r\n"
+message_cow_integrated_verified:
+    .asciz "HEPTAKERNEL HIA COW INTEGRATED PF COPY REFCOUNT PTE VERIFIED\r\n"
+message_cow_integrated_stale:
+    .asciz "HEPTAKERNEL HIA COW INTEGRATED STALE REFCOUNT REFUSED\r\n"
+message_cow_integrated_rejected:
+    .asciz "HEPTAKERNEL HIA COW INTEGRATED DISHONEST OR CORRUPT COPY REJECTED\r\n"
 message_pt_protect_pass:
     .asciz "HEPTAKERNEL HIA LIVE PT WRITE PROTECT VERIFIED\r\n"
 message_pt_protect_fault:
@@ -4098,6 +4236,11 @@ cow_pte_stage:        .skip 8
 cow_pte_fault_rsp:    .skip 8
 cow_pte_saved_rdi:    .skip 8
 cow_pte_saved_r10:    .skip 8
+/* Isolated 4KiB COW refcount table. Not a PMM-owned mapping authority. */
+cow_integrated_guard_before: .skip 8
+.balign 4096
+cow_integrated_state:        .skip 4096
+cow_integrated_guard_after:  .skip 8
 pt_protect_request:  .skip 32
 pt_protect_reply:    .skip 16
 pt_protect_observed: .skip 8
