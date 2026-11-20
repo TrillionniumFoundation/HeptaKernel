@@ -1,9 +1,11 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn cow_frame_binding(request:readbuf,pte:readbuf,owner:mutbuf) -> (u32) effects(read,trap) entry(start)
-block start(request:readbuf,pte:readbuf,owner:mutbuf)
+fn cow_frame_binding(request:readbuf,pte:mutbuf,owner:mutbuf) -> (u32) effects(read,trap) entry(start)
+block start(request:readbuf,pte:mutbuf,owner:mutbuf)
+  fc_pte_view:readbuf = borrow.read(pte)
   fc_view:readbuf = borrow.read(owner)
-  fc_status:u32 = call(request,pte,fc_view) {"function":"inspect"}
+  fc_status:u32 = call(request,fc_pte_view,fc_view) {"function":"inspect"}
   _ = loan.end(fc_view)
+  _ = loan.end(fc_pte_view)
   ret(fc_status)
 end
 fn inspect(request:readbuf,pte:readbuf,owner:readbuf) -> (u32) effects(read,trap) entry(start)
@@ -34,6 +36,12 @@ block bad_metadata()
 block bad_geometry()
   f_err_geo:u32 = const() {"value":4}
   ret(f_err_geo)
+block bad_pte()
+  f_err_pte:u32 = const() {"value":5}
+  ret(f_err_pte)
+block bad_owner()
+  f_err_owner:u32 = const() {"value":6}
+  ret(f_err_owner)
 block magic(fr_magic_r:readbuf,fr_magic_p:readbuf,fr_magic_s:readbuf)
   m_magic_o:usize = const() {"value":0}
   m_magic:u64 = call(fr_magic_s,m_magic_o) {"function":"read_word"}
@@ -169,12 +177,7 @@ block distinct(fr_distinct_r:readbuf,fr_distinct_p:readbuf,fr_distinct_s:readbuf
   dx_dst_o:usize = const() {"value":8}
   dx_dst:u64 = call(fr_distinct_r,dx_dst_o) {"function":"read_word"}
   dx_ok:bool = compare.ne(dx_src,dx_dst)
-  branch dx_ok ready_to_check(fr_distinct_r,fr_distinct_p,fr_distinct_s) bad_geometry()
-block ready_to_check(cr:readbuf,cp:readbuf,cs:readbuf)
-  cv:u32 = call(cr,cp,cs) {"function":"check_pte"}
-  ret(cv)
-end
-fn check_pte(fr_pte_eq_r:readbuf,fr_pte_eq_p:readbuf,fr_pte_eq_s:readbuf) -> (u32) effects(read,trap) entry(pte_eq)
+  branch dx_ok pte_eq(fr_distinct_r,fr_distinct_p,fr_distinct_s) bad_geometry()
 block pte_eq(fr_pte_eq_r:readbuf,fr_pte_eq_p:readbuf,fr_pte_eq_s:readbuf)
   pe_expected_o:usize = const() {"value":16}
   pe_expected:u64 = call(fr_pte_eq_r,pe_expected_o) {"function":"read_word"}
@@ -301,12 +304,6 @@ block dst_bit(fr_dst_bit_r:readbuf,fr_dst_bit_p:readbuf,fr_dst_bit_s:readbuf)
 block accepted(fr_accept_r:readbuf,fr_accept_p:readbuf,fr_accept_s:readbuf)
   f_success:u32 = const() {"value":0}
   ret(f_success)
-block bad_pte()
-  f_err_pte:u32 = const() {"value":5}
-  ret(f_err_pte)
-block bad_owner()
-  f_err_owner:u32 = const() {"value":6}
-  ret(f_err_owner)
 end
 fn read_word(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
 block start(bytes:readbuf,offset:usize)
