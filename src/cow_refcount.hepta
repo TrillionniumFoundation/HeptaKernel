@@ -1,0 +1,131 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn cow_refcount(request:readbuf,receipt:mutbuf,counts:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,receipt:mutbuf,counts:mutbuf)
+  cf_receipt_len:usize = buffer.len(receipt)
+  cf_receipt_size:usize = const() {"value":16}
+  cf_receipt_ok:bool = compare.eq(cf_receipt_len,cf_receipt_size)
+  branch cf_receipt_ok request_shape(request,receipt,counts) bad_receipt()
+block bad_receipt()
+  cf_err_receipt:u32 = const() {"value":1}
+  ret(cf_err_receipt)
+block request_shape(cf_req:readbuf,cf_rep:mutbuf,cf_counts:mutbuf)
+  cf_req_len:usize = buffer.len(cf_req)
+  cf_req_size:usize = const() {"value":16}
+  cf_req_ok:bool = compare.eq(cf_req_len,cf_req_size)
+  branch cf_req_ok counts_shape(cf_req,cf_rep,cf_counts) bad_request()
+block bad_request()
+  cf_err_request:u32 = const() {"value":2}
+  ret(cf_err_request)
+block counts_shape(cf_shape_req:readbuf,cf_shape_rep:mutbuf,cf_shape_counts:mutbuf)
+  cf_count_len:usize = buffer.len(cf_shape_counts)
+  cf_count_size:usize = const() {"value":4096}
+  cf_count_ok:bool = compare.eq(cf_count_len,cf_count_size)
+  branch cf_count_ok decode(cf_shape_req,cf_shape_rep,cf_shape_counts) bad_counts()
+block bad_counts()
+  cf_err_counts:u32 = const() {"value":3}
+  ret(cf_err_counts)
+block decode(cf_wire:readbuf,cf_output:mutbuf,cf_table:mutbuf)
+  cf_at0:usize = const() {"value":0}
+  cf_at1:usize = const() {"value":1}
+  cf_at2:usize = const() {"value":2}
+  cf_at3:usize = const() {"value":3}
+  cf_lo:u8 = buffer.load(cf_wire,cf_at0)
+  cf_hi:u8 = buffer.load(cf_wire,cf_at1)
+  cf_action:u8 = buffer.load(cf_wire,cf_at2)
+  cf_expected:u8 = buffer.load(cf_wire,cf_at3)
+  cf_lo64:u64 = int.cast(cf_lo) {"mode":"wrap"}
+  cf_hi64:u64 = int.cast(cf_hi) {"mode":"wrap"}
+  cf_eight:u64 = const() {"value":8}
+  cf_shift:u64 = int.shl.checked(cf_hi64,cf_eight)
+  cf_slot:u64 = bit.or(cf_shift,cf_lo64)
+  cf_reserved_first:u64 = const() {"value":4}
+  jump reserved(cf_wire,cf_output,cf_table,cf_slot,cf_action,cf_expected,cf_reserved_first)
+block reserved(cf_scan_req:readbuf,cf_scan_rep:mutbuf,cf_scan_table:mutbuf,cf_scan_slot:u64,cf_scan_action:u8,cf_scan_expected:u8,cf_scan_index:u64)
+  cf_scan_end:u64 = const() {"value":16}
+  cf_scan_more:bool = compare.lt(cf_scan_index,cf_scan_end)
+  branch cf_scan_more inspect(cf_scan_req,cf_scan_rep,cf_scan_table,cf_scan_slot,cf_scan_action,cf_scan_expected,cf_scan_index) slot_gate(cf_scan_rep,cf_scan_table,cf_scan_slot,cf_scan_action,cf_scan_expected)
+block inspect(cf_ins_req:readbuf,cf_ins_rep:mutbuf,cf_ins_table:mutbuf,cf_ins_slot:u64,cf_ins_action:u8,cf_ins_expected:u8,cf_ins_index:u64)
+  cf_ins_at:usize = int.cast(cf_ins_index) {"mode":"wrap"}
+  cf_ins_byte:u8 = buffer.load(cf_ins_req,cf_ins_at)
+  cf_ins_zero:u8 = const() {"value":0}
+  cf_ins_ok:bool = compare.eq(cf_ins_byte,cf_ins_zero)
+  branch cf_ins_ok advance(cf_ins_req,cf_ins_rep,cf_ins_table,cf_ins_slot,cf_ins_action,cf_ins_expected,cf_ins_index) bad_reserved()
+block advance(cf_adv_req:readbuf,cf_adv_rep:mutbuf,cf_adv_table:mutbuf,cf_adv_slot:u64,cf_adv_action:u8,cf_adv_expected:u8,cf_adv_index:u64)
+  cf_adv_one:u64 = const() {"value":1}
+  cf_adv_next:u64 = int.add.wrap(cf_adv_index,cf_adv_one)
+  jump reserved(cf_adv_req,cf_adv_rep,cf_adv_table,cf_adv_slot,cf_adv_action,cf_adv_expected,cf_adv_next)
+block bad_reserved()
+  cf_err_reserved:u32 = const() {"value":8}
+  ret(cf_err_reserved)
+block slot_gate(cf_slot_rep:mutbuf,cf_slot_table:mutbuf,cf_slot_index:u64,cf_slot_action:u8,cf_slot_expected:u8)
+  cf_slot_limit:u64 = const() {"value":4096}
+  cf_slot_ok:bool = compare.lt(cf_slot_index,cf_slot_limit)
+  branch cf_slot_ok action_gate(cf_slot_rep,cf_slot_table,cf_slot_index,cf_slot_action,cf_slot_expected) bad_slot()
+block bad_slot()
+  cf_err_slot:u32 = const() {"value":4}
+  ret(cf_err_slot)
+block action_gate(cf_action_rep:mutbuf,cf_action_table:mutbuf,cf_action_slot:u64,cf_action_code:u8,cf_action_expected:u8)
+  cf_action_share:u8 = const() {"value":1}
+  cf_action_detach:u8 = const() {"value":2}
+  cf_action_release:u8 = const() {"value":3}
+  cf_is_share:bool = compare.eq(cf_action_code,cf_action_share)
+  cf_is_detach:bool = compare.eq(cf_action_code,cf_action_detach)
+  cf_is_release:bool = compare.eq(cf_action_code,cf_action_release)
+  cf_any_first:bool = bool.or(cf_is_share,cf_is_detach)
+  cf_any_action:bool = bool.or(cf_any_first,cf_is_release)
+  branch cf_any_action stale_gate(cf_action_rep,cf_action_table,cf_action_slot,cf_action_expected,cf_is_share,cf_is_detach) bad_action()
+block bad_action()
+  cf_err_action:u32 = const() {"value":5}
+  ret(cf_err_action)
+block stale_gate(cf_stale_rep:mutbuf,cf_stale_table:mutbuf,cf_stale_slot:u64,cf_stale_expected:u8,cf_stale_share:bool,cf_stale_detach:bool)
+  cf_stale_at:usize = int.cast(cf_stale_slot) {"mode":"wrap"}
+  cf_stale_seen:u8 = buffer.load(cf_stale_table,cf_stale_at)
+  cf_stale_match:bool = compare.eq(cf_stale_seen,cf_stale_expected)
+  branch cf_stale_match transition(cf_stale_rep,cf_stale_table,cf_stale_at,cf_stale_expected,cf_stale_share,cf_stale_detach) bad_stale()
+block bad_stale()
+  cf_err_stale:u32 = const() {"value":7}
+  ret(cf_err_stale)
+block transition(cf_transition_rep:mutbuf,cf_transition_table:mutbuf,cf_transition_at:usize,cf_transition_old:u8,cf_transition_share:bool,cf_transition_detach:bool)
+  branch cf_transition_share share(cf_transition_rep,cf_transition_table,cf_transition_at,cf_transition_old) other(cf_transition_rep,cf_transition_table,cf_transition_at,cf_transition_old,cf_transition_detach)
+block share(cf_share_rep:mutbuf,cf_share_table:mutbuf,cf_share_at:usize,cf_share_old:u8)
+  cf_share_min:u8 = const() {"value":1}
+  cf_share_max:u8 = const() {"value":254}
+  cf_share_above:bool = compare.ge(cf_share_old,cf_share_min)
+  cf_share_below:bool = compare.le(cf_share_old,cf_share_max)
+  cf_share_ok:bool = bool.and(cf_share_above,cf_share_below)
+  branch cf_share_ok do_share(cf_share_rep,cf_share_table,cf_share_at,cf_share_old) bad_transition()
+block do_share(cf_incr_rep:mutbuf,cf_incr_table:mutbuf,cf_incr_at:usize,cf_incr_old:u8)
+  cf_incr_one:u8 = const() {"value":1}
+  cf_incr_next:u8 = int.add.wrap(cf_incr_old,cf_incr_one)
+  jump commit(cf_incr_rep,cf_incr_table,cf_incr_at,cf_incr_next)
+block other(cf_other_rep:mutbuf,cf_other_table:mutbuf,cf_other_at:usize,cf_other_old:u8,cf_other_detach:bool)
+  branch cf_other_detach detach(cf_other_rep,cf_other_table,cf_other_at,cf_other_old) release(cf_other_rep,cf_other_table,cf_other_at,cf_other_old)
+block detach(cf_detach_rep:mutbuf,cf_detach_table:mutbuf,cf_detach_at:usize,cf_detach_old:u8)
+  cf_detach_min:u8 = const() {"value":2}
+  cf_detach_ok:bool = compare.ge(cf_detach_old,cf_detach_min)
+  branch cf_detach_ok do_detach(cf_detach_rep,cf_detach_table,cf_detach_at,cf_detach_old) bad_transition()
+block do_detach(cf_decr_rep:mutbuf,cf_decr_table:mutbuf,cf_decr_at:usize,cf_decr_old:u8)
+  cf_decr_one:u8 = const() {"value":1}
+  cf_decr_next:u8 = int.sub.wrap(cf_decr_old,cf_decr_one)
+  jump commit(cf_decr_rep,cf_decr_table,cf_decr_at,cf_decr_next)
+block release(cf_release_rep:mutbuf,cf_release_table:mutbuf,cf_release_at:usize,cf_release_old:u8)
+  cf_release_one:u8 = const() {"value":1}
+  cf_release_ok:bool = compare.eq(cf_release_old,cf_release_one)
+  branch cf_release_ok do_release(cf_release_rep,cf_release_table,cf_release_at) bad_transition()
+block do_release(cf_finish_rep:mutbuf,cf_finish_table:mutbuf,cf_finish_at:usize)
+  cf_finish_zero:u8 = const() {"value":0}
+  jump commit(cf_finish_rep,cf_finish_table,cf_finish_at,cf_finish_zero)
+block bad_transition()
+  cf_err_transition:u32 = const() {"value":6}
+  ret(cf_err_transition)
+block commit(cf_commit_rep:mutbuf,cf_commit_table:mutbuf,cf_commit_at:usize,cf_commit_next:u8)
+  _ = buffer.store(cf_commit_table,cf_commit_at,cf_commit_next)
+  cf_reply_zero:u8 = const() {"value":0}
+  cf_reply_at:usize = const() {"value":0}
+  cf_reply_length:usize = const() {"value":16}
+  _ = buffer.fill_range(cf_commit_rep,cf_reply_at,cf_reply_length,cf_reply_zero)
+  cf_reply_next_at:usize = const() {"value":8}
+  _ = buffer.store(cf_commit_rep,cf_reply_next_at,cf_commit_next)
+  cf_status_ok:u32 = const() {"value":0}
+  ret(cf_status_ok)
+end

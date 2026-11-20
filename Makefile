@@ -587,7 +587,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -1174,3 +1174,26 @@ test-page-copy-hw: build/page-copy-hw-multiboot.elf build/page-copy-dishonest-mu
 	  objcopy --dump-section .text="$$renamed" build/page-zero-boot.o; \
 	  cmp "$$original" "$$renamed"
 	$(PYTHON) tests/test_page_copy_qemu.py --qemu "$(QEMU)"
+
+# Bounded single-owner COW reference-count byte transition, NOT an SMP primitive.
+build/cow-refcount.o: src/cow_refcount.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.cow-refcount.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/cow-refcount.so: build/cow-refcount.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/cow-refcount-unsafe.o: tests/negative/cow_refcount_noop.hepta | build check-compiler
+	"$(HEPTA_COMPILER)" < "$<" > "$@"
+
+build/cow-refcount-unsafe.so: build/cow-refcount-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+.PHONY: test-cow-refcount
+test-cow-refcount: build/cow-refcount.so build/cow-refcount-unsafe.so
+	@set -eu; tmp=$$(mktemp build/.cow-byte-identity.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/cow_refcount.hepta > "$$tmp"; \
+	cmp "$$tmp" build/cow-refcount.o
+	timeout 90 $(PYTHON) tests/test_cow_refcount.py build/cow-refcount.so
+	$(PYTHON) tests/test_cow_refcount.py build/cow-refcount-unsafe.so --expect-unsafe

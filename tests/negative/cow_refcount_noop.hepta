@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn cow_refcount_noop(request:readbuf,receipt:mutbuf,counts:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,receipt:mutbuf,counts:mutbuf)
+  noop_status:u32 = const() {"value":0}
+  ret(noop_status)
+end
