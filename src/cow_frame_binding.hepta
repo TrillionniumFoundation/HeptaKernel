@@ -1,6 +1,7 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
 fn cow_frame_binding(request:readbuf,pte:mutbuf,owner:mutbuf) -> (u32) effects(read,trap) entry(start)
 block start(request:readbuf,pte:mutbuf,owner:mutbuf)
+  fc_integrity:bool = call(owner) {"function":"state_valid"}
   fc_pte_view:readbuf = borrow.read(pte)
   fc_view:readbuf = borrow.read(owner)
   fc_status:u32 = call(request,fc_pte_view,fc_view) {"function":"inspect"}
@@ -8,9 +9,8 @@ block start(request:readbuf,pte:mutbuf,owner:mutbuf)
   _ = loan.end(fc_pte_view)
   fc_zero:u32 = const() {"value":0}
   fc_admitted:bool = compare.eq(fc_status,fc_zero)
-  branch fc_admitted validate_owner(owner) passthrough(fc_status)
-block validate_owner(vo_owner:mutbuf)
-  vo_valid:bool = call(vo_owner) {"function":"state_valid"}
+  branch fc_admitted validate_owner(fc_integrity) passthrough(fc_status)
+block validate_owner(vo_valid:bool)
   branch vo_valid owner_valid() owner_invalid()
 block owner_valid()
   vo_success:u32 = const() {"value":0}
