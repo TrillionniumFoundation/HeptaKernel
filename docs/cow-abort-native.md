@@ -29,13 +29,27 @@ and round trips with the genuine `cow_split` native object. It is also
 part of the default `make test` and Foundation CI. The fixed HIA compiler
 and byte-for-byte empty-PATH rebuild requirements are unchanged.
 
-**Important:** This alone does not implement rollback in the actual QEMU
-page-fault handler; the existing boot bridge has not yet been wired to call
-it after an injected *late* PTE failure. A caller could still mistakenly
-reclaim a page already published by a successful PTE update. The routine
+**Actual QEMU late-PTE-failure integration:** an independent PC/32 MiB and
+Q35/64 MiB hardware #PF fixture first calls the real native `cow_split`
+to copy the source page and decrement/increment refcounts. It then forces
+an exact status-9 stale expected-old in the separately compiled native
+`cow_pte_swap`; the actual PTE must remain unchanged. Only then does the
+non-HIA bridge call the real native `cow_abort`. The fixture independently
+checks all 4,096 source bytes, all 4,096 zero destination bytes, all 4,096
+state bytes, guard words and the unchanged PTE. An independently compiled
+malicious always-success HIA abort is required to be rejected on both
+machines. Exact source/object/image identity and QEMU commands are retained
+in the Foundation artifact. This is a *single-CPU, deliberately injected
+late failure* test, not an atomic or general Linux COW rollback. The routine
 cannot authenticate physical ownership or prove that a PTE is unchanged;
 the non-aliasing and exclusive quiescence assumptions are external.
 Its zeroing and counter writes are sequential, not a hardware atomic
 transaction. Traps midway, SMP races, CAS, TLB shootdown, and general Linux
 process COW remain unimplemented. The complete 17 Linux gates and all
 422 syscall obligations remain HOLD.
+
+**Still unclosed:** a caller could mistakenly reclaim a page already
+published by a successful PTE update. There is no HIA verifier-enforced
+PTE authority, physical frame identity, CAS, fault-entry/IRETQ primitive,
+SMP synchronization or TLB shootdown. An actual machine trap midway through
+the multiwrite abort also lacks an all-or-nothing recovery log.

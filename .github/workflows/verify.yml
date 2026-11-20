@@ -320,6 +320,10 @@ jobs:
             build/cow-integrated-stale-multiboot.elf
             build/cow-integrated-dishonest-multiboot.elf
             build/cow-integrated-decoy-multiboot.elf
+            build/cow-integrated-abort-multiboot.elf
+            build/cow-integrated-abort-noop-multiboot.elf
+            build/cow-abort-boot.o
+            build/cow-abort-dishonest-boot.o
             build/cow-split-boot.o
             build/cow-split-hw-multiboot.elf
             build/cow-split-dishonest-multiboot.elf

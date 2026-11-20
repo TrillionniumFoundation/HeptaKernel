@@ -20,6 +20,8 @@ COMPLETE = "HEPTAKERNEL HIA COW INTEGRATED PF COPY REFCOUNT PTE VERIFIED"
 STALE = "HEPTAKERNEL HIA COW INTEGRATED STALE REFCOUNT REFUSED"
 REJECT = "HEPTAKERNEL HIA COW INTEGRATED DISHONEST OR CORRUPT COPY REJECTED"
 PTE = "HEPTAKERNEL HIA COW PTE HARDWARE REMAP AND PHYSICAL RAM VERIFIED"
+ABORT = "HEPTAKERNEL HIA COW INTEGRATED LATE PTE REJECT ABORT ZERO COUNTS RESTORED"
+ABORT_BAD = "HEPTAKERNEL HIA COW INTEGRATED ABORT DISHONEST OR CORRUPT REJECTED"
 FAIL = "HEPTAKERNEL BOOT FAIL"
 
 
@@ -42,11 +44,19 @@ def run(qemu: str, machine: str, mib: int, mode: str) -> dict:
                stdout=p.stdout, stderr=p.stderr)
     out = p.stdout
     assert all(out.count(s) == 1 for s in (MAP, RESERV, FAULT)), row
-    assert all(out.count(s) <= 1 for s in (PREP, COMPLETE, STALE, REJECT, PTE)), row
+    assert all(out.count(s) <= 1 for s in (PREP, COMPLETE, STALE, REJECT, PTE, ABORT, ABORT_BAD)), row
     if mode == "hw":
         assert p.returncode == 75, row
         assert all(out.count(s) == 1 for s in (PREP, COMPLETE, PTE)), row
         assert STALE not in out and REJECT not in out and FAIL not in out, row
+    elif mode == "abort":
+        assert p.returncode == 35 and out.count(ABORT) == 1, row
+        assert out.count(PREP) == 1 and FAIL in out, row
+        assert all(x not in out for x in (COMPLETE, STALE, REJECT, PTE, ABORT_BAD)), row
+    elif mode == "abort-noop":
+        assert p.returncode == 35 and out.count(ABORT_BAD) == 1, row
+        assert out.count(PREP) == 1 and FAIL in out, row
+        assert all(x not in out for x in (COMPLETE, STALE, REJECT, PTE, ABORT)), row
     elif mode == "stale":
         assert p.returncode == 35 and out.count(STALE) == 1, row
         assert PREP not in out and COMPLETE not in out and PTE not in out, row
@@ -65,10 +75,10 @@ def main() -> None:
     args = p.parse_args()
     rows = [run(args.qemu, machine, mib, mode)
             for machine, mib in (("pc", 32), ("q35", 64))
-            for mode in ("hw", "stale", "dishonest", "decoy")]
+            for mode in ("hw", "stale", "dishonest", "decoy", "abort", "abort-noop")]
     report = {"schema": "heptakernel.cow-integrated-qemu.v1",
               "head_evidence": "exact-built-image-per-case", "positives": 2,
-              "negative_controls": 6, "cases": rows, "status": "PASS"}
+              "negative_controls": 10, "cases": rows, "status": "PASS"}
     Path("build/cow-integrated-hardware-report.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(report, sort_keys=True))
