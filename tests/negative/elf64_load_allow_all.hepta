@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn elf64_load_segments(image:readbuf,reply:mutbuf,scratch:mutbuf) -> (u32) effects(read,trap) entry(start)
+block start(image:readbuf,reply:mutbuf,scratch:mutbuf)
+  dishonest:u32 = const() {"value":0}
+  ret(dishonest)
+end
