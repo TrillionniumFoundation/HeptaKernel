@@ -215,3 +215,12 @@ and an alternative *well-formed* forged page provide independent controls.
 The forgery is refused by the **non-HIA** physical-provenance observer, not
 by the HIA source-language verifier or hardware privilege backend. See
 `docs/x86-cr3-root-qemu.md`; full Linux acceptance stays HOLD.
+
+The native HIA `src/elf64_page_plan.hepta` component now derives the
+40-byte single-page file/BSS materialization prefix from the selected current
+ELF64 `PT_LOAD` program header and a two-field selector, rather than accepting
+caller-invented offset, length, lead or memory size. Its independent oracle
+and dishonest native HIA control also check source immutability and rejection
+non-mutation; an isolated host harness connects this output to the original
+HIA page fill. No authenticated cross-call snapshot, trustworthy coordinator,
+page mapping, hardware user execution, or full `execve` exists yet.
