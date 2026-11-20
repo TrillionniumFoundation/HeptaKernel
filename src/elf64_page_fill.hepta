@@ -1,0 +1,163 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn elf64_page_fill(envelope:readbuf,receipt:mutbuf,page:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(envelope:readbuf,receipt:mutbuf,page:mutbuf)
+  full:usize = buffer.len(envelope)
+  header:usize = const() {"value":40}
+  enough:bool = compare.ge(full,header)
+  branch enough reply_shape(envelope,receipt,page,full) bad_short()
+block bad_short()
+  e_short:u32 = const() {"value":1}
+  ret(e_short)
+block reply_shape(env1:readbuf,rec1:mutbuf,pg1:mutbuf,total1:usize)
+  rec_len:usize = buffer.len(rec1)
+  rec_expected:usize = const() {"value":16}
+  rec_valid:bool = compare.eq(rec_len,rec_expected)
+  branch rec_valid page_shape(env1,rec1,pg1,total1) bad_reply()
+block bad_reply()
+  e_reply:u32 = const() {"value":2}
+  ret(e_reply)
+block page_shape(env2:readbuf,rec2:mutbuf,pg2:mutbuf,total2:usize)
+  page_len:usize = buffer.len(pg2)
+  expect_page:usize = const() {"value":4096}
+  page_valid:bool = compare.eq(page_len,expect_page)
+  branch page_valid decode(env2,rec2,pg2,total2) bad_page()
+block bad_page()
+  e_page:u32 = const() {"value":3}
+  ret(e_page)
+block decode(env3:readbuf,rec3:mutbuf,pg3:mutbuf,total3:usize)
+  off0:usize = const() {"value":0}
+  off8:usize = const() {"value":8}
+  off16:usize = const() {"value":16}
+  off24:usize = const() {"value":24}
+  off32:usize = const() {"value":32}
+  fileoff:u64 = call(env3,off0) {"function":"read64"}
+  filesz:u64 = call(env3,off8) {"function":"read64"}
+  memsz:u64 = call(env3,off16) {"function":"read64"}
+  lead:u64 = call(env3,off24) {"function":"read64"}
+  page_index:u64 = call(env3,off32) {"function":"read64"}
+  zero:u64 = const() {"value":0}
+  max_lead:u64 = const() {"value":4096}
+  max_mem:u64 = const() {"value":4294967296}
+  max_page_index:u64 = const() {"value":1048575}
+  mem_nonzero:bool = compare.gt(memsz,zero)
+  file_bounded:bool = compare.le(filesz,memsz)
+  lead_bounded:bool = compare.lt(lead,max_lead)
+  mem_bounded:bool = compare.le(memsz,max_mem)
+  index_bounded:bool = compare.le(page_index,max_page_index)
+  valid1:bool = bool.and(mem_nonzero,file_bounded)
+  valid2:bool = bool.and(lead_bounded,mem_bounded)
+  valid3:bool = bool.and(valid1,valid2)
+  valid4:bool = bool.and(valid3,index_bounded)
+  branch valid4 file_bounds(env3,rec3,pg3,total3,fileoff,filesz,memsz,lead,page_index) bad_fields()
+block bad_fields()
+  e_fields:u32 = const() {"value":4}
+  ret(e_fields)
+block file_bounds(env4:readbuf,rec4:mutbuf,pg4:mutbuf,total4:usize,off4:u64,fs4:u64,ms4:u64,lead4:u64,idx4:u64)
+  header4:usize = const() {"value":40}
+  payload_size:usize = int.sub.wrap(total4,header4)
+  payload_size64:u64 = int.cast(payload_size) {"mode":"wrap"}
+  off_in:bool = compare.le(off4,payload_size64)
+  branch off_in file_remaining(env4,rec4,pg4,payload_size64,off4,fs4,ms4,lead4,idx4) bad_file()
+block file_remaining(env5:readbuf,rec5:mutbuf,pg5:mutbuf,payload5:u64,off5:u64,fs5:u64,ms5:u64,lead5:u64,idx5:u64)
+  avail:u64 = int.sub.wrap(payload5,off5)
+  fits:bool = compare.le(fs5,avail)
+  branch fits page_bounds(env5,rec5,pg5,off5,fs5,ms5,lead5,idx5) bad_file()
+block bad_file()
+  e_file:u32 = const() {"value":5}
+  ret(e_file)
+block page_bounds(env6:readbuf,rec6:mutbuf,pg6:mutbuf,off6:u64,fs6:u64,ms6:u64,lead6:u64,idx6:u64)
+  pagebytes:u64 = const() {"value":4096}
+  page_base:u64 = int.mul.wrap(idx6,pagebytes)
+  mem_end:u64 = int.add.wrap(lead6,ms6)
+  page_in:bool = compare.lt(page_base,mem_end)
+  branch page_in select_start(env6,rec6,pg6,off6,fs6,lead6,page_base) bad_index()
+block bad_index()
+  e_index:u32 = const() {"value":6}
+  ret(e_index)
+block select_start(env7:readbuf,rec7:mutbuf,pg7:mutbuf,off7:u64,fs7:u64,lead7:u64,base7:u64)
+  first_page:bool = compare.gt(lead7,base7)
+  branch first_page select_from_lead(env7,rec7,pg7,off7,fs7,lead7,base7) select_from_page(env7,rec7,pg7,off7,fs7,lead7,base7)
+block select_from_lead(env8:readbuf,rec8:mutbuf,pg8:mutbuf,off8v:u64,fs8:u64,lead8:u64,base8:u64)
+  jump copy_window(env8,rec8,pg8,off8v,fs8,lead8,base8,lead8)
+block select_from_page(env9:readbuf,rec9:mutbuf,pg9:mutbuf,off9:u64,fs9:u64,lead9:u64,base9:u64)
+  jump copy_window(env9,rec9,pg9,off9,fs9,lead9,base9,base9)
+block copy_window(env10:readbuf,rec10:mutbuf,pg10:mutbuf,off10:u64,fs10:u64,lead10:u64,base10:u64,begin10:u64)
+  file_end:u64 = int.add.wrap(lead10,fs10)
+  page_size:u64 = const() {"value":4096}
+  page_end:u64 = int.add.wrap(base10,page_size)
+  file_first:bool = compare.le(file_end,page_end)
+  branch file_first choose_file_end(env10,rec10,pg10,off10,lead10,base10,begin10,file_end) choose_page_end(env10,rec10,pg10,off10,lead10,base10,begin10,page_end)
+block choose_file_end(env11:readbuf,rec11:mutbuf,pg11:mutbuf,off11:u64,lead11:u64,base11:u64,begin11:u64,end11:u64)
+  jump copy_or_zero(env11,rec11,pg11,off11,lead11,base11,begin11,end11)
+block choose_page_end(env12:readbuf,rec12:mutbuf,pg12:mutbuf,off12:u64,lead12:u64,base12:u64,begin12:u64,end12:u64)
+  jump copy_or_zero(env12,rec12,pg12,off12,lead12,base12,begin12,end12)
+block copy_or_zero(env13:readbuf,rec13:mutbuf,pg13:mutbuf,off13:u64,lead13:u64,base13:u64,begin13:u64,end13:u64)
+  positive:bool = compare.gt(end13,begin13)
+  branch positive fill_and_copy(env13,rec13,pg13,off13,lead13,base13,begin13,end13) zero_only(rec13,pg13)
+block fill_and_copy(env14:readbuf,rec14:mutbuf,pg14:mutbuf,off14:u64,lead14:u64,base14:u64,begin14:u64,end14:u64)
+  count:u64 = int.sub.wrap(end14,begin14)
+  dest_off:u64 = int.sub.wrap(begin14,base14)
+  source_relative:u64 = int.sub.wrap(begin14,lead14)
+  raw_source:u64 = int.add.wrap(off14,source_relative)
+  header14:u64 = const() {"value":40}
+  source_off:u64 = int.add.wrap(raw_source,header14)
+  dst_index:usize = int.cast(dest_off) {"mode":"wrap"}
+  src_index:usize = int.cast(source_off) {"mode":"wrap"}
+  copy_bytes:usize = int.cast(count) {"mode":"wrap"}
+  zero_at:usize = const() {"value":0}
+  pagebytes14:usize = const() {"value":4096}
+  zero_byte:u8 = const() {"value":0}
+  _ = buffer.fill_range(pg14,zero_at,pagebytes14,zero_byte)
+  _ = buffer.copy_range(pg14,env14,dst_index,src_index,copy_bytes)
+  jump stamp(rec14)
+block zero_only(rec15:mutbuf,pg15:mutbuf)
+  zero_at15:usize = const() {"value":0}
+  pagebytes15:usize = const() {"value":4096}
+  zero_byte15:u8 = const() {"value":0}
+  _ = buffer.fill_range(pg15,zero_at15,pagebytes15,zero_byte15)
+  jump stamp(rec15)
+block stamp(rec16:mutbuf)
+  zero_at16:usize = const() {"value":0}
+  receipt_size:usize = const() {"value":16}
+  zero_byte16:u8 = const() {"value":0}
+  _ = buffer.fill_range(rec16,zero_at16,receipt_size,zero_byte16)
+  marker:u8 = const() {"value":165}
+  _ = buffer.store(rec16,zero_at16,marker)
+  success:u32 = const() {"value":0}
+  ret(success)
+end
+fn read16(image:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(image:readbuf,offset:usize)
+  octet0:u8 = buffer.load(image,offset)
+  one:usize = const() {"value":1}
+  offset1:usize = int.add.wrap(offset,one)
+  octet1:u8 = buffer.load(image,offset1)
+  word0:u64 = int.cast(octet0) {"mode":"wrap"}
+  word1:u64 = int.cast(octet1) {"mode":"wrap"}
+  shift:u64 = const() {"value":8}
+  upper:u64 = int.shl.checked(word1,shift)
+  result:u64 = bit.or(upper,word0)
+  ret(result)
+end
+fn read32(image:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(image:readbuf,offset:usize)
+  lo:u64 = call(image,offset) {"function":"read16"}
+  step:usize = const() {"value":2}
+  next:usize = int.add.wrap(offset,step)
+  hi:u64 = call(image,next) {"function":"read16"}
+  shift:u64 = const() {"value":16}
+  upper:u64 = int.shl.checked(hi,shift)
+  result:u64 = bit.or(upper,lo)
+  ret(result)
+end
+fn read64(image:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(image:readbuf,offset:usize)
+  lo:u64 = call(image,offset) {"function":"read32"}
+  step:usize = const() {"value":4}
+  next:usize = int.add.wrap(offset,step)
+  hi:u64 = call(image,next) {"function":"read32"}
+  shift:u64 = const() {"value":32}
+  upper:u64 = int.shl.checked(hi,shift)
+  result:u64 = bit.or(upper,lo)
+  ret(result)
+end
