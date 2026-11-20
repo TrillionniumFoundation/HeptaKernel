@@ -83,6 +83,11 @@ jobs:
         run: |
           make test-cow-split HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Verify genuine native HIA COW split on real guest RAM and independent controls
+        shell: bash
+        run: |
+          make test-cow-split-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify native HIA bounded COW reference-count transition and dishonest control
         shell: bash
         run: |
@@ -294,6 +299,13 @@ jobs:
             build/page-zero-recycle-bypass-multiboot.elf
             build/page-zero-hardware-report.json
             build/cow-refcount-hardware-report.json
+            build/cow-split-hardware-report.json
+            build/cow-split-boot.o
+            build/cow-split-hw-multiboot.elf
+            build/cow-split-dishonest-multiboot.elf
+            build/cow-split-stale-multiboot.elf
+            build/cow-split-dest-decoy-multiboot.elf
+            build/cow-split-source-decoy-multiboot.elf
             build/cow-refcount-hw-multiboot.elf
             build/cow-refcount-dishonest-multiboot.elf
             build/cow-refcount-stale-multiboot.elf

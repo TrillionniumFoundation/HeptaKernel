@@ -2796,6 +2796,157 @@ cow_refcount_hw_compare:
     call puts64
 #endif
 
+
+#if defined(HEPTAKERNEL_TEST_COW_SPLIT_HW)
+    /* Non-HIA QEMU oracle: physical frames allocated by real HIA PMM
+     * and cross-checked with E820 and HIA ownership state. The genuine
+     * cow_split_f0 alone performs the page copy and counter transitions.
+     * Physical pointers and observers are expressly NON-HIA test scaffolding. */
+    leaq owner_descriptors(%rip), %rdi
+    movq owner_choice_a(%rip), %rsi
+    movq $13, %rdx
+    call owner_bind64
+    leaq owner_descriptors+24(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    movq $14, %rdx
+    call owner_bind64
+    leaq cow_split_hw_table(%rip), %rdi
+    movabsq $0x5b5b5b5b5b5b5b5b, %rax
+    movl $512, %ecx
+    rep stosq
+    movq $0, cow_split_hw_table(%rip)
+    movq $0, cow_split_hw_table+8(%rip)
+    movw $17, cow_split_hw_table+2(%rip)
+    movb $2, cow_split_hw_table+4(%rip)
+    movb $2, cow_split_hw_table+16(%rip)
+    movb $0, cow_split_hw_table+33(%rip)
+    movabsq $0xa17be4c6d30f9285, %rax
+    movq %rax, cow_split_hw_guard_before(%rip)
+    movq %rax, cow_split_hw_guard_after(%rip)
+    movq $0x402000, %r14          /* actual zone A source frame */
+    movq $0x601000, %r15          /* actual zone B destination frame */
+    movq %r14, %rdi
+    movabsq $0x125a73de6789abcd, %r10
+    movl $512, %ecx
+cow_split_hw_seed_source:
+    movq %r10, (%rdi)
+    addq $8, %rdi
+    addq $0x10101, %r10
+    decl %ecx
+    jnz cow_split_hw_seed_source
+    movq %r15, %rdi
+    movabsq $0xe7e7e7e7e7e7e7e7, %rax
+    movl $512, %ecx
+    rep stosq
+#ifdef HEPTAKERNEL_TEST_COW_SPLIT_STALE
+    /* The actual source count remains 2; expected-old 1 must refuse. */
+    movb $1, cow_split_hw_table+4(%rip)
+#endif
+    movq %r14, %rdi
+    movl $4096, %esi
+    movq %r15, %rdx
+    movl $4096, %ecx
+    leaq cow_split_hw_table(%rip), %r8
+    movl $4096, %r9d
+    call cow_split_f0              /* exact pinned HIA selfhost_elf object */
+#ifdef HEPTAKERNEL_TEST_COW_SPLIT_STALE
+    cmpl $6, %eax
+    jne fail64
+#else
+    testl %eax, %eax
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_COW_SPLIT_DEST_DECOY
+    movb $0x44, 2033(%r15)       /* independent hostile RAM mutation */
+#endif
+#ifdef HEPTAKERNEL_TEST_COW_SPLIT_SOURCE_DECOY
+    movb $0x55, 3001(%r14)
+#endif
+#endif
+    /* Full 8 KiB physical-page oracle. A stale refusal leaves destination
+     * at its original sentinel; success copies every source byte. */
+    movabsq $0x125a73de6789abcd, %r10
+    movq %r14, %rdi
+    movq %r15, %rsi
+    movl $512, %ecx
+cow_split_hw_pages:
+    cmpq %r10, (%rdi)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_COW_SPLIT_STALE
+    movabsq $0xe7e7e7e7e7e7e7e7, %rax
+    cmpq %rax, (%rsi)
+#else
+    cmpq %r10, (%rsi)
+#endif
+    jne fail64
+    addq $8, %rdi
+    addq $8, %rsi
+    addq $0x10101, %r10
+    decl %ecx
+    jnz cow_split_hw_pages
+    /* Full 4096-byte state-table oracle: reserved bytes and untouched
+     * counters stay unchanged. Check actual state, not a success receipt. */
+    leaq cow_split_hw_table(%rip), %r15
+    xorq %rcx, %rcx
+cow_split_hw_table_scan:
+    movb $0x5b, %al
+    cmpq $16, %rcx
+    jb cow_split_hw_header
+    cmpq $16, %rcx
+    je cow_split_hw_source_count
+    cmpq $33, %rcx
+    je cow_split_hw_target_count
+    jmp cow_split_hw_compare
+cow_split_hw_header:
+    xorb %al, %al
+    cmpq $2, %rcx
+    je cow_split_hw_seventeen
+    cmpq $4, %rcx
+    je cow_split_hw_expected_old
+    jmp cow_split_hw_compare
+cow_split_hw_seventeen:
+    movb $17, %al
+    jmp cow_split_hw_compare
+cow_split_hw_expected_old:
+#ifdef HEPTAKERNEL_TEST_COW_SPLIT_STALE
+    movb $1, %al
+#else
+    movb $2, %al
+#endif
+    jmp cow_split_hw_compare
+cow_split_hw_source_count:
+#ifdef HEPTAKERNEL_TEST_COW_SPLIT_STALE
+    movb $2, %al
+#else
+    movb $1, %al
+#endif
+    jmp cow_split_hw_compare
+cow_split_hw_target_count:
+#ifdef HEPTAKERNEL_TEST_COW_SPLIT_STALE
+    xorb %al, %al
+#else
+    movb $1, %al
+#endif
+cow_split_hw_compare:
+    cmpb %al, (%r15,%rcx,1)
+    jne fail64
+    incq %rcx
+    cmpq $4096, %rcx
+    jb cow_split_hw_table_scan
+    movabsq $0xa17be4c6d30f9285, %rax
+    cmpq %rax, cow_split_hw_guard_before(%rip)
+    jne fail64
+    cmpq %rax, cow_split_hw_guard_after(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_COW_SPLIT_STALE
+    leaq message_cow_split_stale(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    leaq message_cow_split_hw_pass(%rip), %rsi
+    call puts64
+#endif
+#endif
+
 #if defined(HEPTAKERNEL_TEST_PAGE_COPY_HW)
     /* Recheck both actual native HIA PMM states after allocating both
      * cross-zone runs, immediately before providing the physical addresses
@@ -3492,6 +3643,10 @@ message_cow_refcount_hw_pass:
     .asciz "HEPTAKERNEL HIA COW REFCOUNT QEMU TRANSITIONS VERIFIED\r\n"
 message_cow_refcount_stale:
     .asciz "HEPTAKERNEL HIA COW REFCOUNT STALE EXPECTED-OLD REFUSED\r\n"
+message_cow_split_hw_pass:
+    .asciz "HEPTAKERNEL HIA COW SPLIT PHYSICAL RAM AND COUNTS VERIFIED\r\n"
+message_cow_split_stale:
+    .asciz "HEPTAKERNEL HIA COW SPLIT STALE EXPECTED-OLD REFUSED\r\n"
 message_page_copy_hw_pass:
     .asciz "HEPTAKERNEL HIA PHYSICAL PAGE COPY TWO PAIRS VERIFIED\r\n"
 message_page_copy_detach_pass:
@@ -3733,6 +3888,11 @@ cow_refcount_hw_table:        .skip 4096
 cow_refcount_hw_guard_after:  .skip 8
 cow_refcount_hw_request:      .skip 16
 cow_refcount_hw_reply:        .skip 16
+/* Test-only 4096-byte table and independent guard words. */
+cow_split_hw_guard_before: .skip 8
+.balign 4096
+cow_split_hw_table:        .skip 4096
+cow_split_hw_guard_after:  .skip 8
 page_copy_hw_guard_before: .skip 8
 page_copy_hw_reply:        .skip 16
 page_copy_hw_guard_after:  .skip 8

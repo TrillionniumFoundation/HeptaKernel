@@ -478,7 +478,7 @@ build/pdpt-1g-%.elf: build/boot-pdpt-1g-%.o $(PDPT_1G_BOOT_SUPPORT) arch/x86_64/
 build/pdpt-1g-%-multiboot.elf: build/pdpt-1g-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-boot: test-cow-refcount-hw test-page-copy-hw test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
+test-boot: test-cow-split-hw test-cow-refcount-hw test-page-copy-hw test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
 	$(PYTHON) tests/test_boot.py --qemu "$(QEMU)"
 
 test-guard-pages: build/kernel-host.so
@@ -1265,3 +1265,52 @@ test-cow-split: build/cow-split.so build/cow-split-unsafe.so
 	cmp "$$tmp" build/cow-split.o
 	timeout 90 $(PYTHON) tests/test_cow_split.py build/cow-split.so
 	$(PYTHON) tests/test_cow_split.py build/cow-split-unsafe.so --expect-unsafe
+
+
+# Real HIA native page+count COW split in E820/PMM guest physical RAM.
+build/cow-split-boot.o: build/cow-split.o
+	objcopy --redefine-sym f0=cow_split_f0 "$<" "$@"
+
+build/cow-split-dishonest-boot.o: build/cow-split-unsafe.o
+	objcopy --redefine-sym f0=cow_split_f0 "$<" "$@"
+
+build/boot-cow-split-hw.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_SPLIT_HW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-cow-split-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_SPLIT_HW=1 -DHEPTAKERNEL_TEST_COW_SPLIT_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-cow-split-dest-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_SPLIT_HW=1 -DHEPTAKERNEL_TEST_COW_SPLIT_DEST_DECOY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-cow-split-source-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_SPLIT_HW=1 -DHEPTAKERNEL_TEST_COW_SPLIT_SOURCE_DECOY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+COW_SPLIT_HW_SUPPORT := $(PAGE_ZERO_HW_SUPPORT)
+
+build/cow-split-hw.elf: build/boot-cow-split-hw.o $(COW_SPLIT_HW_SUPPORT) build/cow-split-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-split-hw.o $(COW_SPLIT_HW_SUPPORT) build/cow-split-boot.o
+
+build/cow-split-dishonest.elf: build/boot-cow-split-hw.o $(COW_SPLIT_HW_SUPPORT) build/cow-split-dishonest-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-split-hw.o $(COW_SPLIT_HW_SUPPORT) build/cow-split-dishonest-boot.o
+
+build/cow-split-stale.elf: build/boot-cow-split-stale.o $(COW_SPLIT_HW_SUPPORT) build/cow-split-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-split-stale.o $(COW_SPLIT_HW_SUPPORT) build/cow-split-boot.o
+
+build/cow-split-dest-decoy.elf: build/boot-cow-split-dest-decoy.o $(COW_SPLIT_HW_SUPPORT) build/cow-split-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-split-dest-decoy.o $(COW_SPLIT_HW_SUPPORT) build/cow-split-boot.o
+
+build/cow-split-source-decoy.elf: build/boot-cow-split-source-decoy.o $(COW_SPLIT_HW_SUPPORT) build/cow-split-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-split-source-decoy.o $(COW_SPLIT_HW_SUPPORT) build/cow-split-boot.o
+
+build/cow-split-%-multiboot.elf: build/cow-split-%.elf
+	objcopy -O elf32-i386 "$<" "$@"
+
+.PHONY: test-cow-split-hw
+test-cow-split-hw: build/cow-split-hw-multiboot.elf build/cow-split-dishonest-multiboot.elf build/cow-split-stale-multiboot.elf build/cow-split-dest-decoy-multiboot.elf build/cow-split-source-decoy-multiboot.elf
+	@set -eu; original=$$(mktemp build/.split-original.XXXXXX); renamed=$$(mktemp build/.split-boot.XXXXXX); \
+	  trap 'rm -f "$$original" "$$renamed"' EXIT HUP INT TERM; \
+	  objcopy --dump-section .text="$$original" build/cow-split.o; \
+	  objcopy --dump-section .text="$$renamed" build/cow-split-boot.o; \
+	  cmp "$$original" "$$renamed"
+	timeout 180 $(PYTHON) tests/test_cow_split_qemu.py --qemu "$(QEMU)"

@@ -40,3 +40,23 @@ entry, privileged TLB invalidation, or rollback on actual machine traps.
 No QEMU hardware test of this *new* combined operation is claimed here; earlier
 QEMU results for its constituent operations remain separate. All 17 complete
 Linux acceptance gates remain HOLD and the 422 syscall obligations remain open.
+
+## Isolated physical-RAM QEMU validation
+
+The new test-cow-split-hw links the unchanged HIA selfhost_elf native object into
+PC 32 MiB and Q35 64 MiB QEMU, with independent .text byte-identity checks.
+Real E820 admission, HIA PMM allocation and HIA owner-state checks cover
+the disjoint physical source 0x402000 and target 0x601000. Only the original
+native HIA function copies 4096 bytes while transitioning source count 2 -> 1
+and target count 0 -> 1 in a separate 4096-byte caller-owned table.
+
+An explicitly NON-HIA RAM observer independently checks every source byte,
+every target byte, all 4096 table bytes including unchanged header/reserved
+fields, and guard words. Four per-platform malicious controls must be rejected:
+HIA no-op disguised as success, stale expected-old rejected with exact status
+6 and unchanged RAM, post-copy destination corruption, and post-copy source
+corruption. The report preserves exact QEMU commands, source-image SHA256,
+serial output and exit codes. None of this establishes authenticated physical
+frame capabilities inside the HIA API, SMP atomics, PTE switching, TLB
+shootdown, a real page fault handler or complete Linux COW. The bridge and
+hardware observer remain NON-HIA. All 17 acceptance gates remain HOLD.
