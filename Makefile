@@ -587,7 +587,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-cow-abort-pte-guarded test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -1456,3 +1456,26 @@ test-cow-integrated-hw: build/cow-integrated-hw-multiboot.elf build/cow-integrat
 	  objcopy --dump-section .text="$$c" build/cow-pte-swap.o; objcopy --dump-section .text="$$d" build/cow-pte-boot.o; cmp "$$c" "$$d"; \
 	  objcopy --dump-section .text="$$a" build/cow-abort.o; objcopy --dump-section .text="$$b" build/cow-abort-boot.o; cmp "$$a" "$$b"
 	timeout 240 $(PYTHON) tests/test_cow_integrated_qemu.py --qemu "$(QEMU)"
+
+# Native Core v8 PTE-guarded prepublication COW cleanup (single-owner).
+# The trusted caller must supply the actual live PTE as the eight-byte readbuf.
+build/cow-abort-pte-guarded.o: src/cow_abort_pte_guarded.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.cow-abort-pte-guarded.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/cow-abort-pte-guarded.so: build/cow-abort-pte-guarded.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/cow-abort-pte-guarded-noop.o: tests/negative/cow_abort_pte_guarded_noop.hepta | build check-compiler
+	"$(HEPTA_COMPILER)" < "$<" > "$@"
+
+build/cow-abort-pte-guarded-noop.so: build/cow-abort-pte-guarded-noop.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+.PHONY: test-cow-abort-pte-guarded
+test-cow-abort-pte-guarded: build/cow-abort-pte-guarded.so build/cow-abort-pte-guarded-noop.so build/cow-split.so
+	@set -eu; tmp=$$(mktemp build/.cow-abort-pte-guarded-identity.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/cow_abort_pte_guarded.hepta > "$$tmp"; cmp "$$tmp" build/cow-abort-pte-guarded.o
+	timeout 90 $(PYTHON) tests/test_cow_abort_pte_guarded.py build/cow-abort-pte-guarded.so --split-library build/cow-split.so
+	$(PYTHON) tests/test_cow_abort_pte_guarded.py build/cow-abort-pte-guarded-noop.so --expect-unsafe

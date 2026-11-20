@@ -1,0 +1,203 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn cow_abort_pte_guarded(request:readbuf,destination:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,destination:mutbuf,state:mutbuf)
+  ca_request_len:usize = buffer.len(request)
+  ca_request_need:usize = const() {"value":8}
+  ca_request_ok:bool = compare.eq(ca_request_len,ca_request_need)
+  branch ca_request_ok guard_state(request,destination,state) bad_request()
+block bad_request()
+  ca_request_error:u32 = const() {"value":7}
+  ret(ca_request_error)
+block guard_state(cg_pte:readbuf,cg_dst:mutbuf,cg_state:mutbuf)
+  cg_size:usize = buffer.len(cg_state)
+  cg_expected_size:usize = const() {"value":4096}
+  cg_valid:bool = compare.eq(cg_size,cg_expected_size)
+  branch cg_valid guard_init(cg_pte,cg_dst,cg_state) bad_state()
+block guard_init(cg_init_pte:readbuf,cg_init_dst:mutbuf,cg_init_state:mutbuf)
+  cg_start:u64 = const() {"value":0}
+  jump guard_loop(cg_init_pte,cg_init_dst,cg_init_state,cg_start)
+block guard_loop(cg_loop_pte:readbuf,cg_loop_dst:mutbuf,cg_loop_state:mutbuf,cg_i:u64)
+  cg_eight:u64 = const() {"value":8}
+  cg_more:bool = compare.lt(cg_i,cg_eight)
+  branch cg_more guard_byte(cg_loop_pte,cg_loop_dst,cg_loop_state,cg_i) guard_flags(cg_loop_pte,cg_loop_dst,cg_loop_state)
+block guard_byte(cg_byte_pte:readbuf,cg_byte_dst:mutbuf,cg_byte_state:mutbuf,cg_index:u64)
+  cg_offset:usize = int.cast(cg_index) {"mode":"wrap"}
+  cg_off_eight:u64 = const() {"value":8}
+  cg_second:u64 = int.add.wrap(cg_index,cg_off_eight)
+  cg_second_offset:usize = int.cast(cg_second) {"mode":"wrap"}
+  cg_observed:u8 = buffer.load(cg_byte_pte,cg_offset)
+  cg_expected:u8 = buffer.load(cg_byte_state,cg_second_offset)
+  cg_equal:bool = compare.eq(cg_observed,cg_expected)
+  branch cg_equal guard_next(cg_byte_pte,cg_byte_dst,cg_byte_state,cg_index) guard_mismatch()
+block guard_next(cg_next_pte:readbuf,cg_next_dst:mutbuf,cg_next_state:mutbuf,cg_next_i:u64)
+  cg_one:u64 = const() {"value":1}
+  cg_incremented:u64 = int.add.wrap(cg_next_i,cg_one)
+  jump guard_loop(cg_next_pte,cg_next_dst,cg_next_state,cg_incremented)
+block guard_mismatch()
+  cg_mismatch_code:u32 = const() {"value":8}
+  ret(cg_mismatch_code)
+block guard_flags(cg_flags_pte:readbuf,cg_flags_dst:mutbuf,cg_flags_state:mutbuf)
+  cg_off0:usize = const() {"value":0}
+  cg_off1:usize = const() {"value":1}
+  cg_off2:usize = const() {"value":2}
+  cg_off3:usize = const() {"value":3}
+  cg_off4:usize = const() {"value":4}
+  cg_off5:usize = const() {"value":5}
+  cg_off6:usize = const() {"value":6}
+  cg_off7:usize = const() {"value":7}
+  cg_b0:u8 = buffer.load(cg_flags_pte,cg_off0)
+  cg_b1:u8 = buffer.load(cg_flags_pte,cg_off1)
+  cg_b2:u8 = buffer.load(cg_flags_pte,cg_off2)
+  cg_b3:u8 = buffer.load(cg_flags_pte,cg_off3)
+  cg_b4:u8 = buffer.load(cg_flags_pte,cg_off4)
+  cg_b5:u8 = buffer.load(cg_flags_pte,cg_off5)
+  cg_b6:u8 = buffer.load(cg_flags_pte,cg_off6)
+  cg_b7:u8 = buffer.load(cg_flags_pte,cg_off7)
+  cg_w0:u64 = int.cast(cg_b0) {"mode":"wrap"}
+  cg_w1:u64 = int.cast(cg_b1) {"mode":"wrap"}
+  cg_w2:u64 = int.cast(cg_b2) {"mode":"wrap"}
+  cg_w3:u64 = int.cast(cg_b3) {"mode":"wrap"}
+  cg_w4:u64 = int.cast(cg_b4) {"mode":"wrap"}
+  cg_w5:u64 = int.cast(cg_b5) {"mode":"wrap"}
+  cg_w6:u64 = int.cast(cg_b6) {"mode":"wrap"}
+  cg_w7:u64 = int.cast(cg_b7) {"mode":"wrap"}
+  cg_mask7:u64 = const() {"value":7}
+  cg_mask128:u64 = const() {"value":128}
+  cg_mask1:u64 = const() {"value":1}
+  cg_mask240:u64 = const() {"value":240}
+  cg_mask15:u64 = const() {"value":15}
+  cg_zero:u64 = const() {"value":0}
+  cg_f0:u64 = bit.and(cg_w0,cg_mask7)
+  cg_f0_expected:u64 = const() {"value":5}
+  cg_f0_ok:bool = compare.eq(cg_f0,cg_f0_expected)
+  cg_nx:u64 = bit.and(cg_w7,cg_mask128)
+  cg_nx_ok:bool = compare.eq(cg_nx,cg_mask128)
+  cg_high6:u64 = bit.and(cg_w6,cg_mask240)
+  cg_high6_ok:bool = compare.eq(cg_high6,cg_zero)
+  cg_high7_ok:bool = compare.eq(cg_w7,cg_mask128)
+  cg_high_ok:bool = bool.and(cg_high6_ok,cg_high7_ok)
+  cg_global:u64 = bit.and(cg_w1,cg_mask1)
+  cg_nonglobal:bool = compare.eq(cg_global,cg_zero)
+  cg_pa1:u64 = bit.and(cg_w1,cg_mask240)
+  cg_pa6:u64 = bit.and(cg_w6,cg_mask15)
+  cg_patemp1:u64 = bit.or(cg_pa1,cg_w2)
+  cg_patemp2:u64 = bit.or(cg_w3,cg_w4)
+  cg_patemp3:u64 = bit.or(cg_w5,cg_pa6)
+  cg_patemp4:u64 = bit.or(cg_patemp1,cg_patemp2)
+  cg_paval:u64 = bit.or(cg_patemp4,cg_patemp3)
+  cg_pa_ok:bool = compare.ne(cg_paval,cg_zero)
+  cg_p0:bool = bool.and(cg_f0_ok,cg_nx_ok)
+  cg_p1:bool = bool.and(cg_high_ok,cg_nonglobal)
+  cg_p2:bool = bool.and(cg_p0,cg_p1)
+  cg_allowed:bool = bool.and(cg_p2,cg_pa_ok)
+  branch cg_allowed check_dest(cg_flags_dst,cg_flags_state) guard_bad_mapping()
+block guard_bad_mapping()
+  cg_bad_mapping_code:u32 = const() {"value":9}
+  ret(cg_bad_mapping_code)
+block check_dest(ca_input_dest:mutbuf,ca_input_state:mutbuf)
+  ca_dl:usize = buffer.len(ca_input_dest)
+  ca_page:usize = const() {"value":4096}
+  ca_dest_ok:bool = compare.eq(ca_dl,ca_page)
+  branch ca_dest_ok state_shape(ca_input_dest,ca_input_state) bad_dest()
+block bad_dest()
+  ca_ed:u32 = const() {"value":1}
+  ret(ca_ed)
+block state_shape(ca_dst:mutbuf,ca_st:mutbuf)
+  ca_sl:usize = buffer.len(ca_st)
+  ca_page_s:usize = const() {"value":4096}
+  ca_state_ok:bool = compare.eq(ca_sl,ca_page_s)
+  branch ca_state_ok decode(ca_dst,ca_st) bad_state()
+block bad_state()
+  ca_es:u32 = const() {"value":2}
+  ret(ca_es)
+block decode(ca_dd:mutbuf,ca_ss:mutbuf)
+  ca_o0:usize = const() {"value":0}
+  ca_o1:usize = const() {"value":1}
+  ca_o2:usize = const() {"value":2}
+  ca_o3:usize = const() {"value":3}
+  ca_o4:usize = const() {"value":4}
+  ca_o5:usize = const() {"value":5}
+  ca_b0:u8 = buffer.load(ca_ss,ca_o0)
+  ca_b1:u8 = buffer.load(ca_ss,ca_o1)
+  ca_b2:u8 = buffer.load(ca_ss,ca_o2)
+  ca_b3:u8 = buffer.load(ca_ss,ca_o3)
+  ca_expected_src:u8 = buffer.load(ca_ss,ca_o4)
+  ca_expected_dst:u8 = buffer.load(ca_ss,ca_o5)
+  ca_w0:u64 = int.cast(ca_b0) {"mode":"wrap"}
+  ca_w1:u64 = int.cast(ca_b1) {"mode":"wrap"}
+  ca_w2:u64 = int.cast(ca_b2) {"mode":"wrap"}
+  ca_w3:u64 = int.cast(ca_b3) {"mode":"wrap"}
+  ca_eight:u64 = const() {"value":8}
+  ca_hi_src:u64 = int.shl.checked(ca_w1,ca_eight)
+  ca_hi_dst:u64 = int.shl.checked(ca_w3,ca_eight)
+  ca_src:u64 = bit.or(ca_hi_src,ca_w0)
+  ca_dst_decode:u64 = bit.or(ca_hi_dst,ca_w2)
+  ca_first:u64 = const() {"value":6}
+  jump scan_reserved(ca_dd,ca_ss,ca_src,ca_dst_decode,ca_expected_src,ca_expected_dst,ca_first)
+block scan_reserved(ca_rd:mutbuf,ca_rs:mutbuf,ca_rsrc:u64,ca_rdst:u64,ca_re:u8,ca_rf:u8,ca_ri:u64)
+  ca_res_end:u64 = const() {"value":8}
+  ca_more:bool = compare.lt(ca_ri,ca_res_end)
+  branch ca_more check_reserved(ca_rd,ca_rs,ca_rsrc,ca_rdst,ca_re,ca_rf,ca_ri) check_slots(ca_rd,ca_rs,ca_rsrc,ca_rdst,ca_re,ca_rf)
+block check_reserved(ca_cd:mutbuf,ca_cs:mutbuf,ca_ci:u64,ca_cj:u64,ca_ce:u8,ca_cf:u8,ca_ck:u64)
+  ca_at:usize = int.cast(ca_ck) {"mode":"wrap"}
+  ca_byte:u8 = buffer.load(ca_cs,ca_at)
+  ca_zero:u8 = const() {"value":0}
+  ca_ok:bool = compare.eq(ca_byte,ca_zero)
+  branch ca_ok advance(ca_cd,ca_cs,ca_ci,ca_cj,ca_ce,ca_cf,ca_ck) bad_reserved()
+block advance(ca_ad:mutbuf,ca_as:mutbuf,ca_ai:u64,ca_aj:u64,ca_ae:u8,ca_af:u8,ca_ak:u64)
+  ca_one:u64 = const() {"value":1}
+  ca_next:u64 = int.add.wrap(ca_ak,ca_one)
+  jump scan_reserved(ca_ad,ca_as,ca_ai,ca_aj,ca_ae,ca_af,ca_next)
+block bad_reserved()
+  ca_er:u32 = const() {"value":3}
+  ret(ca_er)
+block check_slots(ca_xd:mutbuf,ca_xs:mutbuf,ca_xi:u64,ca_xj:u64,ca_xe:u8,ca_xf:u8)
+  ca_limit:u64 = const() {"value":4080}
+  ca_i_ok:bool = compare.lt(ca_xi,ca_limit)
+  ca_j_ok:bool = compare.lt(ca_xj,ca_limit)
+  ca_distinct:bool = compare.ne(ca_xi,ca_xj)
+  ca_both:bool = bool.and(ca_i_ok,ca_j_ok)
+  ca_good:bool = bool.and(ca_both,ca_distinct)
+  branch ca_good check_count(ca_xd,ca_xs,ca_xi,ca_xj,ca_xe,ca_xf) bad_slots()
+block bad_slots()
+  ca_et:u32 = const() {"value":4}
+  ret(ca_et)
+block check_count(ca_sd:mutbuf,ca_ss_check_count:mutbuf,ca_si:u64,ca_sj:u64,ca_se:u8,ca_sf:u8)
+  ca_base:u64 = const() {"value":16}
+  ca_srcidx:u64 = int.add.wrap(ca_si,ca_base)
+  ca_dstidx:u64 = int.add.wrap(ca_sj,ca_base)
+  ca_srcpos:usize = int.cast(ca_srcidx) {"mode":"wrap"}
+  ca_dstpos:usize = int.cast(ca_dstidx) {"mode":"wrap"}
+  ca_seen_src:u8 = buffer.load(ca_ss_check_count,ca_srcpos)
+  ca_seen_dst:u8 = buffer.load(ca_ss_check_count,ca_dstpos)
+  ca_match_src:bool = compare.eq(ca_seen_src,ca_se)
+  ca_match_dst:bool = compare.eq(ca_seen_dst,ca_sf)
+  ca_stable:bool = bool.and(ca_match_src,ca_match_dst)
+  branch ca_stable check_ownership(ca_sd,ca_ss_check_count,ca_srcpos,ca_dstpos,ca_se,ca_sf) bad_stale()
+block bad_stale()
+  ca_ec:u32 = const() {"value":5}
+  ret(ca_ec)
+block check_ownership(ca_od:mutbuf,ca_os:mutbuf,ca_op:usize,ca_oq:usize,ca_oe:u8,ca_of:u8)
+  ca_zero_check_ownership:u8 = const() {"value":0}
+  ca_one_check_ownership:u8 = const() {"value":1}
+  ca_max:u8 = const() {"value":254}
+  ca_positive:bool = compare.ge(ca_oe,ca_one_check_ownership)
+  ca_notmax:bool = compare.le(ca_oe,ca_max)
+  ca_private:bool = compare.eq(ca_of,ca_one_check_ownership)
+  ca_bounded:bool = bool.and(ca_positive,ca_notmax)
+  ca_authorized:bool = bool.and(ca_bounded,ca_private)
+  branch ca_authorized clear_page(ca_od,ca_os,ca_op,ca_oq,ca_oe,ca_zero_check_ownership) bad_ownership()
+block bad_ownership()
+  ca_eo:u32 = const() {"value":6}
+  ret(ca_eo)
+block clear_page(ca_pd:mutbuf,ca_ps:mutbuf,ca_pi:usize,ca_pj:usize,ca_pe:u8,ca_pz:u8)
+  ca_page_begin:usize = const() {"value":0}
+  ca_page_bytes:usize = const() {"value":4096}
+  _ = buffer.fill_range(ca_pd,ca_page_begin,ca_page_bytes,ca_pz)
+  ca_restore_one:u8 = const() {"value":1}
+  ca_restored:u8 = int.add.wrap(ca_pe,ca_restore_one)
+  _ = buffer.store(ca_ps,ca_pi,ca_restored)
+  _ = buffer.store(ca_ps,ca_pj,ca_pz)
+  ca_success:u32 = const() {"value":0}
+  ret(ca_success)
+end
