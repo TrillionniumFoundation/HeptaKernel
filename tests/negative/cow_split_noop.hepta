@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn cow_split_noop(source:readbuf,destination:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(source:readbuf,destination:mutbuf,state:mutbuf)
+  cs_noop:u32 = const() {"value":0}
+  ret(cs_noop)
+end

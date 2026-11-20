@@ -587,7 +587,7 @@ test-closure:
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
 
-test: test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -1241,3 +1241,27 @@ test-cow-refcount-hw: build/cow-refcount-hw-multiboot.elf build/cow-refcount-dis
 	  objcopy --dump-section .text="$$renamed" build/cow-refcount-boot.o; \
 	  cmp "$$original" "$$renamed"
 	timeout 130 $(PYTHON) tests/test_cow_refcount_qemu.py --qemu "$(QEMU)"
+
+
+# Genuine HIA Core v8 single-owner shared-page detach+copy (not atomic COW).
+build/cow-split.o: src/cow_split.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.cow-split.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/cow-split.so: build/cow-split.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/cow-split-unsafe.o: tests/negative/cow_split_noop.hepta | build check-compiler
+	"$(HEPTA_COMPILER)" < "$<" > "$@"
+
+build/cow-split-unsafe.so: build/cow-split-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+.PHONY: test-cow-split
+test-cow-split: build/cow-split.so build/cow-split-unsafe.so
+	@set -eu; tmp=$$(mktemp build/.cow-split-identity.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/cow_split.hepta > "$$tmp"; \
+	cmp "$$tmp" build/cow-split.o
+	timeout 90 $(PYTHON) tests/test_cow_split.py build/cow-split.so
+	$(PYTHON) tests/test_cow_split.py build/cow-split-unsafe.so --expect-unsafe
