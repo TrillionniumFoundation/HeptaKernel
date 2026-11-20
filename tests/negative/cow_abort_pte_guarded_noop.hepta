@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn cow_abort_pte_guarded_noop(pte:readbuf,destination:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(pte:readbuf,destination:mutbuf,state:mutbuf)
+  ag_noop:u32 = const() {"value":0}
+  ret(ag_noop)
+end
