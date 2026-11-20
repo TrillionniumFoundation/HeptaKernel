@@ -231,3 +231,42 @@ resolved, source/include variables are not expanded, and inactive branches are
 not evaluated. CI independently replays all candidate source rows from pinned
 Git blobs and retains explicit full-Linux HOLD. The 17 full-acceptance gates
 and 422 x86-64 syscall rows remain unchanged.
+
+## Kconfig property-to-declaration source candidates (additional audit)
+
+`tools/linux_kconfig_scoped.py` adds a lossless classification layer over the
+existing immutable `kconfig-relation-lines.jsonl` source inventory. It retains
+**every** property candidate in original Git source order, with the original
+path bytes, Git blob OID, exact physical source line and byte offsets. Each
+candidate is labeled `SCOPED_LEXICAL_CANDIDATE`,
+`HELP_TEXT_LEXICAL_ONLY`, `UNRESOLVED_CONTINUATION`, or
+`UNBOUND_LEXICAL_CANDIDATE`. Only the first label carries a tentative
+`config`/`menuconfig` owner and its original declaration line; all other
+records deliberately have null owner fields.
+
+Owner hints use the physical declaration and greater indentation, explicitly
+discard an owner at structural `menu`/`choice`/`if` and include boundaries,
+and refuse to attach a property when a preceding physical line ends in a
+backslash. Properties in indented `help` bodies are still recorded, but
+labeled as lexical-only rather than being silently interpreted as actual
+`select` or `depends on` semantics. Raw-byte paths and Git object identity
+are preserved even for non-UTF8/newline paths; unsupported symlink targets
+are counted, not traversed.
+
+`tests/test_linux_kconfig_scoped.py` covers misleading help text, structural
+scope changes, continued lines, mixed indentation, malicious uncommitted
+worktree edits and wrong-pinned-HEAD rejection. Both `make test` and the
+pinned-source inventory workflow run this test. CI runs the new scanner against
+the exact locked Linux source, checks the new source SHA-256, re-reads original
+Git blobs independently, and verifies one-for-one preservation of *every*
+earlier lexical source row. The result is retained as
+`kconfig-property-scopes.jsonl` and
+`kconfig-property-scopes-report.json` in the exact-commit Actions artifact.
+
+This is **not** a Kconfig parser, evaluated dependency graph or resolved build
+configuration. Mixed whitespace, relative source paths, active conditional
+scopes, help grammar, multiline logical statements, variable substitution,
+macro expansion, menu visibility and reachability remain unqualified. Even a
+candidate owner is not yet proof of Kconfig semantics. It adds no Linux
+functionality; all 17 full-acceptance gates, 422 syscall obligations and
+`inventory_complete=false` remain unchanged.
