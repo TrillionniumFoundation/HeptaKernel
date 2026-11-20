@@ -1519,6 +1519,18 @@ cow_integrated_abort_compare:
     movq cow_pte_old(%rip), %rax
     cmpq %rax, page_table_4m(%rip)
     jne cow_integrated_abort_reject64
+    /* Verify the actual physical contents again AFTER native HIA PMM
+     * processing; a successful allocator reply cannot certify memory. */
+    movq $0x601000, %rdi
+    movabsq $0x1122334455667788, %rax
+    movl $512, %ecx
+    repe scasq
+    jne cow_integrated_abort_reject64
+    movq $0x602000, %rdi
+    xorq %rax, %rax
+    movl $512, %ecx
+    repe scasq
+    jne cow_integrated_abort_reject64
     leaq message_cow_pmm_double_free(%rip), %rsi
     call puts64
     jmp fail64
@@ -1547,6 +1559,18 @@ cow_integrated_abort_compare:
     jne cow_integrated_abort_reject64
     movq cow_pte_old(%rip), %rax
     cmpq %rax, page_table_4m(%rip)
+    jne cow_integrated_abort_reject64
+    /* Verify the actual physical contents again AFTER native HIA PMM
+     * processing; a successful allocator reply cannot certify memory. */
+    movq $0x601000, %rdi
+    movabsq $0x1122334455667788, %rax
+    movl $512, %ecx
+    repe scasq
+    jne cow_integrated_abort_reject64
+    movq $0x602000, %rdi
+    xorq %rax, %rax
+    movl $512, %ecx
+    repe scasq
     jne cow_integrated_abort_reject64
     leaq message_cow_pmm_reissued(%rip), %rsi
     call puts64
