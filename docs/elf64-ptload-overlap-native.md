@@ -1,0 +1,9 @@
+# Native HIA PT_LOAD page-overlap refusal (2026-11-20)
+
+The pinned HIA Core v8 `selfhost_elf` backend compiles `src/elf64_load_segments.hepta` directly to x86-64 native code. After existing ELF header, program-header bounds, per-segment geometry, W^X and executable-entry checks, a second bounded pass compares every pair of `PT_LOAD` records.
+
+Each admitted load segment's virtual mapping footprint is the **inclusive 4 KiB page interval** from `p_vaddr >> 12` through `(p_vaddr + p_memsz - 1) >> 12`. If two loads share even one page, the checker returns status **13**. This rejects page-level aliasing of independent segment permissions/contents, including BSS-only and sub-page collisions. The scan has at most 128 headers and 8,128 pairs and does not rely on input ordering. Non-`PT_LOAD` headers are skipped, except `PT_INTERP` is already rejected. Prior successful return values keep their meanings.
+
+The independent Python oracle computes these intervals separately from source bytes and exercises page-boundary adjacency, reversed records, nonadjacent collisions, W^X-sensitive mixed permissions, BSS collisions and randomized combinations. Its adversarial always-success HIA control must still be detected; the ELF object and linked native text must match and empty-PATH native rebuild must be byte-identical. The original QEMU tests are regressions, not evidence of new user-mode ELF hardware execution.
+
+This is a **deliberately narrower static-loader admission policy**, not a claim of full Linux ELF compatibility. Real Linux may admit some layouts sharing pages if carefully handled by the loader; these are rejected here until there is an auditable mapping policy. No HIA-native page mapping, ET_DYN relocation, interpreter, stack setup, execve, IRETQ, CRx, atomic page-table updates, or SMP TLB synchronization is added. Full Linux acceptance remains HOLD with all 422 x86-64 syscall rows intact.

@@ -46,6 +46,7 @@ def reference(image: bytes) -> int:
         return 6
 
     has_load = has_entry = False
+    page_ranges: list[tuple[int, int]] = []
     for i in range(count):
         start = phoff + PHDR * i
         typ, flags, offset, va, _paddr, filesz, memsz, align = (
@@ -67,11 +68,18 @@ def reference(image: bytes) -> int:
                           ((offset & (align - 1)) != (va & (align - 1)))):
             return 10
         has_load = True
+        page_ranges.append((va >> 12, (va + memsz - 1) >> 12))
         if flags & EXEC and va <= entry < va + filesz:
             has_entry = True
     if not has_load:
         return 8
-    return 0 if has_entry else 11
+    if not has_entry:
+        return 11
+    for i, (first, last) in enumerate(page_ranges):
+        for earlier_first, earlier_last in page_ranges[:i]:
+            if first <= earlier_last and earlier_first <= last:
+                return 13
+    return 0
 
 
 def example(*, kind: int = 2, phoff: int = 64,
@@ -149,6 +157,44 @@ def campaign(path: Path, unsafe: bool = False) -> dict:
                                             0x402000, 0x100, 0x200, align),
                                            (LOAD, 5, 0x1000, 0x401000, 0x200,
                                             0x300, align)), entry=entry))
+    # Conflict detection checks *physical mapping pages*, not only byte spans:
+    # BSS-only overlap, sub-page distinct bytes, duplicate PTE ownership,
+    # reversed program-header order and exact page boundary adjacency.
+    pages = [
+        (13, ((LOAD, 5, 0x1000, 0x401000, 0x100, 0x200, 0x1000),
+              (LOAD, 6, 0x1800, 0x401800, 0x80, 0x100, 1))),
+        (13, ((LOAD, 5, 0x1000, 0x401000, 0x100, 0x1800, 0x1000),
+              (LOAD, 6, 0x2000, 0x402000, 0x80, 0x100, 0x1000))),
+        (13, ((LOAD, 5, 0x1000, 0x401000, 0x100, 0x200, 0x1000),
+              (LOAD, 6, 0x2000, 0x401000, 0x80, 0x200, 0x1000))),
+        (13, ((LOAD, 5, 0x1000, 0x401000, 0x100, 0x200, 0x1000),
+              (LOAD, 6, 0x3000, 0x403000, 0x80, 0x100, 0x1000),
+              (LOAD, 4, 0x1800, 0x401800, 0x80, 0x100, 1))),
+        (0, ((LOAD, 5, 0x1000, 0x401000, 0x100, 0x1000, 0x1000),
+             (LOAD, 6, 0x2000, 0x402000, 0x80, 0x100, 0x1000))),
+        (0, ((LOAD, 6, 0x2000, 0x402000, 0x80, 0x100, 0x1000),
+             (LOAD, 5, 0x1000, 0x401000, 0x100, 0x200, 0x1000))),
+        (0, ((LOAD, 5, 0x1000, 0x401000, 0x100, 0x200, 0x1000),
+             (4, 6, 0x1800, 0x401800, 0x80, 0x100, 1))),
+    ]
+    for status, entries in pages:
+        image = example(entries=entries)
+        assert reference(image) == status, ("targeted overlap oracle", status)
+        check(image)
+    # Deterministic multi-segment campaigns: most conflict variants are
+    # individually valid PT_LOAD descriptions and must fail only at pairing.
+    for _ in range(180):
+        entries = [(LOAD, 5, 0x1000, 0x401000, 0x100, 0x200, 0x1000)]
+        for _part in range(rng.randrange(1, 6)):
+            page = rng.randrange(0, 7)
+            displacement = rng.choice((0, 0x100, 0x800))
+            va = 0x401000 + page * 4096 + displacement
+            off = 0x1000 + page * 4096 + displacement
+            mem = rng.choice((0x80, 0x800, 0x1000, 0x1800))
+            entries.append((LOAD, rng.choice((4, 5, 6)),
+                            off, va, 0x80, mem, 1))
+        rng.shuffle(entries)
+        check(example(entries=tuple(entries)))
     for n in (0, 1, 4, 16, 63, 64, 65, 100, 119, 120, 4095, 4096):
         check(good[:n])
     for i in range(64):
