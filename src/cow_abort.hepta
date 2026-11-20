@@ -37,9 +37,9 @@ block decode(ca_dd:mutbuf,ca_ss:mutbuf)
   ca_hi_src:u64 = int.shl.checked(ca_w1,ca_eight)
   ca_hi_dst:u64 = int.shl.checked(ca_w3,ca_eight)
   ca_src:u64 = bit.or(ca_hi_src,ca_w0)
-  ca_dst:u64 = bit.or(ca_hi_dst,ca_w2)
+  ca_dst_decode:u64 = bit.or(ca_hi_dst,ca_w2)
   ca_first:u64 = const() {"value":6}
-  jump scan_reserved(ca_dd,ca_ss,ca_src,ca_dst,ca_expected_src,ca_expected_dst,ca_first)
+  jump scan_reserved(ca_dd,ca_ss,ca_src,ca_dst_decode,ca_expected_src,ca_expected_dst,ca_first)
 block scan_reserved(ca_rd:mutbuf,ca_rs:mutbuf,ca_rsrc:u64,ca_rdst:u64,ca_re:u8,ca_rf:u8,ca_ri:u64)
   ca_res_end:u64 = const() {"value":16}
   ca_more:bool = compare.lt(ca_ri,ca_res_end)
@@ -68,31 +68,31 @@ block check_slots(ca_xd:mutbuf,ca_xs:mutbuf,ca_xi:u64,ca_xj:u64,ca_xe:u8,ca_xf:u
 block bad_slots()
   ca_et:u32 = const() {"value":4}
   ret(ca_et)
-block check_count(ca_sd:mutbuf,ca_ss:mutbuf,ca_si:u64,ca_sj:u64,ca_se:u8,ca_sf:u8)
+block check_count(ca_sd:mutbuf,ca_ss_check_count:mutbuf,ca_si:u64,ca_sj:u64,ca_se:u8,ca_sf:u8)
   ca_base:u64 = const() {"value":16}
   ca_srcidx:u64 = int.add.wrap(ca_si,ca_base)
   ca_dstidx:u64 = int.add.wrap(ca_sj,ca_base)
   ca_srcpos:usize = int.cast(ca_srcidx) {"mode":"wrap"}
   ca_dstpos:usize = int.cast(ca_dstidx) {"mode":"wrap"}
-  ca_seen_src:u8 = buffer.load(ca_ss,ca_srcpos)
-  ca_seen_dst:u8 = buffer.load(ca_ss,ca_dstpos)
+  ca_seen_src:u8 = buffer.load(ca_ss_check_count,ca_srcpos)
+  ca_seen_dst:u8 = buffer.load(ca_ss_check_count,ca_dstpos)
   ca_match_src:bool = compare.eq(ca_seen_src,ca_se)
   ca_match_dst:bool = compare.eq(ca_seen_dst,ca_sf)
   ca_stable:bool = bool.and(ca_match_src,ca_match_dst)
-  branch ca_stable check_ownership(ca_sd,ca_ss,ca_srcpos,ca_dstpos,ca_se,ca_sf) bad_stale()
+  branch ca_stable check_ownership(ca_sd,ca_ss_check_count,ca_srcpos,ca_dstpos,ca_se,ca_sf) bad_stale()
 block bad_stale()
   ca_ec:u32 = const() {"value":5}
   ret(ca_ec)
 block check_ownership(ca_od:mutbuf,ca_os:mutbuf,ca_op:usize,ca_oq:usize,ca_oe:u8,ca_of:u8)
-  ca_zero:u8 = const() {"value":0}
-  ca_one:u8 = const() {"value":1}
+  ca_zero_check_ownership:u8 = const() {"value":0}
+  ca_one_check_ownership:u8 = const() {"value":1}
   ca_max:u8 = const() {"value":254}
-  ca_positive:bool = compare.ge(ca_oe,ca_one)
+  ca_positive:bool = compare.ge(ca_oe,ca_one_check_ownership)
   ca_notmax:bool = compare.le(ca_oe,ca_max)
-  ca_private:bool = compare.eq(ca_of,ca_one)
+  ca_private:bool = compare.eq(ca_of,ca_one_check_ownership)
   ca_bounded:bool = bool.and(ca_positive,ca_notmax)
   ca_authorized:bool = bool.and(ca_bounded,ca_private)
-  branch ca_authorized clear_page(ca_od,ca_os,ca_op,ca_oq,ca_oe,ca_zero) bad_ownership()
+  branch ca_authorized clear_page(ca_od,ca_os,ca_op,ca_oq,ca_oe,ca_zero_check_ownership) bad_ownership()
 block bad_ownership()
   ca_eo:u32 = const() {"value":6}
   ret(ca_eo)
@@ -101,19 +101,19 @@ block clear_page(ca_pd:mutbuf,ca_ps:mutbuf,ca_pi:usize,ca_pj:usize,ca_pe:u8,ca_p
   jump zero_loop(ca_pd,ca_ps,ca_pi,ca_pj,ca_pe,ca_pz,ca_loopzero)
 block zero_loop(ca_zd:mutbuf,ca_zs:mutbuf,ca_zi:usize,ca_zj:usize,ca_ze:u8,ca_zz:u8,ca_zk:u64)
   ca_end:u64 = const() {"value":4096}
-  ca_more:bool = compare.lt(ca_zk,ca_end)
-  branch ca_more zero_one(ca_zd,ca_zs,ca_zi,ca_zj,ca_ze,ca_zz,ca_zk) finish(ca_zs,ca_zi,ca_zj,ca_ze,ca_zz)
+  ca_more_zero_loop:bool = compare.lt(ca_zk,ca_end)
+  branch ca_more_zero_loop zero_one(ca_zd,ca_zs,ca_zi,ca_zj,ca_ze,ca_zz,ca_zk) finish(ca_zs,ca_zi,ca_zj,ca_ze,ca_zz)
 block zero_one(ca_bd:mutbuf,ca_bs:mutbuf,ca_bi:usize,ca_bj:usize,ca_be:u8,ca_bz:u8,ca_bk:u64)
-  ca_at:usize = int.cast(ca_bk) {"mode":"wrap"}
-  _ = buffer.store(ca_bd,ca_at,ca_bz)
-  ca_one:u64 = const() {"value":1}
-  ca_next:u64 = int.add.wrap(ca_bk,ca_one)
-  jump zero_loop(ca_bd,ca_bs,ca_bi,ca_bj,ca_be,ca_bz,ca_next)
+  ca_at_zero_one:usize = int.cast(ca_bk) {"mode":"wrap"}
+  _ = buffer.store(ca_bd,ca_at_zero_one,ca_bz)
+  ca_one_zero_one:u64 = const() {"value":1}
+  ca_next_zero_one:u64 = int.add.wrap(ca_bk,ca_one_zero_one)
+  jump zero_loop(ca_bd,ca_bs,ca_bi,ca_bj,ca_be,ca_bz,ca_next_zero_one)
 block finish(ca_fs:mutbuf,ca_fi:usize,ca_fj:usize,ca_fe:u8,ca_fz:u8)
-  ca_one:u8 = const() {"value":1}
-  ca_restored:u8 = int.add.wrap(ca_fe,ca_one)
+  ca_one_finish:u8 = const() {"value":1}
+  ca_restored:u8 = int.add.wrap(ca_fe,ca_one_finish)
   _ = buffer.store(ca_fs,ca_fi,ca_restored)
   _ = buffer.store(ca_fs,ca_fj,ca_fz)
-  ca_ok:u32 = const() {"value":0}
-  ret(ca_ok)
+  ca_ok_finish:u32 = const() {"value":0}
+  ret(ca_ok_finish)
 end
