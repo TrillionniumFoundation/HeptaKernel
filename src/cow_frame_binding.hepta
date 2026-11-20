@@ -1,0 +1,208 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn cow_frame_binding(request:readbuf,pte:readbuf,owner:mutbuf) -> (u32) effects(read,trap) entry(start)
+block start(request:readbuf,pte:readbuf,owner:mutbuf)
+  cf_owner_view:readbuf = borrow.read(owner)
+  cf_result:u32 = call(request,pte,cf_owner_view) {"function":"inspect"}
+  _ = loan.end(cf_owner_view)
+  ret(cf_result)
+end
+fn inspect(request:readbuf,pte:readbuf,owner:readbuf) -> (u32) effects(read,trap) entry(start)
+block start(request:readbuf,pte:readbuf,owner:readbuf)
+  cf_request_len:usize = buffer.len(request)
+  cf_req_48:usize = const() {"value":48}
+  cf_req_ok:bool = compare.eq(cf_request_len,cf_req_48)
+  branch cf_req_ok pte_shape(request,pte,owner) bad_wire()
+block pte_shape(cf_req:readbuf,cf_leaf:readbuf,cf_state:readbuf)
+  cf_leaf_len:usize = buffer.len(cf_leaf)
+  cf_leaf_8:usize = const() {"value":8}
+  cf_leaf_ok:bool = compare.eq(cf_leaf_len,cf_leaf_8)
+  branch cf_leaf_ok state_shape(cf_req,cf_leaf,cf_state) bad_wire()
+block bad_wire()
+  cf_error_wire:u32 = const() {"value":1}
+  ret(cf_error_wire)
+block state_shape(cf_req_s:readbuf,cf_leaf_s:readbuf,cf_state_s:readbuf)
+  cf_len:usize = buffer.len(cf_state_s)
+  cf_64:usize = const() {"value":64}
+  cf_long:bool = compare.ge(cf_len,cf_64)
+  branch cf_long decode(cf_req_s,cf_leaf_s,cf_state_s,cf_len) bad_state()
+block bad_state()
+  cf_error_state:u32 = const() {"value":2}
+  ret(cf_error_state)
+block decode(cf_req_d:readbuf,cf_leaf_d:readbuf,cf_state_d:readbuf,cf_state_len:usize)
+  cf_o0:usize = const() {"value":0}
+  cf_o8:usize = const() {"value":8}
+  cf_o16:usize = const() {"value":16}
+  cf_o24:usize = const() {"value":24}
+  cf_o32:usize = const() {"value":32}
+  cf_o40:usize = const() {"value":40}
+  cf_source:u64 = call(cf_req_d,cf_o0) {"function":"read_word"}
+  cf_dest:u64 = call(cf_req_d,cf_o8) {"function":"read_word"}
+  cf_expected:u64 = call(cf_req_d,cf_o16) {"function":"read_word"}
+  cf_base:u64 = call(cf_req_d,cf_o24) {"function":"read_word"}
+  cf_pages:u64 = call(cf_req_d,cf_o32) {"function":"read_word"}
+  cf_reserved:u64 = call(cf_req_d,cf_o40) {"function":"read_word"}
+  cf_magic:u64 = call(cf_state_d,cf_o0) {"function":"read_word"}
+  cf_state_pages:u64 = call(cf_state_d,cf_o8) {"function":"read_word"}
+  cf_state_base:u64 = call(cf_state_d,cf_o16) {"function":"read_word"}
+  cf_state_reserved:u64 = call(cf_state_d,cf_o24) {"function":"read_word"}
+  cf_free:u64 = call(cf_state_d,cf_o32) {"function":"read_word"}
+  cf_want_magic:u64 = const() {"value":3552580688320940353}
+  cf_magic_ok:bool = compare.eq(cf_magic,cf_want_magic)
+  cf_pages_ok:bool = compare.eq(cf_pages,cf_state_pages)
+  cf_base_ok:bool = compare.eq(cf_base,cf_state_base)
+  cf_reserved_ok:bool = compare.eq(cf_reserved,cf_state_reserved)
+  cf_same_a:bool = bool.and(cf_magic_ok,cf_pages_ok)
+  cf_same_b:bool = bool.and(cf_base_ok,cf_reserved_ok)
+  cf_same:bool = bool.and(cf_same_a,cf_same_b)
+  branch cf_same geometry(cf_leaf_d,cf_state_d,cf_state_len,cf_source,cf_dest,cf_expected,cf_base,cf_pages,cf_reserved,cf_free) bad_metadata()
+block bad_metadata()
+  cf_error_metadata:u32 = const() {"value":3}
+  ret(cf_error_metadata)
+block geometry(cf_leaf_g:readbuf,cf_state_g:readbuf,cf_len_g:usize,cf_src_g:u64,cf_dst_g:u64,cf_exp_g:u64,cf_base_g:u64,cf_pages_g:u64,cf_reserved_g:u64,cf_free_g:u64)
+  cf_zero:u64 = const() {"value":0}
+  cf_one:u64 = const() {"value":1}
+  cf_max_pages:u64 = const() {"value":65536}
+  cf_max_pa:u64 = const() {"value":4503599627370496}
+  cf_mask:u64 = const() {"value":4095}
+  cf_page_bytes:u64 = const() {"value":4096}
+  cf_nonzero:bool = compare.gt(cf_pages_g,cf_zero)
+  cf_cap:bool = compare.le(cf_pages_g,cf_max_pages)
+  cf_prefix:bool = compare.le(cf_reserved_g,cf_pages_g)
+  cf_base_low:u64 = bit.and(cf_base_g,cf_mask)
+  cf_aligned:bool = compare.eq(cf_base_low,cf_zero)
+  cf_base_bounded:bool = compare.lt(cf_base_g,cf_max_pa)
+  cf_span:u64 = int.mul.wrap(cf_pages_g,cf_page_bytes)
+  cf_remaining:u64 = int.sub.wrap(cf_max_pa,cf_base_g)
+  cf_span_bounded:bool = compare.le(cf_span,cf_remaining)
+  cf_count_max:u64 = int.sub.wrap(cf_pages_g,cf_reserved_g)
+  cf_free_ok:bool = compare.le(cf_free_g,cf_count_max)
+  cf_check_a:bool = bool.and(cf_nonzero,cf_cap)
+  cf_check_b:bool = bool.and(cf_prefix,cf_aligned)
+  cf_check_c:bool = bool.and(cf_base_bounded,cf_span_bounded)
+  cf_check_d:bool = bool.and(cf_free_ok,cf_check_a)
+  cf_check_e:bool = bool.and(cf_check_b,cf_check_c)
+  cf_good:bool = bool.and(cf_check_d,cf_check_e)
+  branch cf_good frame_bounds(cf_leaf_g,cf_state_g,cf_len_g,cf_src_g,cf_dst_g,cf_exp_g,cf_base_g,cf_pages_g,cf_reserved_g,cf_span) bad_geometry()
+block bad_geometry()
+  cf_error_geometry:u32 = const() {"value":4}
+  ret(cf_error_geometry)
+block frame_bounds(cf_leaf_f:readbuf,cf_state_f:readbuf,cf_len_f:usize,cf_src_f:u64,cf_dst_f:u64,cf_exp_f:u64,cf_base_f:u64,cf_pages_f:u64,cf_reserved_f:u64,cf_span_f:u64)
+  cf_src_above:bool = compare.ge(cf_src_f,cf_base_f)
+  cf_dst_above:bool = compare.ge(cf_dst_f,cf_base_f)
+  cf_src_delta:u64 = int.sub.wrap(cf_src_f,cf_base_f)
+  cf_dst_delta:u64 = int.sub.wrap(cf_dst_f,cf_base_f)
+  cf_src_inside:bool = compare.lt(cf_src_delta,cf_span_f)
+  cf_dst_inside:bool = compare.lt(cf_dst_delta,cf_span_f)
+  cf_mask_f:u64 = const() {"value":4095}
+  cf_zero_f:u64 = const() {"value":0}
+  cf_src_low:u64 = bit.and(cf_src_f,cf_mask_f)
+  cf_dst_low:u64 = bit.and(cf_dst_f,cf_mask_f)
+  cf_src_align:bool = compare.eq(cf_src_low,cf_zero_f)
+  cf_dst_align:bool = compare.eq(cf_dst_low,cf_zero_f)
+  cf_distinct:bool = compare.ne(cf_src_f,cf_dst_f)
+  cf_src_a:bool = bool.and(cf_src_above,cf_src_inside)
+  cf_dst_a:bool = bool.and(cf_dst_above,cf_dst_inside)
+  cf_align_a:bool = bool.and(cf_src_align,cf_dst_align)
+  cf_both_a:bool = bool.and(cf_src_a,cf_dst_a)
+  cf_both_b:bool = bool.and(cf_align_a,cf_distinct)
+  cf_frames_ok:bool = bool.and(cf_both_a,cf_both_b)
+  branch cf_frames_ok pte_check(cf_leaf_f,cf_state_f,cf_len_f,cf_src_f,cf_exp_f,cf_src_delta,cf_dst_delta,cf_reserved_f,cf_pages_f) bad_geometry()
+block pte_check(cf_leaf_p:readbuf,cf_state_p:readbuf,cf_len_p:usize,cf_src_p:u64,cf_exp_p:u64,cf_src_delta_p:u64,cf_dst_delta_p:u64,cf_reserved_p:u64,cf_pages_p:u64)
+  cf_o_p:usize = const() {"value":0}
+  cf_seen:u64 = call(cf_leaf_p,cf_o_p) {"function":"read_word"}
+  cf_same_pte:bool = compare.eq(cf_seen,cf_exp_p)
+  cf_flags:u64 = const() {"value":263}
+  cf_expected_flags:u64 = const() {"value":5}
+  cf_bits:u64 = bit.and(cf_seen,cf_flags)
+  cf_flags_ok:bool = compare.eq(cf_bits,cf_expected_flags)
+  cf_nx_mask:u64 = const() {"value":9223372036854775808}
+  cf_nx:u64 = bit.and(cf_seen,cf_nx_mask)
+  cf_nx_ok:bool = compare.ne(cf_nx,cf_o_p)
+  cf_reserved_mask:u64 = const() {"value":9218868437227405312}
+  cf_reserved_bits:u64 = bit.and(cf_seen,cf_reserved_mask)
+  cf_reserved_zero:bool = compare.eq(cf_reserved_bits,cf_o_p)
+  cf_address_mask:u64 = const() {"value":4503599627366400}
+  cf_frame:u64 = bit.and(cf_seen,cf_address_mask)
+  cf_frame_ok:bool = compare.eq(cf_frame,cf_src_p)
+  cf_a:bool = bool.and(cf_same_pte,cf_flags_ok)
+  cf_b:bool = bool.and(cf_nx_ok,cf_reserved_zero)
+  cf_c:bool = bool.and(cf_a,cf_b)
+  cf_pte_ok:bool = bool.and(cf_c,cf_frame_ok)
+  branch cf_pte_ok bitmap_shape(cf_state_p,cf_len_p,cf_src_delta_p,cf_dst_delta_p,cf_reserved_p,cf_pages_p) bad_pte()
+block bad_pte()
+  cf_error_pte:u32 = const() {"value":5}
+  ret(cf_error_pte)
+block bitmap_shape(cf_owner_b:readbuf,cf_size_b:usize,cf_src_delta_b:u64,cf_dst_delta_b:u64,cf_reserved_b:u64,cf_pages_b:u64)
+  cf_shift:u64 = const() {"value":12}
+  cf_src_index:u64 = int.shr.checked(cf_src_delta_b,cf_shift)
+  cf_dst_index:u64 = int.shr.checked(cf_dst_delta_b,cf_shift)
+  cf_src_claimable:bool = compare.ge(cf_src_index,cf_reserved_b)
+  cf_dst_claimable:bool = compare.ge(cf_dst_index,cf_reserved_b)
+  cf_claimable:bool = bool.and(cf_src_claimable,cf_dst_claimable)
+  cf_seven:u64 = const() {"value":7}
+  cf_three:u64 = const() {"value":3}
+  cf_rounded:u64 = int.add.wrap(cf_pages_b,cf_seven)
+  cf_bitmap_bytes:u64 = int.shr.checked(cf_rounded,cf_three)
+  cf_header:u64 = const() {"value":64}
+  cf_need:u64 = int.add.wrap(cf_header,cf_bitmap_bytes)
+  cf_available:u64 = int.cast(cf_size_b) {"mode":"wrap"}
+  cf_enough:bool = compare.ge(cf_available,cf_need)
+  cf_can_look:bool = bool.and(cf_claimable,cf_enough)
+  branch cf_can_look bitmap_bits(cf_owner_b,cf_src_index,cf_dst_index) bad_owner()
+block bitmap_bits(cf_owner_bits:readbuf,cf_src_i:u64,cf_dst_i:u64)
+  cf_three_b:u64 = const() {"value":3}
+  cf_seven_b:u64 = const() {"value":7}
+  cf_header_b:u64 = const() {"value":64}
+  cf_one_b:u64 = const() {"value":1}
+  cf_zero_b:u64 = const() {"value":0}
+  cf_src_byte:u64 = int.shr.checked(cf_src_i,cf_three_b)
+  cf_dst_byte:u64 = int.shr.checked(cf_dst_i,cf_three_b)
+  cf_src_at64:u64 = int.add.wrap(cf_src_byte,cf_header_b)
+  cf_dst_at64:u64 = int.add.wrap(cf_dst_byte,cf_header_b)
+  cf_src_at:usize = int.cast(cf_src_at64) {"mode":"wrap"}
+  cf_dst_at:usize = int.cast(cf_dst_at64) {"mode":"wrap"}
+  cf_src_octet:u8 = buffer.load(cf_owner_bits,cf_src_at)
+  cf_dst_octet:u8 = buffer.load(cf_owner_bits,cf_dst_at)
+  cf_src_wide:u64 = int.cast(cf_src_octet) {"mode":"wrap"}
+  cf_dst_wide:u64 = int.cast(cf_dst_octet) {"mode":"wrap"}
+  cf_src_bit:u64 = bit.and(cf_src_i,cf_seven_b)
+  cf_dst_bit:u64 = bit.and(cf_dst_i,cf_seven_b)
+  cf_src_mask:u64 = int.shl.checked(cf_one_b,cf_src_bit)
+  cf_dst_mask:u64 = int.shl.checked(cf_one_b,cf_dst_bit)
+  cf_src_found:u64 = bit.and(cf_src_wide,cf_src_mask)
+  cf_dst_found:u64 = bit.and(cf_dst_wide,cf_dst_mask)
+  cf_src_owned:bool = compare.ne(cf_src_found,cf_zero_b)
+  cf_dst_owned:bool = compare.ne(cf_dst_found,cf_zero_b)
+  cf_owned:bool = bool.and(cf_src_owned,cf_dst_owned)
+  branch cf_owned accepted() bad_owner()
+block bad_owner()
+  cf_error_owner:u32 = const() {"value":6}
+  ret(cf_error_owner)
+block accepted()
+  cf_success:u32 = const() {"value":0}
+  ret(cf_success)
+end
+fn read_word(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
+  cf_first:u64 = const() {"value":0}
+  cf_initial:u64 = const() {"value":0}
+  jump word_loop(bytes,offset,cf_first,cf_initial)
+block word_loop(cf_bytes:readbuf,cf_base:usize,cf_index:u64,cf_acc:u64)
+  cf_eight:u64 = const() {"value":8}
+  cf_more:bool = compare.lt(cf_index,cf_eight)
+  branch cf_more word_byte(cf_bytes,cf_base,cf_index,cf_acc) word_done(cf_acc)
+block word_byte(cf_bytes_b:readbuf,cf_offset_b:usize,cf_i_b:u64,cf_acc_b:u64)
+  cf_i_size:usize = int.cast(cf_i_b) {"mode":"wrap"}
+  cf_pos:usize = int.add.wrap(cf_offset_b,cf_i_size)
+  cf_octet:u8 = buffer.load(cf_bytes_b,cf_pos)
+  cf_octet_wide:u64 = int.cast(cf_octet) {"mode":"wrap"}
+  cf_eight_b:u64 = const() {"value":8}
+  cf_shift:u64 = int.mul.wrap(cf_i_b,cf_eight_b)
+  cf_part:u64 = int.shl.checked(cf_octet_wide,cf_shift)
+  cf_combined:u64 = bit.or(cf_acc_b,cf_part)
+  cf_one:u64 = const() {"value":1}
+  cf_next:u64 = int.add.wrap(cf_i_b,cf_one)
+  jump word_loop(cf_bytes_b,cf_offset_b,cf_next,cf_combined)
+block word_done(cf_result:u64)
+  ret(cf_result)
+end
