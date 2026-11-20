@@ -60,8 +60,8 @@ block check_reserved(cs_xsrc:readbuf,cs_xdst:mutbuf,cs_xtab:mutbuf,cs_xs:u64,cs_
   branch cs_clear advance(cs_xsrc,cs_xdst,cs_xtab,cs_xs,cs_xd,cs_xe,cs_xdo,cs_xi) bad_reserved()
 block advance(cs_asrc:readbuf,cs_adst:mutbuf,cs_atab:mutbuf,cs_as:u64,cs_ad:u64,cs_ae:u8,cs_ado:u8,cs_ai:u64)
   cs_advance_one:u64 = const() {"value":1}
-  cs_next:u64 = int.add.wrap(cs_ai,cs_advance_one)
-  jump scan_reserved(cs_asrc,cs_adst,cs_atab,cs_as,cs_ad,cs_ae,cs_ado,cs_next)
+  cs_scan_next:u64 = int.add.wrap(cs_ai,cs_advance_one)
+  jump scan_reserved(cs_asrc,cs_adst,cs_atab,cs_as,cs_ad,cs_ae,cs_ado,cs_scan_next)
 block bad_reserved()
   cs_res_err:u32 = const() {"value":4}
   ret(cs_res_err)
