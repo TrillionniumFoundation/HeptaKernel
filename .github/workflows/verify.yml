@@ -93,6 +93,11 @@ jobs:
         run: |
           make test-cow-frame-binding HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Verify native HIA COW frame binding against real QEMU PMM and active PTE
+        shell: bash
+        run: |
+          make test-cow-frame-binding-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify native HIA COW abort guarded by a live PTE with oracle and malicious control
         run: |
           make test-cow-abort-pte-guarded HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
@@ -323,6 +328,13 @@ jobs:
             build/page-zero-hardware-report.json
             build/cow-refcount-hardware-report.json
             build/cow-split-hardware-report.json
+            build/cow-frame-binding-qemu-report.json
+            build/cow-binding-hw-multiboot.elf
+            build/cow-binding-pte-stale-multiboot.elf
+            build/cow-binding-bitmap-multiboot.elf
+            build/cow-binding-noop-multiboot.elf
+            build/cow-frame-binding-boot.o
+            build/cow-frame-binding-dishonest-boot.o
             build/cow-integrated-hardware-report.json
             build/cow-integrated-hw-multiboot.elf
             build/cow-integrated-stale-multiboot.elf

@@ -2542,6 +2542,115 @@ cow_pte_hardware_exercise64:
     movb $2, cow_integrated_state+4(%rip)
     movb $2, cow_integrated_state+18(%rip)
 #endif
+
+#ifdef HEPTAKERNEL_TEST_COW_FRAME_BINDING_HW
+    /* Real HIA PMM owns two E820-admitted pages. Native HIA checks its
+     * live bitmap AND the actual hardware-active PTE before COW #PF.
+     * The bridge supplies pointers, but cannot fabricate a green receipt. */
+    leaq owner_init_b(%rip), %rdi
+    movl $32, %esi
+    leaq owner_alloc_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq owner_b_state(%rip), %r8
+    movl $STATE_BYTES, %r9d
+    call f0                         /* unchanged locked HIA PMM */
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, owner_alloc_reply(%rip)
+    jne fail64
+    cmpq $16, owner_alloc_reply+8(%rip)
+    jne fail64
+    leaq owner_alloc_two(%rip), %rdi
+    movl $32, %esi
+    leaq owner_alloc_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq owner_b_state(%rip), %r8
+    movl $STATE_BYTES, %r9d
+    call f0                         /* HIA claims 0x601000 and 0x602000 */
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, owner_alloc_reply(%rip)
+    jne fail64
+    cmpq $0x601000, owner_alloc_reply+8(%rip)
+    jne fail64
+    movabsq $0x314d4d504b484941, %rax
+    cmpq %rax, owner_b_state(%rip)
+    jne fail64
+    cmpq $17, owner_b_state+8(%rip)
+    jne fail64
+    cmpq $0x600000, owner_b_state+16(%rip)
+    jne fail64
+    cmpq $1, owner_b_state+24(%rip)
+    jne fail64
+    cmpq $14, owner_b_state+32(%rip)
+    jne fail64
+    cmpb $7, owner_b_state+64(%rip)
+    jne fail64
+
+    movq $0x601000, cow_frame_binding_request(%rip)
+    movq $0x602000, cow_frame_binding_request+8(%rip)
+    movq cow_pte_old(%rip), %rax
+    movq %rax, cow_frame_binding_request+16(%rip)
+    movq $0x600000, cow_frame_binding_request+24(%rip)
+    movq $17, cow_frame_binding_request+32(%rip)
+    movq $1, cow_frame_binding_request+40(%rip)
+#ifdef HEPTAKERNEL_TEST_COW_FRAME_BINDING_PTE_STALE
+    /* Plausible but stale expected PTE: must give exact status 5. */
+    xorq $8, cow_frame_binding_request+16(%rip)
+#endif
+#ifdef HEPTAKERNEL_TEST_COW_FRAME_BINDING_BITMAP
+    /* Adversarial PMM state: target looks free, despite a HIA claim. */
+    xorb $4, owner_b_state+64(%rip)
+#endif
+    /* Frozen independent complete owner-state oracle, taken AFTER injection.
+     * Real native binding is read-only, including every reserved byte. */
+    leaq owner_b_state(%rip), %rsi
+    leaq cow_frame_binding_snapshot(%rip), %rdi
+    movl $(STATE_BYTES / 8), %ecx
+    rep movsq
+    movq page_table_4m(%rip), %r12
+    leaq cow_frame_binding_request(%rip), %rdi
+    movl $48, %esi
+    leaq page_table_4m(%rip), %rdx  /* actual active PTE, not a copied word */
+    movl $8, %ecx
+    leaq owner_b_state(%rip), %r8
+    movl $STATE_BYTES, %r9d
+    call cow_frame_binding_f0       /* genuine selfhost HIA native .text */
+    movl %eax, %r14d
+    leaq owner_b_state(%rip), %rsi
+    leaq cow_frame_binding_snapshot(%rip), %rdi
+    movl $(STATE_BYTES / 8), %ecx
+    repe cmpsq
+    jne fail64
+    cmpq %r12, page_table_4m(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_COW_FRAME_BINDING_NOOP
+    /* Hostile HIA always returns success on an invalid allocation bitmap;
+     * this observer must DETECT that status, never pass COW. */
+    cmpl $0, %r14d
+    jne fail64
+    leaq message_cow_frame_binding_noop(%rip), %rsi
+    call puts64
+    jmp fail64
+#elif defined(HEPTAKERNEL_TEST_COW_FRAME_BINDING_BITMAP)
+    cmpl $6, %r14d
+    jne fail64
+    leaq message_cow_frame_binding_bitmap(%rip), %rsi
+    call puts64
+    jmp fail64
+#elif defined(HEPTAKERNEL_TEST_COW_FRAME_BINDING_PTE_STALE)
+    cmpl $5, %r14d
+    jne fail64
+    leaq message_cow_frame_binding_pte_stale(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %r14d, %r14d
+    jne fail64
+    leaq message_cow_frame_binding_live(%rip), %rsi
+    call puts64
+#endif
+#endif /* HEPTAKERNEL_TEST_COW_FRAME_BINDING_HW */
     movq $0, cow_pte_stage(%rip)
     leaq message_cow_pte_mapped(%rip), %rsi
     call puts64
@@ -4155,6 +4264,14 @@ message_cow_pte_dishonest:
     .asciz "HEPTAKERNEL HIA COW PTE DISHONEST NOOP REJECTED\r\n"
 message_cow_pte_bypass:
     .asciz "HEPTAKERNEL HIA COW PTE RESTORE BYPASS REFAULT VERIFIED\r\n"
+message_cow_frame_binding_live:
+    .asciz "HEPTAKERNEL HIA COW FRAME BINDING LIVE PMM PTE VERIFIED\r\n"
+message_cow_frame_binding_bitmap:
+    .asciz "HEPTAKERNEL HIA COW FRAME BINDING BITMAP REFUSED UNCHANGED\r\n"
+message_cow_frame_binding_pte_stale:
+    .asciz "HEPTAKERNEL HIA COW FRAME BINDING STALE PTE REFUSED UNCHANGED\r\n"
+message_cow_frame_binding_noop:
+    .asciz "HEPTAKERNEL HIA COW FRAME BINDING DISHONEST ACCEPT DETECTED\r\n"
 message_cow_integrated_aborted:
     .asciz "HEPTAKERNEL HIA COW INTEGRATED LATE PTE REJECT ABORT ZERO COUNTS RESTORED\r\n"
 message_cow_integrated_guard_refused:
@@ -4408,6 +4525,10 @@ cow_integrated_guard_before: .skip 8
 .balign 4096
 cow_integrated_state:        .skip 4096
 cow_integrated_guard_after:  .skip 8
+/* 48-byte HIA request; actual current PTE and HIA PMM are NOT snapshots. */
+cow_frame_binding_request: .skip 48
+.balign 16
+cow_frame_binding_snapshot: .skip STATE_BYTES
 /* Non-HIA independent full-byte pre-refusal snapshot. */
 .balign 4096
 cow_integrated_guard_snapshot: .skip 4096
