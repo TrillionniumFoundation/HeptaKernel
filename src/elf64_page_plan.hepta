@@ -1,6 +1,6 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn elf64_page_plan(image:readbuf,selector:readbuf,plan:mutbuf) -> (u32) effects(read,write,trap) entry(start)
-block start(image:readbuf,selector:readbuf,plan:mutbuf)
+fn elf64_page_plan(image:readbuf,selector:mutbuf,plan:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(image:readbuf,selector:mutbuf,plan:mutbuf)
   image_size:usize = buffer.len(image)
   min_header:usize = const() {"value":64}
   enough:bool = compare.ge(image_size,min_header)
@@ -8,12 +8,12 @@ block start(image:readbuf,selector:readbuf,plan:mutbuf)
 block short()
   code_short:u32 = const() {"value":1}
   ret(code_short)
-block buffers(im1:readbuf,sel1:readbuf,out1:mutbuf,size1:usize)
+block buffers(im1:readbuf,sel1:mutbuf,out1:mutbuf,size1:usize)
   sel_size:usize = buffer.len(sel1)
   expect_sel:usize = const() {"value":16}
   sel_ok:bool = compare.eq(sel_size,expect_sel)
   branch sel_ok output_shape(im1,sel1,out1,size1) bad_buffer()
-block output_shape(im2:readbuf,sel2:readbuf,out2:mutbuf,size2:usize)
+block output_shape(im2:readbuf,sel2:mutbuf,out2:mutbuf,size2:usize)
   out_size:usize = buffer.len(out2)
   expect_out:usize = const() {"value":40}
   out_ok:bool = compare.eq(out_size,expect_out)
@@ -21,7 +21,7 @@ block output_shape(im2:readbuf,sel2:readbuf,out2:mutbuf,size2:usize)
 block bad_buffer()
   code_buffer:u32 = const() {"value":2}
   ret(code_buffer)
-block ident(im3:readbuf,sel3:readbuf,out3:mutbuf,size3:usize)
+block ident(im3:readbuf,sel3:mutbuf,out3:mutbuf,size3:usize)
   off0:usize = const() {"value":0}
   off4:usize = const() {"value":4}
   off5:usize = const() {"value":5}
@@ -57,7 +57,7 @@ block ident(im3:readbuf,sel3:readbuf,out3:mutbuf,size3:usize)
 block bad_ident()
   code_ident:u32 = const() {"value":3}
   ret(code_ident)
-block machine(im4:readbuf,sel4:readbuf,out4:mutbuf,size4:usize)
+block machine(im4:readbuf,sel4:mutbuf,out4:mutbuf,size4:usize)
   type_off:usize = const() {"value":16}
   machine_off:usize = const() {"value":18}
   version_off:usize = const() {"value":20}
@@ -76,7 +76,7 @@ block machine(im4:readbuf,sel4:readbuf,out4:mutbuf,size4:usize)
   a_ok:bool = bool.and(good_type,good_machine)
   all_ok:bool = bool.and(a_ok,good_version)
   branch all_ok layout(im4,sel4,out4,size4) bad_ident()
-block layout(im5:readbuf,sel5:readbuf,out5:mutbuf,size5:usize)
+block layout(im5:readbuf,sel5:mutbuf,out5:mutbuf,size5:usize)
   eh_off:usize = const() {"value":52}
   ent_off:usize = const() {"value":54}
   num_off:usize = const() {"value":56}
@@ -109,17 +109,19 @@ block layout(im5:readbuf,sel5:readbuf,out5:mutbuf,size5:usize)
 block bad_layout()
   code_layout:u32 = const() {"value":4}
   ret(code_layout)
-block table_span(im6:readbuf,sel6:readbuf,out6:mutbuf,size6:u64,ph6:u64,num6:u64)
+block table_span(im6:readbuf,sel6:mutbuf,out6:mutbuf,size6:u64,ph6:u64,num6:u64)
   remaining:u64 = int.sub.wrap(size6,ph6)
   ent_size:u64 = const() {"value":56}
   all_bytes:u64 = int.mul.wrap(num6,ent_size)
   fits:bool = compare.le(all_bytes,remaining)
   branch fits choose(im6,sel6,out6,size6,ph6,num6) bad_layout()
-block choose(im7:readbuf,sel7:readbuf,out7:mutbuf,size7:u64,ph7:u64,num7:u64)
+block choose(im7:readbuf,sel7:mutbuf,out7:mutbuf,size7:u64,ph7:u64,num7:u64)
   zero7:usize = const() {"value":0}
   eight7:usize = const() {"value":8}
-  ph_index:u64 = call(sel7,zero7) {"function":"read64"}
-  page_index:u64 = call(sel7,eight7) {"function":"read64"}
+  selview:readbuf = borrow.read(sel7)
+  ph_index:u64 = call(selview,zero7) {"function":"read64"}
+  page_index:u64 = call(selview,eight7) {"function":"read64"}
+  _ = loan.end(selview)
   in_table:bool = compare.lt(ph_index,num7)
   index_max:u64 = const() {"value":1048575}
   in_page:bool = compare.le(page_index,index_max)
