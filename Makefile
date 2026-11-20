@@ -478,7 +478,7 @@ build/pdpt-1g-%.elf: build/boot-pdpt-1g-%.o $(PDPT_1G_BOOT_SUPPORT) arch/x86_64/
 build/pdpt-1g-%-multiboot.elf: build/pdpt-1g-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-boot: test-cow-integrated-hw test-cow-pte-hw test-cow-split-hw test-cow-refcount-hw test-page-copy-hw test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
+test-boot: test-cow-frame-binding-hw test-cow-integrated-hw test-cow-pte-hw test-cow-split-hw test-cow-refcount-hw test-page-copy-hw test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
 	$(PYTHON) tests/test_boot.py --qemu "$(QEMU)"
 
 test-guard-pages: build/kernel-host.so
@@ -1536,3 +1536,49 @@ test-cow-frame-binding: build/cow-frame-binding.so build/cow-frame-binding-noop.
 	env -i PATH= "$(HEPTA_COMPILER)" < src/cow_frame_binding.hepta > "$$tmp"; cmp "$$tmp" build/cow-frame-binding.o
 	timeout 90 $(PYTHON) tests/test_cow_frame_binding.py build/cow-frame-binding.so
 	$(PYTHON) tests/test_cow_frame_binding.py build/cow-frame-binding-noop.so --expect-unsafe
+
+# Quiescent QEMU integration: native HIA PMM allocation, actual live PTE,
+# native read-only HIA frame-binding gate, then hardware #PF/COW remap.
+# All privileged setup/exception instructions remain NON-HIA boot bridge.
+.PHONY: test-cow-frame-binding-hw
+build/cow-frame-binding-boot.o: build/cow-frame-binding.o
+	objcopy --redefine-sym f0=cow_frame_binding_f0 "$<" "$@"
+
+build/cow-frame-binding-dishonest-boot.o: build/cow-frame-binding-noop.o
+	objcopy --redefine-sym f0=cow_frame_binding_f0 "$<" "$@"
+
+build/boot-cow-binding-hw.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_PTE_HW=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED=1 -DHEPTAKERNEL_TEST_COW_FRAME_BINDING_HW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-cow-binding-pte-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_PTE_HW=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED=1 -DHEPTAKERNEL_TEST_COW_FRAME_BINDING_HW=1 -DHEPTAKERNEL_TEST_COW_FRAME_BINDING_PTE_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-cow-binding-bitmap.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_PTE_HW=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED=1 -DHEPTAKERNEL_TEST_COW_FRAME_BINDING_HW=1 -DHEPTAKERNEL_TEST_COW_FRAME_BINDING_BITMAP=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-cow-binding-noop.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_PTE_HW=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED=1 -DHEPTAKERNEL_TEST_COW_FRAME_BINDING_HW=1 -DHEPTAKERNEL_TEST_COW_FRAME_BINDING_BITMAP=1 -DHEPTAKERNEL_TEST_COW_FRAME_BINDING_NOOP=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+COW_BINDING_HW_SUPPORT := $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o
+
+build/cow-binding-hw.elf: build/boot-cow-binding-hw.o $(COW_BINDING_HW_SUPPORT) build/cow-frame-binding-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-binding-hw.o $(COW_BINDING_HW_SUPPORT) build/cow-frame-binding-boot.o
+
+build/cow-binding-pte-stale.elf: build/boot-cow-binding-pte-stale.o $(COW_BINDING_HW_SUPPORT) build/cow-frame-binding-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-binding-pte-stale.o $(COW_BINDING_HW_SUPPORT) build/cow-frame-binding-boot.o
+
+build/cow-binding-bitmap.elf: build/boot-cow-binding-bitmap.o $(COW_BINDING_HW_SUPPORT) build/cow-frame-binding-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-binding-bitmap.o $(COW_BINDING_HW_SUPPORT) build/cow-frame-binding-boot.o
+
+build/cow-binding-noop.elf: build/boot-cow-binding-noop.o $(COW_BINDING_HW_SUPPORT) build/cow-frame-binding-dishonest-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-binding-noop.o $(COW_BINDING_HW_SUPPORT) build/cow-frame-binding-dishonest-boot.o
+
+build/cow-binding-%-multiboot.elf: build/cow-binding-%.elf
+	objcopy -O elf32-i386 "$<" "$@"
+
+test-cow-frame-binding-hw: build/cow-binding-hw-multiboot.elf build/cow-binding-pte-stale-multiboot.elf build/cow-binding-bitmap-multiboot.elf build/cow-binding-noop-multiboot.elf
+	@set -eu; a=$$(mktemp build/.cow-binding-hia-source.XXXXXX); b=$$(mktemp build/.cow-binding-hia-linked.XXXXXX); \
+	  trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	  objcopy --dump-section .text="$$a" build/cow-frame-binding.o; objcopy --dump-section .text="$$b" build/cow-frame-binding-boot.o; cmp "$$a" "$$b"; \
+	  objcopy --dump-section .text="$$a" build/cow-frame-binding-noop.o; objcopy --dump-section .text="$$b" build/cow-frame-binding-dishonest-boot.o; cmp "$$a" "$$b"
+	timeout 180 $(PYTHON) tests/test_cow_frame_binding_qemu.py --qemu "$(QEMU)"
