@@ -93,6 +93,11 @@ jobs:
         run: |
           make test-elf64-page-fill HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Verify original HIA ELF file/BSS fill on live QEMU PMM pages and negative controls
+        shell: bash
+        run: |
+          make test-elf64-page-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Validate native HIA ELF64 PT_LOAD spans, executable entry and dishonest control
         shell: bash
         run: |
@@ -349,6 +354,13 @@ jobs:
             .toolchain/compiler/B3.receipt.json
             .toolchain/compiler/native-compiler.receipt.json
             build/native-report.json
+            build/elf-page-hardware-report.json
+            build/elf64-page-fill-boot.o
+            build/elf64-page-fill-dishonest-boot.o
+            build/elf-page-hw-multiboot.elf
+            build/elf-page-truncated-multiboot.elf
+            build/elf-page-noop-multiboot.elf
+            build/elf-page-decoy-multiboot.elf
             build/elf64-load-report.json
             build/elf64-load-segments.o
             build/elf64-load-segments.so
