@@ -83,6 +83,11 @@ jobs:
         run: |
           make test-cow-refcount HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Verify real QEMU native HIA COW counts with malicious and stale-state controls
+        shell: bash
+        run: |
+          make test-cow-refcount-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify native HIA full-page zeroing, OS guard pages and dishonest control
         shell: bash
         run: |
@@ -283,6 +288,12 @@ jobs:
             build/native-report.json
             build/page-zero-recycle-bypass-multiboot.elf
             build/page-zero-hardware-report.json
+            build/cow-refcount-hardware-report.json
+            build/cow-refcount-hw-multiboot.elf
+            build/cow-refcount-dishonest-multiboot.elf
+            build/cow-refcount-stale-multiboot.elf
+            build/cow-refcount-decoy-multiboot.elf
+            build/cow-refcount-boot.o
             build/page-copy-hardware-report.json
             build/page-copy-hw-multiboot.elf
             build/page-copy-dishonest-multiboot.elf

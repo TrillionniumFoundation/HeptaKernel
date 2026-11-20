@@ -478,7 +478,7 @@ build/pdpt-1g-%.elf: build/boot-pdpt-1g-%.o $(PDPT_1G_BOOT_SUPPORT) arch/x86_64/
 build/pdpt-1g-%-multiboot.elf: build/pdpt-1g-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-boot: test-page-copy-hw test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
+test-boot: test-cow-refcount-hw test-page-copy-hw test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
 	$(PYTHON) tests/test_boot.py --qemu "$(QEMU)"
 
 test-guard-pages: build/kernel-host.so
@@ -1197,3 +1197,47 @@ test-cow-refcount: build/cow-refcount.so build/cow-refcount-unsafe.so
 	cmp "$$tmp" build/cow-refcount.o
 	timeout 90 $(PYTHON) tests/test_cow_refcount.py build/cow-refcount.so
 	$(PYTHON) tests/test_cow_refcount.py build/cow-refcount-unsafe.so --expect-unsafe
+
+
+# Isolated PC/Q35 native-HIA refcount transitions in actual QEMU guest RAM.
+# The explicitly non-HIA bridge performs the independent byte-level oracle.
+build/cow-refcount-boot.o: build/cow-refcount.o
+	objcopy --redefine-sym f0=cow_refcount_f0 "$<" "$@"
+
+build/cow-refcount-dishonest-boot.o: build/cow-refcount-unsafe.o
+	objcopy --redefine-sym f0=cow_refcount_f0 "$<" "$@"
+
+build/boot-cow-refcount-hw.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_REFCOUNT_HW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-cow-refcount-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_REFCOUNT_HW=1 -DHEPTAKERNEL_TEST_COW_REFCOUNT_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-cow-refcount-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_REFCOUNT_HW=1 -DHEPTAKERNEL_TEST_COW_REFCOUNT_DECOY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+COW_REFCOUNT_HW_SUPPORT := $(PAGE_ZERO_HW_SUPPORT)
+
+build/cow-refcount-hw.elf: build/boot-cow-refcount-hw.o $(COW_REFCOUNT_HW_SUPPORT) build/cow-refcount-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-refcount-hw.o $(COW_REFCOUNT_HW_SUPPORT) build/cow-refcount-boot.o
+
+build/cow-refcount-dishonest.elf: build/boot-cow-refcount-hw.o $(COW_REFCOUNT_HW_SUPPORT) build/cow-refcount-dishonest-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-refcount-hw.o $(COW_REFCOUNT_HW_SUPPORT) build/cow-refcount-dishonest-boot.o
+
+build/cow-refcount-stale.elf: build/boot-cow-refcount-stale.o $(COW_REFCOUNT_HW_SUPPORT) build/cow-refcount-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-refcount-stale.o $(COW_REFCOUNT_HW_SUPPORT) build/cow-refcount-boot.o
+
+build/cow-refcount-decoy.elf: build/boot-cow-refcount-decoy.o $(COW_REFCOUNT_HW_SUPPORT) build/cow-refcount-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-refcount-decoy.o $(COW_REFCOUNT_HW_SUPPORT) build/cow-refcount-boot.o
+
+build/cow-refcount-%-multiboot.elf: build/cow-refcount-%.elf
+	objcopy -O elf32-i386 "$<" "$@"
+
+.PHONY: test-cow-refcount-hw
+test-cow-refcount-hw: build/cow-refcount-hw-multiboot.elf build/cow-refcount-dishonest-multiboot.elf build/cow-refcount-stale-multiboot.elf build/cow-refcount-decoy-multiboot.elf
+	@set -eu; original=$$(mktemp build/.cow-original.XXXXXX); renamed=$$(mktemp build/.cow-boot.XXXXXX); \
+	  trap 'rm -f "$$original" "$$renamed"' EXIT HUP INT TERM; \
+	  objcopy --dump-section .text="$$original" build/cow-refcount.o; \
+	  objcopy --dump-section .text="$$renamed" build/cow-refcount-boot.o; \
+	  cmp "$$original" "$$renamed"
+	timeout 130 $(PYTHON) tests/test_cow_refcount_qemu.py --qemu "$(QEMU)"
