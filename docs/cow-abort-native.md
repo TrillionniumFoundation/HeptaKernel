@@ -10,7 +10,7 @@ Under **caller-guaranteed exclusive quiescence**, the caller must independently
 check that the PTE still maps the original read-only source frame and that no
 other actor can observe the unpublished destination. After a successful split,
 the caller updates only the request header to the current post-split counts
-and invokes `cow_abort(destination:mutbuf,state:mutbuf)`. Both buffers must
+and invokes `cow_abort(request:readbuf,destination:mutbuf,state:mutbuf)`. The request buffer must have zero length. Both mutable buffers must
 be disjoint, writable and exactly 4,096 bytes. The 16-byte header has u16
 source/destination slots (bytes 0..3), expected post-split counts (4..5),
 and ten zero reserved bytes. The remaining 4080 bytes are u8 counters.
@@ -20,7 +20,7 @@ source count in 1..254, destination count exactly 1. It then zeroes all 4,096
 destination bytes, increments the source count and resets the destination
 count to zero. Header and unrelated counters are not modified. Codes:
 0 success, 1 invalid destination size, 2 invalid state size, 3 reserved
-field, 4 slot, 5 stale count, 6 disallowed ownership. All rejected calls
+field, 4 slot, 5 stale count, 6 disallowed ownership, 7 nonempty request. All rejected calls
 must leave both buffers unchanged.
 
 The independent native test covers fixed/random boundary cases, full byte

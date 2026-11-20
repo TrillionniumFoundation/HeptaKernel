@@ -19,7 +19,9 @@ SLOTS = PAGE - HEADER
 PAD = 32
 
 
-def oracle(destination: bytes, state: bytes) -> tuple[int, bytes, bytes]:
+def oracle(request: bytes, destination: bytes, state: bytes) -> tuple[int, bytes, bytes]:
+    if len(request) != 0:
+        return 7, destination, state
     if len(destination) != PAGE:
         return 1, destination, state
     if len(state) != PAGE:
@@ -58,19 +60,23 @@ def state_for(src: int, dst: int, old: int, dest_old: int = 1,
     return bytes(state)
 
 
-def invoke(entry, destination: bytes, state: bytes) -> bool:
+def invoke(entry, destination: bytes, state: bytes, request: bytes = b"") -> bool:
+    r = ctypes.create_string_buffer(bytes([0xC4]) * PAD +
+                                    request + bytes([0xC4]) * PAD)
     d = ctypes.create_string_buffer(bytes([0xA5]) * PAD +
                                     destination + bytes([0xA5]) * PAD)
     s = ctypes.create_string_buffer(bytes([0xB6]) * PAD +
                                     state + bytes([0xB6]) * PAD)
-    before_d, before_s = bytes(d), bytes(s)
-    result = entry(ctypes.addressof(d) + PAD, len(destination),
+    before_r, before_d, before_s = bytes(r), bytes(d), bytes(s)
+    result = entry(ctypes.addressof(r) + PAD, len(request),
+                   ctypes.addressof(d) + PAD, len(destination),
                    ctypes.addressof(s) + PAD, len(state))
-    status, expected_d, expected_s = oracle(destination, state)
+    status, expected_d, expected_s = oracle(request, destination, state)
     wanted_d, wanted_s = bytearray(before_d), bytearray(before_s)
     wanted_d[PAD:PAD + len(destination)] = expected_d
     wanted_s[PAD:PAD + len(state)] = expected_s
-    return (result == status and bytes(d) == bytes(wanted_d) and
+    return (result == status and bytes(r) == before_r and
+            bytes(d) == bytes(wanted_d) and
             bytes(s) == bytes(wanted_s))
 
 
@@ -91,13 +97,14 @@ def guarded(entry) -> str:
         ctypes.memset(destination, 0xEA, PAGE)
         initial = state_for(0, SLOTS - 1, 1)
         ctypes.memmove(state, initial, PAGE)
-        assert entry(destination, PAGE, state, PAGE) == 0
+        req = ctypes.create_string_buffer(b"\x00")
+        assert entry(ctypes.addressof(req), 0, destination, PAGE, state, PAGE) == 0
         assert ctypes.string_at(destination, PAGE) == bytes(PAGE)
         wanted = bytearray(initial)
         wanted[HEADER] = 2
         wanted[HEADER + SLOTS - 1] = 0
         assert ctypes.string_at(state, PAGE) == bytes(wanted)
-        assert entry(destination, PAGE + 1, state, PAGE) == 1
+        assert entry(ctypes.addressof(req), 0, destination, PAGE + 1, state, PAGE) == 1
         assert ctypes.string_at(state, PAGE) == bytes(wanted)
     finally:
         for base in bases:
@@ -128,7 +135,9 @@ def composition(abort, split) -> int:
             snapshot[4] = old - 1
             snapshot[5] = 1
             ctypes.memmove(state, bytes(snapshot), PAGE)
-            assert abort(ctypes.addressof(destination), PAGE,
+            req = ctypes.create_string_buffer(b"\x00")
+            assert abort(ctypes.addressof(req), 0,
+                         ctypes.addressof(destination), PAGE,
                          ctypes.addressof(state), PAGE) == 0
             restored = bytearray(ctypes.string_at(state, PAGE))
             restored[4] = old
@@ -147,7 +156,7 @@ def main() -> None:
     parser.add_argument("--split-library", type=Path)
     args = parser.parse_args()
     abort = ctypes.CDLL(str(args.library.resolve())).f0
-    abort.argtypes = [ctypes.c_void_p, ctypes.c_uint64] * 2
+    abort.argtypes = [ctypes.c_void_p, ctypes.c_uint64] * 3
     abort.restype = ctypes.c_uint32
     rng = random.Random(20261120)
     cases = mismatches = accepted = 0
@@ -158,7 +167,7 @@ def main() -> None:
                     state = state_for(src, dst, old, dest_old,
                                       actual=(old + delta) & 255)
                     data = rng.randbytes(PAGE)
-                    accepted += oracle(data, state)[0] == 0
+                    accepted += oracle(b"", data, state)[0] == 0
                     mismatches += not invoke(abort, data, state)
                     cases += 1
     for src, dst in ((0, 0), (4080, 1), (1, 4080), (65535, 1), (1, 65535)):
@@ -179,6 +188,10 @@ def main() -> None:
             state = state[:rng.choice((0, 4095, 4097))]
         accepted += oracle(data, state)[0] == 0
         mismatches += not invoke(abort, data, state)
+        cases += 1
+    for payload in (b"x", b"\x00" * 16):
+        mismatches += not invoke(abort, rng.randbytes(PAGE),
+                                 state_for(0, 1, 1), request=payload)
         cases += 1
     if args.expect_unsafe:
         assert mismatches > 30, (cases, mismatches)

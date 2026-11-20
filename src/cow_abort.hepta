@@ -1,10 +1,18 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn cow_abort(destination:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
-block start(destination:mutbuf,state:mutbuf)
-  ca_dl:usize = buffer.len(destination)
+fn cow_abort(request:readbuf,destination:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,destination:mutbuf,state:mutbuf)
+  ca_request_len:usize = buffer.len(request)
+  ca_request_zero:usize = const() {"value":0}
+  ca_request_ok:bool = compare.eq(ca_request_len,ca_request_zero)
+  branch ca_request_ok check_dest(destination,state) bad_request()
+block bad_request()
+  ca_request_error:u32 = const() {"value":7}
+  ret(ca_request_error)
+block check_dest(ca_input_dest:mutbuf,ca_input_state:mutbuf)
+  ca_dl:usize = buffer.len(ca_input_dest)
   ca_page:usize = const() {"value":4096}
   ca_dest_ok:bool = compare.eq(ca_dl,ca_page)
-  branch ca_dest_ok state_shape(destination,state) bad_dest()
+  branch ca_dest_ok state_shape(ca_input_dest,ca_input_state) bad_dest()
 block bad_dest()
   ca_ed:u32 = const() {"value":1}
   ret(ca_ed)
