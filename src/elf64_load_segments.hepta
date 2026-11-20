@@ -186,7 +186,7 @@ block scan_init(im:readbuf,phoffset:u64,phcount:u64,total:u64,entrypoint:u64)
   jump scan(im,phoffset,phcount,total,entrypoint,z,f,f)
 block scan(im0:readbuf,p0:u64,n0:u64,total0:u64,entry0:u64,index0:u64,load0:bool,exec0:bool)
   more:bool = compare.lt(index0,n0)
-  branch more read_ph(im0,p0,n0,total0,entry0,index0,load0,exec0) finish(load0,exec0)
+  branch more read_ph(im0,p0,n0,total0,entry0,index0,load0,exec0) finish(im0,p0,n0,load0,exec0)
 block read_ph(im1:readbuf,p1:u64,n1:u64,total1:u64,entry1:u64,index1:u64,load1:bool,exec1:bool)
   phsize:u64 = const() {"value":56}
   step:u64 = int.mul.wrap(index1,phsize)
@@ -292,10 +292,10 @@ block advance(im7:readbuf,p7:u64,n7:u64,total7:u64,entry7:u64,index7:u64,load7:b
   one7:u64 = const() {"value":1}
   next7:u64 = int.add.wrap(index7,one7)
   jump scan(im7,p7,n7,total7,entry7,next7,load7,exec7)
-block finish(load8:bool,exec8:bool)
-  branch load8 final_entry(exec8) bad_no_load()
-block final_entry(entry8:bool)
-  branch entry8 accepted() bad_no_entry()
+block finish(im8:readbuf,p8:u64,n8:u64,load8:bool,exec8:bool)
+  branch load8 final_entry(im8,p8,n8,exec8) bad_no_load()
+block final_entry(im9:readbuf,p9:u64,n9:u64,entry8:bool)
+  branch entry8 overlap_begin(im9,p9,n9) bad_no_entry()
 block bad_no_load()
   error8:u32 = const() {"value":8}
   ret(error8)
@@ -311,6 +311,83 @@ block bad_no_entry()
 block bad_interp()
   error12:u32 = const() {"value":12}
   ret(error12)
+# Second pass: forbid any two PT_LOAD segments sharing a 4KiB user page.
+# All table bounds and segment virtual end/size conditions were verified above.
+# Comparison uses inclusive page indices to catch BSS and sub-page collisions.
+block overlap_begin(ov_image:readbuf,ov_p:u64,ov_n:u64)
+  ov_zero:u64 = const() {"value":0}
+  jump overlap_outer(ov_image,ov_p,ov_n,ov_zero)
+block overlap_outer(oo_image:readbuf,oo_p:u64,oo_n:u64,oo_i:u64)
+  oo_more:bool = compare.lt(oo_i,oo_n)
+  branch oo_more overlap_outer_ph(oo_image,oo_p,oo_n,oo_i) accepted()
+block overlap_outer_ph(op_image:readbuf,op_p:u64,op_n:u64,op_i:u64)
+  op_stride:u64 = const() {"value":56}
+  op_step:u64 = int.mul.wrap(op_i,op_stride)
+  op_base:u64 = int.add.wrap(op_p,op_step)
+  op_pos:usize = int.cast(op_base) {"mode":"wrap"}
+  op_kind:u64 = call(op_image,op_pos) {"function":"read32"}
+  op_load:u64 = const() {"value":1}
+  op_isload:bool = compare.eq(op_kind,op_load)
+  branch op_isload overlap_current(op_image,op_p,op_n,op_i,op_base) overlap_advance(op_image,op_p,op_n,op_i)
+block overlap_current(oc_image:readbuf,oc_p:u64,oc_n:u64,oc_i:u64,oc_base:u64)
+  oc_vstep:u64 = const() {"value":16}
+  oc_mstep:u64 = const() {"value":40}
+  oc_vaddr:u64 = int.add.wrap(oc_base,oc_vstep)
+  oc_maddr:u64 = int.add.wrap(oc_base,oc_mstep)
+  oc_vpos:usize = int.cast(oc_vaddr) {"mode":"wrap"}
+  oc_mpos:usize = int.cast(oc_maddr) {"mode":"wrap"}
+  oc_va:u64 = call(oc_image,oc_vpos) {"function":"read64"}
+  oc_mem:u64 = call(oc_image,oc_mpos) {"function":"read64"}
+  oc_end:u64 = int.add.wrap(oc_va,oc_mem)
+  oc_one:u64 = const() {"value":1}
+  oc_last:u64 = int.sub.wrap(oc_end,oc_one)
+  oc_shift:u64 = const() {"value":12}
+  oc_first_page:u64 = int.shr.checked(oc_va,oc_shift)
+  oc_last_page:u64 = int.shr.checked(oc_last,oc_shift)
+  oc_zero:u64 = const() {"value":0}
+  jump overlap_inner(oc_image,oc_p,oc_n,oc_i,oc_zero,oc_first_page,oc_last_page)
+block overlap_inner(oi_image:readbuf,oi_p:u64,oi_n:u64,oi_i:u64,oi_j:u64,oi_lo:u64,oi_hi:u64)
+  oi_more:bool = compare.lt(oi_j,oi_i)
+  branch oi_more overlap_prev(oi_image,oi_p,oi_n,oi_i,oi_j,oi_lo,oi_hi) overlap_advance(oi_image,oi_p,oi_n,oi_i)
+block overlap_prev(pv_image:readbuf,pv_p:u64,pv_n:u64,pv_i:u64,pv_j:u64,pv_lo:u64,pv_hi:u64)
+  pv_stride:u64 = const() {"value":56}
+  pv_step:u64 = int.mul.wrap(pv_j,pv_stride)
+  pv_base:u64 = int.add.wrap(pv_p,pv_step)
+  pv_pos:usize = int.cast(pv_base) {"mode":"wrap"}
+  pv_kind:u64 = call(pv_image,pv_pos) {"function":"read32"}
+  pv_load:u64 = const() {"value":1}
+  pv_isload:bool = compare.eq(pv_kind,pv_load)
+  branch pv_isload overlap_compare(pv_image,pv_p,pv_n,pv_i,pv_j,pv_lo,pv_hi,pv_base) overlap_inner_next(pv_image,pv_p,pv_n,pv_i,pv_j,pv_lo,pv_hi)
+block overlap_compare(co_image:readbuf,co_p:u64,co_n:u64,co_i:u64,co_j:u64,co_lo:u64,co_hi:u64,co_base:u64)
+  co_vstep:u64 = const() {"value":16}
+  co_mstep:u64 = const() {"value":40}
+  co_vaddr:u64 = int.add.wrap(co_base,co_vstep)
+  co_maddr:u64 = int.add.wrap(co_base,co_mstep)
+  co_vpos:usize = int.cast(co_vaddr) {"mode":"wrap"}
+  co_mpos:usize = int.cast(co_maddr) {"mode":"wrap"}
+  co_va:u64 = call(co_image,co_vpos) {"function":"read64"}
+  co_mem:u64 = call(co_image,co_mpos) {"function":"read64"}
+  co_end:u64 = int.add.wrap(co_va,co_mem)
+  co_one:u64 = const() {"value":1}
+  co_last:u64 = int.sub.wrap(co_end,co_one)
+  co_shift:u64 = const() {"value":12}
+  co_first:u64 = int.shr.checked(co_va,co_shift)
+  co_final:u64 = int.shr.checked(co_last,co_shift)
+  co_overlap_a:bool = compare.le(co_lo,co_final)
+  co_overlap_b:bool = compare.le(co_first,co_hi)
+  co_overlap:bool = bool.and(co_overlap_a,co_overlap_b)
+  branch co_overlap bad_overlap() overlap_inner_next(co_image,co_p,co_n,co_i,co_j,co_lo,co_hi)
+block overlap_inner_next(nx_image:readbuf,nx_p:u64,nx_n:u64,nx_i:u64,nx_j:u64,nx_lo:u64,nx_hi:u64)
+  nx_one:u64 = const() {"value":1}
+  nx_next:u64 = int.add.wrap(nx_j,nx_one)
+  jump overlap_inner(nx_image,nx_p,nx_n,nx_i,nx_next,nx_lo,nx_hi)
+block overlap_advance(oa_image:readbuf,oa_p:u64,oa_n:u64,oa_i:u64)
+  oa_one:u64 = const() {"value":1}
+  oa_next:u64 = int.add.wrap(oa_i,oa_one)
+  jump overlap_outer(oa_image,oa_p,oa_n,oa_next)
+block bad_overlap()
+  overlap_code:u32 = const() {"value":13}
+  ret(overlap_code)
 block accepted()
   success:u32 = const() {"value":0}
   ret(success)
