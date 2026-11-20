@@ -117,8 +117,11 @@ def guarded(entry) -> str:
             for offset in (0, PAGE, 2 * PAGE):
                 assert libc.mprotect(base + offset, PAGE,
                                     mmap.PROT_READ | mmap.PROT_WRITE) == 0
-        for i, (region, holder) in enumerate(maps):
-            maps[i] = (region, None)
+        # Pop each exported ctypes buffer before closing its mmap.
+        # The local 'holder' from the construction loop is overwritten,
+        # then deleted before region.close() for the last allocation.
+        while maps:
+            region, holder = maps.pop()
             del holder
             region.close()
     return "PASS"
