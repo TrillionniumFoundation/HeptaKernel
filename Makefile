@@ -1446,15 +1446,47 @@ build/cow-integrated-abort.elf: build/boot-cow-integrated-abort.o $(COW_INTEGRAT
 build/cow-integrated-abort-noop.elf: build/boot-cow-integrated-abort.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o build/cow-abort-dishonest-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-abort.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o build/cow-abort-dishonest-boot.o
 
+# A genuine HIA PTE-guarded abort reads eight bytes from the live QEMU
+# page-table leaf, independently observing late publication and stale header.
+build/cow-abort-pte-guarded-boot.o: build/cow-abort-pte-guarded.o
+	objcopy --redefine-sym f0=cow_abort_pte_guarded_f0 "$<" "$@"
+
+build/cow-abort-pte-guarded-dishonest-boot.o: build/cow-abort-pte-guarded-noop.o
+	objcopy --redefine-sym f0=cow_abort_pte_guarded_f0 "$<" "$@"
+
+build/boot-cow-integrated-guarded.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_PTE_HW=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED_ABORT=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED_ABORT_GUARDED=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-cow-integrated-guarded-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_PTE_HW=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED_ABORT=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED_ABORT_GUARDED=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED_GUARD_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-cow-integrated-guarded-published.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_COW_PTE_HW=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED_ABORT=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED_ABORT_GUARDED=1 -DHEPTAKERNEL_TEST_COW_INTEGRATED_GUARD_PUBLISHED=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+COW_GUARDED_SUPPORT := $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o build/cow-abort-pte-guarded-boot.o
+
+build/cow-integrated-guarded.elf: build/boot-cow-integrated-guarded.o $(COW_GUARDED_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-guarded.o $(COW_GUARDED_SUPPORT)
+
+build/cow-integrated-guarded-stale.elf: build/boot-cow-integrated-guarded-stale.o $(COW_GUARDED_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-guarded-stale.o $(COW_GUARDED_SUPPORT)
+
+build/cow-integrated-guarded-published.elf: build/boot-cow-integrated-guarded-published.o $(COW_GUARDED_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-guarded-published.o $(COW_GUARDED_SUPPORT)
+
+build/cow-integrated-guarded-noop.elf: build/boot-cow-integrated-guarded.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o build/cow-abort-pte-guarded-dishonest-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-cow-integrated-guarded.o $(COW_INTEGRATED_SUPPORT) build/cow-split-boot.o build/cow-abort-pte-guarded-dishonest-boot.o
+
 build/cow-integrated-%-multiboot.elf: build/cow-integrated-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-cow-integrated-hw: build/cow-integrated-hw-multiboot.elf build/cow-integrated-stale-multiboot.elf build/cow-integrated-dishonest-multiboot.elf build/cow-integrated-decoy-multiboot.elf build/cow-integrated-abort-multiboot.elf build/cow-integrated-abort-noop-multiboot.elf
+test-cow-integrated-hw: build/cow-integrated-hw-multiboot.elf build/cow-integrated-stale-multiboot.elf build/cow-integrated-dishonest-multiboot.elf build/cow-integrated-decoy-multiboot.elf build/cow-integrated-abort-multiboot.elf build/cow-integrated-abort-noop-multiboot.elf build/cow-integrated-guarded-multiboot.elf build/cow-integrated-guarded-noop-multiboot.elf build/cow-integrated-guarded-stale-multiboot.elf build/cow-integrated-guarded-published-multiboot.elf
 	@set -eu; a=$$(mktemp build/.cow-integrated-split-a.XXXXXX); b=$$(mktemp build/.cow-integrated-split-b.XXXXXX); c=$$(mktemp build/.cow-integrated-pte-a.XXXXXX); d=$$(mktemp build/.cow-integrated-pte-b.XXXXXX); \
 	  trap 'rm -f "$$a" "$$b" "$$c" "$$d"' EXIT HUP INT TERM; \
 	  objcopy --dump-section .text="$$a" build/cow-split.o; objcopy --dump-section .text="$$b" build/cow-split-boot.o; cmp "$$a" "$$b"; \
 	  objcopy --dump-section .text="$$c" build/cow-pte-swap.o; objcopy --dump-section .text="$$d" build/cow-pte-boot.o; cmp "$$c" "$$d"; \
-	  objcopy --dump-section .text="$$a" build/cow-abort.o; objcopy --dump-section .text="$$b" build/cow-abort-boot.o; cmp "$$a" "$$b"
+	  objcopy --dump-section .text="$$a" build/cow-abort.o; objcopy --dump-section .text="$$b" build/cow-abort-boot.o; cmp "$$a" "$$b"; \
+	  objcopy --dump-section .text="$$a" build/cow-abort-pte-guarded.o; objcopy --dump-section .text="$$b" build/cow-abort-pte-guarded-boot.o; cmp "$$a" "$$b"
 	timeout 240 $(PYTHON) tests/test_cow_integrated_qemu.py --qemu "$(QEMU)"
 
 # Native Core v8 PTE-guarded prepublication COW cleanup (single-owner).
