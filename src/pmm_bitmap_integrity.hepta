@@ -1,0 +1,178 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn pmm_bitmap_integrity(request:readbuf,state:mutbuf,unused:mutbuf) -> (u32) effects(read,trap) entry(start)
+block start(request:readbuf,state:mutbuf,unused:mutbuf)
+  b_view:readbuf = borrow.read(state)
+  b_result:u32 = call(request,b_view) {"function":"inspect"}
+  _ = loan.end(b_view)
+  ret(b_result)
+end
+fn inspect(request:readbuf,state:readbuf) -> (u32) effects(read,trap) entry(start)
+block start(request:readbuf,state:readbuf)
+  v_req:usize = buffer.len(request)
+  v_24:usize = const() {"value":24}
+  v_ok:bool = compare.eq(v_req,v_24)
+  branch v_ok state_shape(request,state) malformed()
+block state_shape(request:readbuf,state:readbuf)
+  v_state:usize = buffer.len(state)
+  v_64:usize = const() {"value":64}
+  v_ok:bool = compare.ge(v_state,v_64)
+  branch v_ok metadata(request,state) malformed()
+block malformed()
+  v_bad:u32 = const() {"value":1}
+  ret(v_bad)
+block bad_metadata()
+  v_bad:u32 = const() {"value":2}
+  ret(v_bad)
+block bad_geometry()
+  v_bad:u32 = const() {"value":3}
+  ret(v_bad)
+block bad_bitmap()
+  v_bad:u32 = const() {"value":4}
+  ret(v_bad)
+block metadata(request:readbuf,state:readbuf)
+  m_o0:usize = const() {"value":0}
+  m_o8:usize = const() {"value":8}
+  m_o16:usize = const() {"value":16}
+  m_o24:usize = const() {"value":24}
+  m_o32:usize = const() {"value":32}
+  m_magic:u64 = call(state,m_o0) {"function":"read_word"}
+  m_count:u64 = call(state,m_o8) {"function":"read_word"}
+  m_base:u64 = call(state,m_o16) {"function":"read_word"}
+  m_reserved:u64 = call(state,m_o24) {"function":"read_word"}
+  m_free:u64 = call(state,m_o32) {"function":"read_word"}
+  m_want_base:u64 = call(request,m_o0) {"function":"read_word"}
+  m_want_count:u64 = call(request,m_o8) {"function":"read_word"}
+  m_want_reserved:u64 = call(request,m_o16) {"function":"read_word"}
+  m_magic_target:u64 = const() {"value":3552580688320940353}
+  m_magic_ok:bool = compare.eq(m_magic,m_magic_target)
+  m_count_ok:bool = compare.eq(m_count,m_want_count)
+  m_base_ok:bool = compare.eq(m_base,m_want_base)
+  m_reserved_ok:bool = compare.eq(m_reserved,m_want_reserved)
+  m_pair1:bool = bool.and(m_magic_ok,m_count_ok)
+  m_pair2:bool = bool.and(m_base_ok,m_reserved_ok)
+  m_valid:bool = bool.and(m_pair1,m_pair2)
+  branch m_valid geometry(state,m_count,m_base,m_reserved,m_free) bad_metadata()
+block geometry(state:readbuf,count:u64,base:u64,reserved:u64,free:u64)
+  g_zero:u64 = const() {"value":0}
+  g_max:u64 = const() {"value":65536}
+  g_limit:u64 = const() {"value":4503599627370496}
+  g_page:u64 = const() {"value":4096}
+  g_mask:u64 = const() {"value":4095}
+  g_pos:bool = compare.gt(count,g_zero)
+  g_bound:bool = compare.le(count,g_max)
+  g_prefix:bool = compare.le(reserved,count)
+  g_low:u64 = bit.and(base,g_mask)
+  g_align:bool = compare.eq(g_low,g_zero)
+  g_under:bool = compare.lt(base,g_limit)
+  g_span:u64 = int.mul.wrap(count,g_page)
+  g_room:u64 = int.sub.wrap(g_limit,base)
+  g_fit:bool = compare.le(g_span,g_room)
+  g_capacity:u64 = int.sub.wrap(count,reserved)
+  g_free_ok:bool = compare.le(free,g_capacity)
+  g_a:bool = bool.and(g_pos,g_bound)
+  g_b:bool = bool.and(g_prefix,g_align)
+  g_c:bool = bool.and(g_under,g_fit)
+  g_d:bool = bool.and(g_a,g_b)
+  g_e:bool = bool.and(g_c,g_free_ok)
+  g_good:bool = bool.and(g_d,g_e)
+  branch g_good length_check(state,count,reserved,free) bad_geometry()
+block length_check(state:readbuf,count:u64,reserved:u64,free:u64)
+  l_seven:u64 = const() {"value":7}
+  l_round:u64 = int.add.wrap(count,l_seven)
+  l_three:u64 = const() {"value":3}
+  l_bytes:u64 = int.shr.checked(l_round,l_three)
+  l_head:u64 = const() {"value":64}
+  l_min:u64 = int.add.wrap(l_bytes,l_head)
+  l_len:usize = buffer.len(state)
+  l_seen:u64 = int.cast(l_len) {"mode":"wrap"}
+  l_ok:bool = compare.ge(l_seen,l_min)
+  branch l_ok pad_check(state,count,reserved,free,l_bytes) bad_geometry()
+block pad_check(state:readbuf,count:u64,reserved:u64,free:u64,bytes:u64)
+  p_o40:usize = const() {"value":40}
+  p_o48:usize = const() {"value":48}
+  p_o56:usize = const() {"value":56}
+  p_a:u64 = call(state,p_o40) {"function":"read_word"}
+  p_b:u64 = call(state,p_o48) {"function":"read_word"}
+  p_c:u64 = call(state,p_o56) {"function":"read_word"}
+  p_zero:u64 = const() {"value":0}
+  p_za:bool = compare.eq(p_a,p_zero)
+  p_zb:bool = compare.eq(p_b,p_zero)
+  p_zc:bool = compare.eq(p_c,p_zero)
+  p_ab:bool = bool.and(p_za,p_zb)
+  p_ok:bool = bool.and(p_ab,p_zc)
+  branch p_ok scan_start(state,count,reserved,free,bytes) bad_bitmap()
+block scan_start(state:readbuf,count:u64,reserved:u64,free:u64,bytes:u64)
+  z_eight:u64 = const() {"value":8}
+  z_end:u64 = int.mul.wrap(bytes,z_eight)
+  z_zero:u64 = const() {"value":0}
+  jump scan(state,count,reserved,free,z_end,z_zero,z_zero)
+block scan(state:readbuf,count:u64,reserved:u64,free:u64,end:u64,index:u64,seen:u64)
+  s_more:bool = compare.lt(index,end)
+  branch s_more test_bit(state,count,reserved,free,end,index,seen) completed(free,seen)
+block test_bit(state:readbuf,count:u64,reserved:u64,free:u64,end:u64,index:u64,seen:u64)
+  t_three:u64 = const() {"value":3}
+  t_seven:u64 = const() {"value":7}
+  t_64:u64 = const() {"value":64}
+  t_one:u64 = const() {"value":1}
+  t_byte:u64 = int.shr.checked(index,t_three)
+  t_off:u64 = int.add.wrap(t_64,t_byte)
+  t_at:usize = int.cast(t_off) {"mode":"wrap"}
+  t_oct:u8 = buffer.load(state,t_at)
+  t_word:u64 = int.cast(t_oct) {"mode":"wrap"}
+  t_shift:u64 = bit.and(index,t_seven)
+  t_mask:u64 = int.shl.checked(t_one,t_shift)
+  t_bit:u64 = bit.and(t_word,t_mask)
+  t_zero:u64 = const() {"value":0}
+  t_set:bool = compare.ne(t_bit,t_zero)
+  t_active:bool = compare.lt(index,count)
+  branch t_active active(state,count,reserved,free,end,index,seen,t_set) tail(state,count,reserved,free,end,index,seen,t_set)
+block active(state:readbuf,count:u64,reserved:u64,free:u64,end:u64,index:u64,seen:u64,set:bool)
+  a_prefix:bool = compare.lt(index,reserved)
+  branch a_prefix protected(state,count,reserved,free,end,index,seen,set) usable(state,count,reserved,free,end,index,seen,set)
+block protected(state:readbuf,count:u64,reserved:u64,free:u64,end:u64,index:u64,seen:u64,set:bool)
+  branch set next(state,count,reserved,free,end,index,seen) bad_bitmap()
+block usable(state:readbuf,count:u64,reserved:u64,free:u64,end:u64,index:u64,seen:u64,set:bool)
+  branch set next(state,count,reserved,free,end,index,seen) missing(state,count,reserved,free,end,index,seen)
+block missing(state:readbuf,count:u64,reserved:u64,free:u64,end:u64,index:u64,seen:u64)
+  u_one:u64 = const() {"value":1}
+  u_more:u64 = int.add.wrap(seen,u_one)
+  jump next(state,count,reserved,free,end,index,u_more)
+block tail(state:readbuf,count:u64,reserved:u64,free:u64,end:u64,index:u64,seen:u64,set:bool)
+  branch set bad_bitmap() next(state,count,reserved,free,end,index,seen)
+block next(state:readbuf,count:u64,reserved:u64,free:u64,end:u64,index:u64,seen:u64)
+  n_one:u64 = const() {"value":1}
+  n_next:u64 = int.add.wrap(index,n_one)
+  jump scan(state,count,reserved,free,end,n_next,seen)
+block completed(expected:u64,actual:u64)
+  d_eq:bool = compare.eq(expected,actual)
+  branch d_eq accepted() bad_count()
+block bad_count()
+  d_bad:u32 = const() {"value":5}
+  ret(d_bad)
+block accepted()
+  d_ok:u32 = const() {"value":0}
+  ret(d_ok)
+end
+fn read_word(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
+  w_zero:u64 = const() {"value":0}
+  jump word_loop(bytes,offset,w_zero,w_zero)
+block word_loop(bytes:readbuf,offset:usize,index:u64,value:u64)
+  w_eight:u64 = const() {"value":8}
+  w_more:bool = compare.lt(index,w_eight)
+  branch w_more word_byte(bytes,offset,index,value) word_done(value)
+block word_byte(bytes:readbuf,offset:usize,index:u64,value:u64)
+  w_index:usize = int.cast(index) {"mode":"wrap"}
+  w_at:usize = int.add.wrap(offset,w_index)
+  w_oct:u8 = buffer.load(bytes,w_at)
+  w_wide:u64 = int.cast(w_oct) {"mode":"wrap"}
+  w_8:u64 = const() {"value":8}
+  w_shift:u64 = int.mul.wrap(index,w_8)
+  w_part:u64 = int.shl.checked(w_wide,w_shift)
+  w_new:u64 = bit.or(value,w_part)
+  w_one:u64 = const() {"value":1}
+  w_next:u64 = int.add.wrap(index,w_one)
+  jump word_loop(bytes,offset,w_next,w_new)
+block word_done(value:u64)
+  ret(value)
+end
