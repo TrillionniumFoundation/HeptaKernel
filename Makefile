@@ -2218,3 +2218,53 @@ test-x86-sysret-admit: build/x86-sysret-admit.so build/x86-sysret-allow-all.so
 	cmp "$$a" "$$b"; cmp "$$a" build/x86-sysret-admit.o
 	timeout 90 $(PYTHON) tests/test_x86_sysret_admit.py build/x86-sysret-admit.so --object build/x86-sysret-admit.o
 	$(PYTHON) tests/test_x86_sysret_admit.py build/x86-sysret-allow-all.so --expect-unsafe
+
+# HIA-native SYSRET64 user-code GDT descriptor (0x40) with independent
+# oracle. Privileged WRMSR and SYSRETQ are strictly NON-HIA QEMU fixtures.
+.PHONY: test-x86-sysret-gdt
+build/x86-sysret-gdt.o: src/x86_sysret_gdt.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.sysret-gdt.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/x86-sysret-gdt.so: build/x86-sysret-gdt.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/x86-sysret-gdt-noop.o: tests/negative/x86_sysret_gdt_noop.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.sysret-gdt-noop.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/x86-sysret-gdt-noop.so: build/x86-sysret-gdt-noop.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+test-x86-sysret-gdt: build/x86-sysret-gdt.so build/x86-sysret-gdt-noop.so
+	@set -eu; a=$$(mktemp build/.sysret-gdt-identity-a.XXXXXX); b=$$(mktemp build/.sysret-gdt-identity-b.XXXXXX); trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_sysret_gdt.hepta > "$$a"; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_sysret_gdt.hepta > "$$b"; \
+	cmp "$$a" "$$b"; cmp "$$a" build/x86-sysret-gdt.o
+	timeout 90 $(PYTHON) tests/test_x86_sysret_gdt.py build/x86-sysret-gdt.so --object build/x86-sysret-gdt.o
+	$(PYTHON) tests/test_x86_sysret_gdt.py build/x86-sysret-gdt-noop.so --expect-unsafe
+
+build/sysret-gdt-boot.o: build/x86-sysret-gdt.o
+	objcopy --redefine-sym f0=sysret_gdt_f0 "$<" "$@"
+
+build/sysret-admit-boot.o: build/x86-sysret-admit.o
+	objcopy --redefine-sym sysret_admit=sysret_admit_f0 "$<" "$@"
+
+build/boot-sysret-ring3.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSRET_RING3=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-sysret-gdt-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSRET_GDT_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+SYSRET_RING3_BOOT_SUPPORT := build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o build/pde-2m-boot.o build/upper-user-boot.o build/sysret-gdt-boot.o build/sysret-admit-boot.o
+
+build/sysret-ring3-multiboot.elf: build/boot-sysret-ring3.o $(SYSRET_RING3_BOOT_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/sysret-ring3.elf "$<" $(SYSRET_RING3_BOOT_SUPPORT)
+	objcopy -O elf32-i386 build/sysret-ring3.elf "$@"
+
+build/sysret-gdt-stale-multiboot.elf: build/boot-sysret-gdt-stale.o $(SYSRET_RING3_BOOT_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/sysret-gdt-stale.elf "$<" $(SYSRET_RING3_BOOT_SUPPORT)
+	objcopy -O elf32-i386 build/sysret-gdt-stale.elf "$@"
+
+test: test-x86-sysret-gdt
+test-boot: build/sysret-ring3-multiboot.elf build/sysret-gdt-stale-multiboot.elf

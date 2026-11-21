@@ -601,7 +601,7 @@ hia_idt_next64:
 #endif
     /* Test-only CPL3 #UD: real HIA builds vector 6 with IST0.
      * IRET/exception entry and ring3 selectors remain NON-HIA test bridge. */
-#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS) || defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSRET_GDT_STALE)
     movq $6, idt_gate_request(%rip)
 #if defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
     leaq us_ring3_fault64(%rip), %rax
@@ -693,7 +693,7 @@ hia_idt_next64:
     call pde_2m_unmap_exercise64
     jmp fail64
 #endif
-#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS) || defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSRET_GDT_STALE)
     /* After native E820/reservation admission: terminal ring3 observer. */
     call rsp0_ring3_exercise64
     jmp fail64
@@ -2229,12 +2229,66 @@ pdpt_1g_unmap_fault_load64:
 #endif
 #endif
 
-#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS) || defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSRET_GDT_STALE)
 /* Test-only NON-HIA CPL3 harness for native HIA-configured TSS and IDT.
  * E820/reservation already admitted both physical test regions. The 4MiB
  * huge page is user RX; 6MiB is user RW/NX. Kernel pages remain U/S=0.
  * Nothing here is a purported HIA privilege/backend implementation. */
 rsp0_ring3_exercise64:
+#if defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSRET_GDT_STALE)
+    /* Only genuine native HIA installs 0x40 user code. The previously
+     * HIA-installed 0x38 data and 0x30 IRET code remain unchanged.
+     * MSR and SYSRET instructions are expressly NON-HIA test bridge. */
+    movq gdt+64(%rip), %rax
+    movq %rax, sysret_gdt_request(%rip)
+    movq gdt+56(%rip), %rax
+    movq %rax, sysret_gdt_request+8(%rip)
+#ifdef HEPTAKERNEL_TEST_SYSRET_GDT_STALE
+    movq $1, sysret_gdt_request(%rip)
+#endif
+    movq $-1, sysret_gdt_reply(%rip)
+    movq $-1, sysret_gdt_reply+8(%rip)
+    leaq sysret_gdt_request(%rip), %rdi
+    movl $16, %esi
+    leaq sysret_gdt_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq gdt(%rip), %r8
+    movl $72, %r9d
+    call sysret_gdt_f0
+#ifdef HEPTAKERNEL_TEST_SYSRET_GDT_STALE
+    cmpl $9, %eax
+    jne fail64
+    cmpq $9, sysret_gdt_reply(%rip)
+    jne fail64
+    cmpq $0, sysret_gdt_reply+8(%rip)
+    jne fail64
+    cmpq $0, gdt+64(%rip)
+    jne fail64
+    movabsq $0x00cff2000000ffff, %rax
+    cmpq %rax, gdt+56(%rip)
+    jne fail64
+    leaq message_sysret_gdt_stale(%rip), %rsi
+    call puts64
+    jmp fail64                 /* refused BEFORE SYSRETQ */
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, sysret_gdt_reply(%rip)
+    jne fail64
+    movabsq $0x00affa000000ffff, %rax
+    cmpq %rax, sysret_gdt_reply+8(%rip)
+    jne fail64
+    cmpq %rax, gdt+64(%rip)
+    jne fail64
+    cmpq %rax, gdt+48(%rip)
+    jne fail64
+    movabsq $0x00cff2000000ffff, %rax
+    cmpq %rax, gdt+56(%rip)
+    jne fail64
+    leaq message_sysret_gdt(%rip), %rsi
+    call puts64
+#endif
+#endif
     movq $ARENA_MIN, %rax
     movw $0x0b0f, (%rax)             /* fixture: UD2 at 0x400000 */
     /* Native HIA owns parent U/S and 2 MiB leaf PDE updates.
@@ -2410,6 +2464,33 @@ rsp0_ring3_exercise64:
     leaq rsp0_decoy_stack_top(%rip), %rax
     movq %rax, tss64+4(%rip)
 #endif
+#ifdef HEPTAKERNEL_TEST_SYSRET_RING3
+    /* Real HIA native preflight, then NON-HIA MSR and ring-transition bridge.
+     * This is not a Linux syscall handler or an HIA privileged backend. */
+    movq $ARENA_MIN, %rdi
+    movq $0x602000, %rsi
+    movq $0x202, %rdx
+    call sysret_admit_f0
+    testl %eax, %eax
+    jne fail64
+    movl $0xc0000081, %ecx       /* IA32_STAR */
+    xorl %eax, %eax
+    movl $0x00300008, %edx      /* upper32: user base 0x30, kernel CS 0x08 */
+    wrmsr
+    movl $0xc0000080, %ecx       /* IA32_EFER */
+    rdmsr
+    orl $1, %eax                /* SCE */
+    wrmsr
+    movl $0xc0000084, %ecx       /* IA32_FMASK */
+    movl $0x200, %eax
+    xorl %edx, %edx
+    wrmsr
+    movq $0x602000, %rsp        /* fixture user stack, never a kernel stack */
+    movq $ARENA_MIN, %rcx       /* HIA-admitted RIP */
+    movq $0x202, %r11           /* HIA-admitted RFLAGS */
+    sysretq                     /* NON-HIA, actual hardware CPL0 -> CPL3 */
+    jmp fail64
+#else
     pushq $0x3b                     /* CPL3 SS */
     pushq $0x602000                 /* CPL3 NX stack */
     pushq $0x2                      /* IF masked */
@@ -2417,6 +2498,7 @@ rsp0_ring3_exercise64:
     pushq $ARENA_MIN                /* user-mode #UD */
     iretq                           /* test-only NON-HIA transition */
     jmp fail64
+#endif
 #endif /* not the deliberately stale HIA huge PDE refusal */
 
 rsp0_ring3_fault64:
@@ -2437,8 +2519,17 @@ rsp0_ring3_fault64:
     jne fail64
     cmpq $ARENA_MIN, 0(%rsp)
     jne fail64
+#ifdef HEPTAKERNEL_TEST_SYSRET_RING3
+    cmpq $0x43, 8(%rsp)          /* actual hardware SYSRET64 CS */
+    jne fail64
+    movq 16(%rsp), %rax
+    andq $0x202, %rax
+    cmpq $0x202, %rax           /* R11 fixed bit/IF in saved RFLAGS */
+    jne fail64
+#else
     cmpq $0x33, 8(%rsp)
     jne fail64
+#endif
     cmpq $0x602000, 24(%rsp)
     jne fail64
     cmpq $0x3b, 32(%rsp)
@@ -2449,7 +2540,11 @@ rsp0_ring3_fault64:
     call puts64
     jmp fail64
 #else
+#ifdef HEPTAKERNEL_TEST_SYSRET_RING3
+    leaq message_sysret_ring3(%rip), %rsi
+#else
     leaq message_rsp0_switch(%rip), %rsi
+#endif
     call puts64
     movl $0x16, %eax                 /* QEMU exit 45 */
     jmp debug_exit64
@@ -5814,6 +5909,7 @@ gdt:
     .quad 0                        /* selector 0x20: 64-bit TSS high */
     .quad 0                        /* 0x33: HIA installs CPL3 code */
     .quad 0                        /* 0x3b: HIA installs CPL3 data */
+    .quad 0                        /* 0x43: HIA installs SYSRETQ CPL3 code at 0x40 */
 gdt_end:
 gdt_descriptor:
     .word gdt_end - gdt - 1
@@ -5829,6 +5925,12 @@ message_tss_rsp0_stale:
     .asciz "HEPTAKERNEL HIA TSS RSP0 STALE WORD REJECTED\r\n"
 message_rsp0_switch:
     .asciz "HEPTAKERNEL HIA TSS RSP0 CPL3 HARDWARE SWITCH VERIFIED\r\n"
+message_sysret_gdt:
+    .asciz "HEPTAKERNEL HIA SYSRETQ GDT SLOT INSTALLED\r\n"
+message_sysret_gdt_stale:
+    .asciz "HEPTAKERNEL HIA SYSRETQ GDT STALE WORD REJECTED\r\n"
+message_sysret_ring3:
+    .asciz "HEPTAKERNEL HIA SYSRETQ CPL3 HARDWARE SWITCH VERIFIED\r\n"
 message_us_initial:
     .asciz "HEPTAKERNEL HIA CPL3 USER FETCH BEFORE REVOKE VERIFIED\r\n"
 message_us_live:
@@ -6247,6 +6349,8 @@ pdpt_1g_unmap_old:   .skip 8
 pdpt_1g_unmap_armed: .skip 8
 user_gdt_request: .skip 16
 user_gdt_reply:   .skip 16
+sysret_gdt_request: .skip 16
+sysret_gdt_reply:   .skip 16
 tss_gdt_request:  .skip 32
 tss_gdt_reply:    .skip 16
 idt_gate_request: .skip 40
