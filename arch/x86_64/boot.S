@@ -4433,6 +4433,24 @@ elf_plan_hw_exercise64:
     jne fail64
 #endif
 
+
+    /* True native HIA byte-by-byte scan of the immutable fixture versus
+     * the exact working ELF used by the full-layout admission. This does
+     * not authenticate the reference or make later accesses atomic. */
+    leaq elf_plan_image(%rip), %rdi
+    movl $7292, %esi
+    leaq elf_plan_mutable(%rip), %rdx
+    movl $7292, %ecx
+    leaq elf_plan_snapshot_receipt(%rip), %r8
+    movl $16, %r9d
+    call elf_snapshot_f0
+    testl %eax, %eax
+    jne fail64
+    cmpb $0xa5, elf_plan_snapshot_receipt(%rip)
+    jne fail64
+    cmpb $0x5a, elf_plan_snapshot_receipt+1(%rip)
+    jne fail64
+
 #ifdef HEPTAKERNEL_TEST_ELF_PLAN_INVALID
     /* A hostile coordinator changes p_offset after the source snapshot:
      * 0x107c no longer has the same 4KiB residue as 0x40107b. */
@@ -4498,6 +4516,65 @@ elf_plan_hw_exercise64:
     jne fail64
     cmpq $0, elf_plan_selector+8(%rip)
     jne fail64
+
+
+    /* Fault injected AFTER full HIA ELF admission and successful HIA page
+     * planning. This data-only edit preserves every ELF/PT_LOAD header:
+     * both original modules would otherwise accept and copy the corruption. */
+#if defined(HEPTAKERNEL_TEST_ELF_SNAPSHOT_MUTATED) || defined(HEPTAKERNEL_TEST_ELF_SNAPSHOT_LIAR)
+    xorb $0x5a, elf_plan_mutable+0x1200(%rip)
+#endif
+    movabsq $0xe9e9e9e9e9e9e9e9, %rax
+    movq %rax, elf_plan_snapshot_receipt(%rip)
+    movq %rax, elf_plan_snapshot_receipt+8(%rip)
+    leaq elf_plan_image(%rip), %rdi
+    movl $7292, %esi
+    leaq elf_plan_mutable(%rip), %rdx
+    movl $7292, %ecx
+    leaq elf_plan_snapshot_receipt(%rip), %r8
+    movl $16, %r9d
+    call elf_snapshot_f0    /* second genuine native HIA source equality gate */
+#ifdef HEPTAKERNEL_TEST_ELF_SNAPSHOT_MUTATED
+    cmpl $4, %eax
+    jne fail64
+    cmpb $0xe9, elf_plan_snapshot_receipt(%rip)
+    jne fail64
+    cmpb $0xe9, elf_plan_snapshot_receipt+15(%rip)
+    jne fail64
+    xorq %rax, %rax
+    movq $0x601000, %rdi
+    movl $1024, %ecx
+    repe scasq
+    jne fail64
+    leaq message_elf_snapshot_mutated(%rip), %rsi
+    call puts64
+    jmp fail64
+#elif defined(HEPTAKERNEL_TEST_ELF_SNAPSHOT_LIAR)
+    testl %eax, %eax
+    jne fail64
+    cmpb $0xa5, elf_plan_snapshot_receipt(%rip)
+    jne fail64
+    cmpb $0x5a, elf_plan_snapshot_receipt+1(%rip)
+    jne fail64
+    movzbl elf_plan_image+0x1200(%rip), %edx
+    cmpb %dl, elf_plan_mutable+0x1200(%rip)
+    je fail64
+    xorq %rax, %rax
+    movq $0x601000, %rdi
+    movl $1024, %ecx
+    repe scasq
+    jne fail64
+    leaq message_elf_snapshot_liar(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpb $0xa5, elf_plan_snapshot_receipt(%rip)
+    jne fail64
+    cmpb $0x5a, elf_plan_snapshot_receipt+1(%rip)
+    jne fail64
+#endif
 
     /* The bridge constructs a copied envelope; HIA independently generated
      * its 40-byte prefix, and HIA alone writes the 4KiB physical page. */
@@ -5009,6 +5086,10 @@ message_elf_layout_overlap:
     .asciz "HEPTAKERNEL HIA ELF64 FULL LAYOUT OVERLAP REFUSED PHYSICAL UNCHANGED\r\n"
 message_elf_layout_liar:
     .asciz "HEPTAKERNEL HIA ELF64 DISHONEST FULL LAYOUT ACCEPT DETECTED\r\n"
+message_elf_snapshot_mutated:
+    .asciz "HEPTAKERNEL HIA ELF64 POST PLAN PAYLOAD MUTATION REFUSED PHYSICAL UNCHANGED\r\n"
+message_elf_snapshot_liar:
+    .asciz "HEPTAKERNEL HIA ELF64 DISHONEST SNAPSHOT EQUALITY DETECTED\r\n"
 message_elf_plan_pass:
     .asciz "HEPTAKERNEL HIA ELF64 NATIVE PLAN PHYSICAL FILE BSS VERIFIED\r\n"
 message_elf_plan_invalid:
@@ -5341,6 +5422,7 @@ elf_plan_mutable: .skip 7292
 elf_plan_guard_after: .skip 8
 elf_plan_selector: .skip 16
 elf_plan_out: .skip 40
+elf_plan_snapshot_receipt: .skip 16
 elf_plan_env_guard_before: .skip 8
 elf_plan_envelope: .skip 7332
 elf_plan_env_guard_after: .skip 8

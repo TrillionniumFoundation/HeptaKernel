@@ -23,6 +23,8 @@ BAD = {
     "decoy": "HEPTAKERNEL HIA ELF64 POST PLAN DECOY DETECTED",
     "overlap": "HEPTAKERNEL HIA ELF64 FULL LAYOUT OVERLAP REFUSED PHYSICAL UNCHANGED",
     "layout-liar": "HEPTAKERNEL HIA ELF64 DISHONEST FULL LAYOUT ACCEPT DETECTED",
+    "snapshot-mutated": "HEPTAKERNEL HIA ELF64 POST PLAN PAYLOAD MUTATION REFUSED PHYSICAL UNCHANGED",
+    "snapshot-liar": "HEPTAKERNEL HIA ELF64 DISHONEST SNAPSHOT EQUALITY DETECTED",
 }
 FAIL = "HEPTAKERNEL BOOT FAIL"
 
@@ -73,14 +75,16 @@ def main() -> None:
     records = [
         probe(args.qemu, machine, memory, mode)
         for machine, memory in (("pc", 32), ("q35", 64))
-        for mode in ("hw", "invalid", "noop", "decoy", "overlap", "layout-liar")
+        for mode in ("hw", "invalid", "noop", "decoy", "overlap", "layout-liar", "snapshot-mutated", "snapshot-liar")
     ]
     report = {
         "schema": "heptakernel.elf64-page-plan-qemu.v1",
         "status": "PASS", "cases": len(records), "positive": 2,
-        "negative_controls": 10, "native_hia_plan": True,
+        "negative_controls": 14, "native_hia_plan": True,
         "native_hia_full_elf_layout_gate": True,
-        "full_8192_byte_negative_physical_readback": ["overlap", "layout-liar"],
+        "full_8192_byte_negative_physical_readback": ["overlap", "layout-liar", "snapshot-mutated", "snapshot-liar"],
+        "native_hia_snapshot_byte_equality": True,
+        "native_hia_payload_mutation_refusal": True,
         "native_hia_page_fill": True,
         "non_hia_fixture_and_independent_oracle": True,
         "authenticated_file_snapshot": False,

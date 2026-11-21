@@ -76,3 +76,34 @@ objects** before and after extraction. The stored
 The native full-layout oracle and two independent empty-PATH raw-object
 rebuilds run before QEMU integration and again in the original CI stage.
 No failing prior candidate was treated as passing.
+
+## Genuine native HIA post-admission snapshot equality (2026-11-21)
+
+The locked HIA Core v8 program `src/elf64_snapshot_equal.hepta` compares
+**every byte**, not a lossy checksum, of a caller-supplied 64-byte-to-1-MiB
+reference buffer with the working ELF byte buffer. Both buffers are read-only
+in the HIA type/effect signature. The 16-byte receipt is written only on
+exact equality (first bytes `a5 5a`); unequal length, unsupported length,
+bad receipt geometry and content mutation give separate status codes without
+altering the receipt. An independent Python byte oracle exercises first,
+middle and last-byte corruption, length changes, random data, canaries,
+a dishonest HIA always-equal program, and twice-rebuilt native object identity.
+
+The QEMU PC and Q35 bridge now invokes the **actual native HIA** snapshot
+checker twice: after full-file PT_LOAD validation and immediately before
+any physical page fill. Two additional per-platform QEMU negative controls
+mutate a **data byte at 0x1200 after successful HIA layout and HIA page
+planning**, leaving all ELF headers and PHDR fields unchanged. The honest HIA
+checker must refuse with content-mismatch status 4 without writing its
+receipt; both physical 4-KiB pages must remain byte-for-byte zero. The
+dishonest, genuinely HIA-compiled always-equal substitute marks success but
+is caught by an independent source-byte comparison before any physical
+write. All boot-linked HIA snapshot object bytes are checked against their
+locked-compiler inputs, including the dishonest control.
+
+This closes one *bounded fixture TOCTOU gap* across those two checkpoints,
+not arbitrary mutation between the final equality check and physical fill,
+not reference-file authentication, file-backed page immutability, untrusted
+DMA, SMP races, a binding authority or a Linux exec transaction. Both
+the reference snapshot and call sequencing still belong to the explicitly
+non-HIA test bridge. Full Linux kernel acceptance remains HOLD.
