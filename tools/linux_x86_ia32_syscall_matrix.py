@@ -130,6 +130,11 @@ def run(repo: Path, inventory: Path, lock_file: Path) -> dict:
             or matches[0]["mode"] not in ("100644", "100755")):
         raise ValueError("i386 table missing or not a regular Git blob")
     item = matches[0]
+    pinned_path_oid = git(
+        repo, "rev-parse", "HEAD:arch/x86/entry/syscalls/syscall_32.tbl"
+    ).strip().decode("ascii")
+    if pinned_path_oid != item["oid"]:
+        raise ValueError("i386 table blob does not match pinned tree path")
     blob = git(repo, "cat-file", "blob", item["oid"])
     if len(blob) != item["size"]:
         raise ValueError("i386 source blob size mismatch")
