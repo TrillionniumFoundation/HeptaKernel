@@ -18,7 +18,10 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 
+# -I excludes the script directory: explicitly load only this sibling module.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from linux_kconfig_include_targets import decode, encode, literal_target
 
 VAR = re.compile(rb"\$\((SRCARCH|HEADER_ARCH)\)|\$\{(SRCARCH|HEADER_ARCH)\}|\$(SRCARCH|HEADER_ARCH)\b")
