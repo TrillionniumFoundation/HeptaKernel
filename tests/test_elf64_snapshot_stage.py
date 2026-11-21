@@ -56,7 +56,7 @@ def guarded_copy(entry) -> str:
             assert libc.mprotect(address, 4096, 0) == 0
             assert libc.mprotect(address + 8192, 4096, 0) == 0
         assert libc.mprotect(addresses[0] + 4096, 4096, mmap.PROT_READ) == 0
-        receipt = ctypes.create_string_buffer(b"\xe9" * RECEIPT)
+        receipt = ctypes.create_string_buffer(RECEIPT)
         result = entry(addresses[0] + 4096, 4096,
                        addresses[1] + 4096, 4096,
                        ctypes.addressof(receipt), RECEIPT)
