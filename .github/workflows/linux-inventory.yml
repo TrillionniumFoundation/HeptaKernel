@@ -7,9 +7,11 @@ on:
       - 'tools/linux_uapi_tags.py'
       - 'tools/linux_kconfig_relations.py'
       - 'tools/linux_kconfig_scoped.py'
+      - 'tools/linux_kconfig_include_targets.py'
       - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_kconfig_scoped.py'
+      - 'tests/test_linux_kconfig_include_targets.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -21,9 +23,11 @@ on:
       - 'tools/linux_uapi_tags.py'
       - 'tools/linux_kconfig_relations.py'
       - 'tools/linux_kconfig_scoped.py'
+      - 'tools/linux_kconfig_include_targets.py'
       - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_kconfig_scoped.py'
+      - 'tests/test_linux_kconfig_include_targets.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -50,6 +54,7 @@ jobs:
           python3 -I -B tests/test_linux_uapi_tags.py
           python3 -I -B tests/test_linux_kconfig_relations.py
           python3 -I -B tests/test_linux_kconfig_scoped.py
+          python3 -I -B tests/test_linux_kconfig_include_targets.py
 
       - name: Checkout exact pinned upstream Linux (not a moving branch)
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -234,6 +239,82 @@ jobs:
           assert sum(report["counts"].get(key, 0) for key in allowed) == len(now)
           print("KCONFIG_SCOPED_IMMUTABLE_ROWS:", len(now), report["counts"])
           print("KCONFIG_DEPENDENCY_EVALUATION: HOLD")
+          PY
+
+      - name: Verify immutable Kconfig literal include targets against pinned Git blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I -B tools/linux_kconfig_include_targets.py --repo .upstream/linux --lock compatibility/linux-source-lock.json --inventory build/linux-inventory
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          from pathlib import Path
+          import subprocess
+          root = Path("build/linux-inventory")
+          report = json.loads((root / "kconfig-literal-targets-report.json").read_text())
+          payload = (root / "kconfig-literal-targets.jsonl").read_bytes()
+          source_bytes = (root / "source-paths.jsonl").read_bytes()
+          edges_bytes = (root / "kconfig-source-edges.jsonl").read_bytes()
+          old = [json.loads(line) for line in edges_bytes.splitlines()]
+          now = [json.loads(line) for line in payload.splitlines()]
+          paths = {base64.b64decode(x["path_b64"]): x
+                   for x in map(json.loads, source_bytes.splitlines())}
+          assert report["status"] == "PARTIAL_LITERAL_TARGETS_NOT_ACTIVE_KCONFIG_GRAPH"
+          assert not report["inventory_complete"] and not report["full_rewrite_complete"]
+          assert hashlib.sha256(payload).hexdigest() == report["source_sha256"]
+          assert hashlib.sha256(edges_bytes).hexdigest() == report["upstream_edges_sha256"]
+          assert hashlib.sha256(source_bytes).hexdigest() == report["upstream_paths_sha256"]
+          assert len(old) == len(now) == report["counts"]["all_lexical_edges"] > 0
+          assert report["linux_commit"] == subprocess.check_output(
+              ["git", "-C", ".upstream/linux", "rev-parse", "HEAD"], text=True).strip()
+          assert report["linux_root_tree"] == subprocess.check_output(
+              ["git", "-C", ".upstream/linux", "rev-parse", "HEAD^{tree}"], text=True).strip()
+          blobs = {}
+          for original, row in zip(old, now):
+              assert all(row[k] == value for k, value in original.items()), (original, row)
+              path = base64.b64decode(row["path_b64"])
+              src = paths[path]
+              assert src["oid"] == row["blob_oid"]
+              oid = src["oid"]
+              if oid not in blobs:
+                  blobs[oid] = subprocess.check_output(
+                      ["git", "-C", ".upstream/linux", "cat-file", "blob", oid]).splitlines()
+              physical = blobs[oid][row["line"] - 1].lstrip(b" \t")
+              kind, separator, operand = physical.partition(b" ")
+              if separator:
+                  operand = operand.strip(b" \t")
+              else:
+                  kind, separator, operand = physical.partition(b"\t")
+                  operand = operand.strip(b" \t")
+              assert kind.decode() == row["kind"]
+              assert operand == base64.b64decode(row["operand_b64"])
+              dest = row["target_path_b64"]
+              if dest is not None:
+                  name = base64.b64decode(dest)
+                  ref = paths.get(name)
+                  if row["target_oid"] is None:
+                      assert ref is None
+                      assert row["resolution"] in (
+                          "OPTIONAL_UNTRACKED_LITERAL", "REQUIRED_UNTRACKED_LITERAL")
+                      assert row["target_mode"] is None
+                  else:
+                      assert ref is not None and row["target_oid"] == ref["oid"]
+                      assert row["target_mode"] == ref["mode"]
+                      if row["resolution"] == "TRACKED_REGULAR_LITERAL":
+                          assert ref["mode"] in ("100644", "100755") and ref["type"] == "blob"
+                      else:
+                          assert row["resolution"] == "TRACKED_NONREGULAR_LITERAL"
+              else:
+                  assert row["target_oid"] is None and row["target_mode"] is None
+                  assert row["resolution"] in (
+                      "UNRESOLVED_LITERAL_SYNTAX", "UNRESOLVED_VARIABLE_GLOB_OR_ESCAPE",
+                      "OUTSIDE_TRACKED_TREE")
+          assert sum(v for k,v in report["counts"].items() if k != "all_lexical_edges") == len(now)
+          print("KCONFIG_LITERAL_TARGET_GIT_PROVENANCE: PASS", len(now), report["counts"])
+          print("KCONFIG_ACTIVE_DEPENDENCY_GRAPH: HOLD")
+          print("FULL_LINUX_REWRITE: HOLD")
           PY
 
       - name: Independently check source counts, hashes and unclosed Linux scope
@@ -570,6 +651,8 @@ jobs:
             build/linux-inventory/kconfig-relation-report.json
             build/linux-inventory/kconfig-property-scopes.jsonl
             build/linux-inventory/kconfig-property-scopes-report.json
+            build/linux-inventory/kconfig-literal-targets.jsonl
+            build/linux-inventory/kconfig-literal-targets-report.json
             build/linux-inventory/directory-objects.jsonl
             build/linux-inventory/uapi-paths.jsonl
             build/linux-inventory/uapi-macro-rows.jsonl

@@ -270,3 +270,34 @@ macro expansion, menu visibility and reachability remain unqualified. Even a
 candidate owner is not yet proof of Kconfig semantics. It adds no Linux
 functionality; all 17 full-acceptance gates, 422 syscall obligations and
 `inventory_complete=false` remain unchanged.
+
+
+## Source-root/relative Kconfig literal include target provenance
+
+`tools/linux_kconfig_include_targets.py` projects **all** previously
+recorded `kconfig-source-edges.jsonl` into tracked target-path identities
+under the exact locked Linux Git root. Quoted static `source` and `osource`
+paths are rooted at srctree; `rsource` and `orsource` are relative to
+the containing Kconfig file's directory. Target metadata is read from the
+existing raw-byte-safe full-tree source ledger and never from worktree files.
+The resolver re-reads original immutable Git Kconfig blobs, verifies source
+lines and the parent ledger digests, and refuses changed commit or tree
+identities. It retains original row order and fields without omission.
+
+Each edge is classified as a tracked regular literal, tracked nonregular
+literal (including symlinks, which are never followed), optional/required
+untracked literal, outside-tree path, or unresolved literal syntax or
+variable/glob/escape. The files `kconfig-literal-targets.jsonl` and
+`kconfig-literal-targets-report.json` are retained in the pinned-source
+CI artifact with their SHA-256 and original Git commit/tree provenance.
+Adversarial synthetic Git fixtures include forged worktree contents,
+wrong HEAD, ledger tampering, root/relative anchoring and symlinks.
+
+This is deliberately a **partial literal target source audit**, not the
+evaluated Kconfig include graph. Branch conditions, environment substitution,
+optional existence in generated build trees, globs, shell expansion, actual
+menu configurations, compilation and driver activation remain unresolved.
+Tracked target does not imply an active include; untracked required targets
+may be conditional or generated. All 17 full Linux acceptance gates and 422
+x86-64 syscall obligations stay unchanged, `inventory_complete=false`,
+and `make full-acceptance` must continue to report HOLD.
