@@ -4375,6 +4375,64 @@ elf_plan_hw_exercise64:
     movl $40, %ecx
     rep stosb
 
+    /* The genuine HIA full-file gate runs on the SAME ELF bytes as the
+     * HIA selected-PT_LOAD planner. It refuses conflicting page layouts
+     * and PT_INTERP before either physical page can be written. This is
+     * an isolated read-only admission, not authenticated file ownership. */
+#if defined(HEPTAKERNEL_TEST_ELF_LAYOUT_OVERLAP) || defined(HEPTAKERNEL_TEST_ELF_LAYOUT_LIAR)
+    /* Independent hostile fixture: a second valid, read-only PT_LOAD
+     * occupies the first segment's virtual page. The selected page-plan
+     * alone would admit PHDR 0, but full-file HIA must return 13. */
+    movw $2, elf_plan_mutable+56(%rip)
+    movl $1, elf_plan_mutable+120(%rip)
+    movl $4, elf_plan_mutable+124(%rip)
+    movq $0x1200, elf_plan_mutable+128(%rip)
+    movq $0x401200, elf_plan_mutable+136(%rip)
+    movq $0, elf_plan_mutable+144(%rip)
+    movq $128, elf_plan_mutable+152(%rip)
+    movq $4096, elf_plan_mutable+160(%rip)
+    movq $4096, elf_plan_mutable+168(%rip)
+#endif
+    leaq elf_plan_mutable(%rip), %rdi
+    movl $7292, %esi
+    leaq elf_plan_out(%rip), %rdx
+    movl $40, %ecx
+    leaq elf_plan_selector(%rip), %r8
+    movl $16, %r9d
+    call elf_layout_f0       /* original native HIA full PT_LOAD admission */
+#ifdef HEPTAKERNEL_TEST_ELF_LAYOUT_OVERLAP
+    cmpl $13, %eax
+    jne fail64
+    /* Check the ENTIRE 8KiB physical target, not only its first word. */
+    xorq %rax, %rax
+    movq $0x601000, %rdi
+    movl $1024, %ecx
+    repe scasq
+    jne fail64
+    leaq message_elf_layout_overlap(%rip), %rsi
+    call puts64
+    jmp fail64
+#elif defined(HEPTAKERNEL_TEST_ELF_LAYOUT_LIAR)
+    testl %eax, %eax
+    jne fail64
+    cmpw $2, elf_plan_mutable+56(%rip)
+    jne fail64
+    cmpl $1, elf_plan_mutable+120(%rip)
+    jne fail64
+    /* Deliberately dishonest native HIA accepted an overlapping file. */
+    xorq %rax, %rax
+    movq $0x601000, %rdi
+    movl $1024, %ecx
+    repe scasq
+    jne fail64
+    leaq message_elf_layout_liar(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %eax, %eax
+    jne fail64
+#endif
+
 #ifdef HEPTAKERNEL_TEST_ELF_PLAN_INVALID
     /* A hostile coordinator changes p_offset after the source snapshot:
      * 0x107c no longer has the same 4KiB residue as 0x40107b. */
@@ -4947,6 +5005,10 @@ message_elf_hw_noop:
 message_elf_hw_decoy:
     .asciz "HEPTAKERNEL HIA ELF64 POST-CALL PHYSICAL DECOY DETECTED\\r\\n"
 
+message_elf_layout_overlap:
+    .asciz "HEPTAKERNEL HIA ELF64 FULL LAYOUT OVERLAP REFUSED PHYSICAL UNCHANGED\r\n"
+message_elf_layout_liar:
+    .asciz "HEPTAKERNEL HIA ELF64 DISHONEST FULL LAYOUT ACCEPT DETECTED\r\n"
 message_elf_plan_pass:
     .asciz "HEPTAKERNEL HIA ELF64 NATIVE PLAN PHYSICAL FILE BSS VERIFIED\r\n"
 message_elf_plan_invalid:

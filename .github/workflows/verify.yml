@@ -98,7 +98,7 @@ jobs:
         run: |
           make test-elf64-page-fill HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
-      - name: Verify genuine HIA ELF PT_LOAD-derived plans on real QEMU PMM pages
+      - name: Verify native HIA whole-ELF layout, PT_LOAD plans and physical page fill with overlap/liar controls
         shell: bash
         run: |
           make test-elf64-page-plan-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
@@ -365,8 +365,13 @@ jobs:
             .toolchain/compiler/native-compiler.receipt.json
             build/native-report.json
             build/elf-plan-hardware-report.json
+            build/elf-plan-native-inputs.sha256
             build/elf64-page-plan-boot.o
             build/elf64-page-plan-dishonest-boot.o
+            build/elf64-load-boot.o
+            build/elf64-load-dishonest-boot.o
+            build/elf-plan-overlap-multiboot.elf
+            build/elf-plan-layout-liar-multiboot.elf
             build/elf-plan-hw-multiboot.elf
             build/elf-plan-invalid-multiboot.elf
             build/elf-plan-noop-multiboot.elf

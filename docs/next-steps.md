@@ -224,3 +224,13 @@ and dishonest native HIA control also check source immutability and rejection
 non-mutation; an isolated host harness connects this output to the original
 HIA page fill. No authenticated cross-call snapshot, trustworthy coordinator,
 page mapping, hardware user execution, or full `execve` exists yet.
+
+The QEMU ELF64 physical plan/fill path also executes the unchanged **native
+HIA whole-file PT_LOAD layout gate** on the same copied image before planning
+or writing pages. PC/Q35 controls must refuse a second valid overlapping
+virtual-page PT_LOAD with exact status 13 and full 8 KiB physical readback,
+and detect a dishonest HIA always-accept layout checker. The untrusted test
+bridge still controls the image snapshot, ordering and physical memory; an
+invalid-after-preflight test explicitly demonstrates the open check/use window.
+No Linux `execve` or new full-target gate is closed; see
+`docs/elf64-page-plan-qemu.md`.
