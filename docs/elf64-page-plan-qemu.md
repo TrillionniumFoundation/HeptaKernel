@@ -108,3 +108,20 @@ not reference-file authentication, file-backed page immutability, untrusted
 DMA, SMP races, a binding authority or a Linux exec transaction. Both
 the reference snapshot and call sequencing still belong to the explicitly
 non-HIA test bridge. Full Linux kernel acceptance remains HOLD.
+
+## Native HIA staged-image QEMU path (2026-11-21)
+
+In isolated PC-32 MiB and Q35-64 MiB QEMU tests, the locked native
+`src/elf64_snapshot_stage.hepta` copies 7,292 bytes to a separate staging
+allocation **before** whole-file layout admission. Layout, `PT_LOAD` planning,
+both page fills, and snapshot equality thereafter read only that destination.
+An independent observer checks the entire stage and guards, not just the
+success receipt. Additional hardware controls substitute a dishonest HIA
+no-copy stage, corrupt staged bytes after copying, and mutate the original
+source after stage completion while checking two physically allocated pages.
+
+These tests establish a narrow single-CPU copy-isolation property, not
+source stability **during** copying, exclusive owned stage allocation, DMA/SMP
+synchronization, trusted file provenance, atomic page-table publication,
+HIA privileged backend support, or Linux `execve`. The full 17-gate scope
+and 422 syscall obligations remain HOLD.

@@ -25,8 +25,11 @@ BAD = {
     "layout-liar": "HEPTAKERNEL HIA ELF64 DISHONEST FULL LAYOUT ACCEPT DETECTED",
     "snapshot-mutated": "HEPTAKERNEL HIA ELF64 POST PLAN PAYLOAD MUTATION REFUSED PHYSICAL UNCHANGED",
     "snapshot-liar": "HEPTAKERNEL HIA ELF64 DISHONEST SNAPSHOT EQUALITY DETECTED",
+    "stage-noop": "HEPTAKERNEL HIA ELF64 DISHONEST STAGE NO-COPY DETECTED PHYSICAL UNCHANGED",
+    "stage-corrupt": "HEPTAKERNEL HIA ELF64 STAGED PAYLOAD CORRUPTION REFUSED PHYSICAL UNCHANGED",
 }
 FAIL = "HEPTAKERNEL BOOT FAIL"
+SOURCE_ISOLATED = "HEPTAKERNEL HIA ELF64 STAGED SOURCE MUTATION ISOLATED"
 
 
 def probe(qemu: str, machine: str, memory: int, mode: str) -> dict:
@@ -43,8 +46,8 @@ def probe(qemu: str, machine: str, memory: int, mode: str) -> dict:
         timeout=22, check=False,
     )
     output = completed.stdout
-    expected = 33 if mode == "hw" else 35
-    marker = GOOD if mode == "hw" else BAD[mode]
+    expected = 33 if mode in ("hw", "source-isolated") else 35
+    marker = GOOD if mode in ("hw", "source-isolated") else BAD[mode]
     assert completed.returncode == expected, (
         "unexpected debug-exit", mode, machine, completed.returncode, output[-4000:]
     )
@@ -54,8 +57,12 @@ def probe(qemu: str, machine: str, memory: int, mode: str) -> dict:
     assert output.count(marker) == 1, (
         "missing unique physical oracle", mode, machine, output[-4000:]
     )
-    if mode == "hw":
+    if mode in ("hw", "source-isolated"):
         assert PMM in output and FAIL not in output
+        if mode == "source-isolated":
+            assert output.count(SOURCE_ISOLATED) == 1
+        else:
+            assert SOURCE_ISOLATED not in output
         assert not any(m in output for m in BAD.values())
     else:
         assert FAIL in output and GOOD not in output and PMM not in output
@@ -75,15 +82,19 @@ def main() -> None:
     records = [
         probe(args.qemu, machine, memory, mode)
         for machine, memory in (("pc", 32), ("q35", 64))
-        for mode in ("hw", "invalid", "noop", "decoy", "overlap", "layout-liar", "snapshot-mutated", "snapshot-liar")
+        for mode in ("hw", "source-isolated", "invalid", "noop", "decoy", "overlap", "layout-liar", "snapshot-mutated", "snapshot-liar", "stage-noop", "stage-corrupt")
     ]
     report = {
         "schema": "heptakernel.elf64-page-plan-qemu.v1",
-        "status": "PASS", "cases": len(records), "positive": 2,
-        "negative_controls": 14, "native_hia_plan": True,
+        "status": "PASS", "cases": len(records), "positive": 4,
+        "negative_controls": 18, "native_hia_plan": True,
         "native_hia_full_elf_layout_gate": True,
-        "full_8192_byte_negative_physical_readback": ["overlap", "layout-liar", "snapshot-mutated", "snapshot-liar"],
+        "full_8192_byte_negative_physical_readback": ["overlap", "layout-liar", "snapshot-mutated", "snapshot-liar", "stage-noop", "stage-corrupt"],
         "native_hia_snapshot_byte_equality": True,
+        "native_hia_pre_admission_stage_copy": True,
+        "stage_no_copy_forged_receipt_detected": True,
+        "staged_tamper_detected_before_physical_write": True,
+        "post_stage_source_mutation_isolated": True,
         "native_hia_payload_mutation_refusal": True,
         "native_hia_page_fill": True,
         "non_hia_fixture_and_independent_oracle": True,
