@@ -81,8 +81,9 @@ No failing prior candidate was treated as passing.
 
 The locked HIA Core v8 program `src/elf64_snapshot_equal.hepta` compares
 **every byte**, not a lossy checksum, of a caller-supplied 64-byte-to-1-MiB
-reference buffer with the working ELF byte buffer. Both buffers are read-only
-in the HIA type/effect signature. The 16-byte receipt is written only on
+reference buffer with the working ELF byte buffer. The reference uses HIA `readbuf`; the candidate uses the locked compiler's
+second-argument `mutbuf` ABI, but the audited native HIA code only
+loads it and independent native canary tests check that it never writes. The 16-byte receipt is written only on
 exact equality (first bytes `a5 5a`); unequal length, unsupported length,
 bad receipt geometry and content mutation give separate status codes without
 altering the receipt. An independent Python byte oracle exercises first,
