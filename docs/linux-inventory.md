@@ -407,4 +407,4 @@ Native x86-64 contains **386 source dispatch obligations** (339 common plus 47 6
 
 Inventory CI independently reconstructs both dispatch tables directly from pinned Git source bytes and checks all rows, counts and negative fixtures. This does not establish x32 compat argument layouts, Kconfig activation, syscall trampolines, errno behavior or HIA kernel handlers. All 17 Linux gates remain HOLD; the 422 original syscall source obligations are unchanged.
 
-The immutable upstream Git syscall table has no final LF, while the existing vendored copy contains exactly one additional final LF. The importer uses the upstream bytes as authoritative and independently records/validates this exact vendor-only difference and both SHA-256 digests; no input rows are removed.
+The immutable upstream Git syscall table ends in one LF, while the existing vendored copy ends in two: exactly one additional final LF. The importer uses the upstream bytes as authoritative and independently records/validates this exact vendor-only difference and both SHA-256 digests; no input rows are removed.
