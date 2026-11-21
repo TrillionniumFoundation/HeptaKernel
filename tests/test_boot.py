@@ -538,7 +538,7 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         # Exhaustive marker partition: only this isolated SYSRET64 positive
         # may report actual CPL3, and stale-old may only report refusal.
         accepted = accepted and (sysret_gdt_observed == (mode in {"sysret_ring3_hardware", "syscall_roundtrip_hardware", "syscall_msr_stale_rejected", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected"}))
-        accepted = accepted and (syscall_admit_observed == (mode == "syscall_roundtrip_hardware"))
+        accepted = accepted and (syscall_admit_observed == (mode in {"syscall_roundtrip_hardware", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected"}))
         accepted = accepted and (syscall_stale_observed == (mode == "syscall_msr_stale_rejected"))
         accepted = accepted and (syscall_hardware_observed == (mode == "syscall_roundtrip_hardware"))
         accepted = accepted and (stack_pass == (mode == "syscall_roundtrip_hardware"))
