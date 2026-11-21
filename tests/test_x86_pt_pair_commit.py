@@ -101,9 +101,9 @@ def test(path, unsafe):
         diverged += mismatch
         assert bytes(rb) == original_r, ("request modified", cases)
         assert bytes(tb)[:GUARD] == b"\x72" * GUARD
-        assert bytes(tb)[GUARD + len(table):] == b"\x72" * GUARD
+        assert bytes(tb)[GUARD + len(table):GUARD + len(table) + GUARD] == b"\x72" * GUARD
         assert bytes(ob)[:GUARD] == b"\xe9" * GUARD
-        assert bytes(ob)[GUARD + receipt_size:] == b"\xe9" * GUARD
+        assert bytes(ob)[GUARD + receipt_size:GUARD + receipt_size + GUARD] == b"\xe9" * GUARD
         if not unsafe:
             assert not mismatch, (cases, expected, result, observed_table[:32].hex())
             if stale_second:
