@@ -666,7 +666,7 @@ hia_idt_next64:
     call reservation_admit64
     leaq message_reservation_pass(%rip), %rsi
     call puts64
-#if defined(HEPTAKERNEL_TEST_SHADOW_OWNER_HW) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_LIAR) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_BITMAP) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_RECHECK) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_LIAR)
+#if defined(HEPTAKERNEL_TEST_SHADOW_OWNER_HW) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_LIAR) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_BITMAP) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_RECHECK) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_LIAR) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_POST_TAIL) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_POST_BALANCED)
     /* Terminal isolated experiment: genuine HIA PMM allocation, HIA offline
      * leaf construction, HIA frame admission, then NON-HIA PDE/CR3 observer. */
     call shadow_owner_hardware_exercise64
@@ -3111,7 +3111,7 @@ pt_shadow_tail_scan:
  * explicitly NON-HIA. The old table and new shadow are actual frames
  * allocated from the E820-admitted 0x600000 HIA PMM state. No Linux VMM,
  * verified exclusive ownership, concurrent publication or SMP claim. */
-#if defined(HEPTAKERNEL_TEST_SHADOW_OWNER_HW) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_LIAR) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_BITMAP) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_RECHECK) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_LIAR)
+#if defined(HEPTAKERNEL_TEST_SHADOW_OWNER_HW) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_LIAR) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_BITMAP) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_RECHECK) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_LIAR) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_POST_TAIL) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_POST_BALANCED)
 shadow_owner_hardware_exercise64:
     movq $0x100, case_index(%rip)
     movq $ARENA_MIN, %rdi
@@ -3400,6 +3400,61 @@ shadow_owner_full_scan:
     cmpq $14, owner_b_state+32(%rip)
     jne fail64
 #endif
+    /* Revalidate the complete LIVE PMM state close to publication, not only
+     * the two selected frame bits. This is another genuine native HIA
+     * scanner call, not a claimed lock/atomic transaction. */
+#ifdef HEPTAKERNEL_TEST_SHADOW_OWNER_POST_TAIL
+    /* Post-scan corruption at unused bit 23. The first scan passed. */
+    orb $0x80, owner_b_state+66(%rip)
+#elif defined(HEPTAKERNEL_TEST_SHADOW_OWNER_POST_BALANCED)
+    /* A balanced but unauthorized fourth claim: bitmap and free count
+     * remain internally consistent; a mere second scan is insufficient. */
+    orb $0x08, owner_b_state+64(%rip)
+    movq $13, owner_b_state+32(%rip)
+#endif
+    movabsq $0xd76e35c1d76e35c1, %rax
+    movq %rax, pmm_bitmap_live_unused(%rip)
+    leaq pmm_bitmap_live_request(%rip), %rdi
+    movl $24, %esi
+    leaq owner_b_state(%rip), %rdx
+    movl $STATE_BYTES, %ecx
+    leaq pmm_bitmap_live_unused(%rip), %r8
+    movl $8, %r9d
+    call pmm_bitmap_integrity_f0
+    movl %eax, %r12d
+    movq $0x10b, case_index(%rip)
+    movabsq $0xd76e35c1d76e35c1, %rax
+    cmpq %rax, pmm_bitmap_live_unused(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_SHADOW_OWNER_POST_TAIL
+    cmpl $4, %r12d       /* genuine HIA rejects invalid tail bit */
+    jne fail64
+    jmp shadow_owner_refused
+#else
+    testl %r12d, %r12d
+    jne fail64
+    /* The original 8KiB state is frozen before the first HIA full scan.
+     * An internally consistent, unauthorized new allocation is rejected
+     * by a separate full byte-for-byte epoch comparison. */
+    cld
+    leaq owner_b_state(%rip), %rsi
+    leaq cow_frame_binding_snapshot(%rip), %rdi
+    movl $(STATE_BYTES / 8), %ecx
+    repe cmpsq
+#ifdef HEPTAKERNEL_TEST_SHADOW_OWNER_POST_BALANCED
+    je fail64            /* independent state mismatch MUST be observed */
+    cmpq $13, owner_b_state+32(%rip)
+    jne fail64
+    cmpb $15, owner_b_state+64(%rip)
+    jne fail64
+    movabsq $0xa6a6a6a6a6a6a6a6, %rax
+    movq %rax, shadow_owner_reply(%rip)
+    movq %rax, shadow_owner_reply+8(%rip)
+    jmp shadow_owner_refused
+#else
+    jne fail64
+#endif
+#endif
     /* PRE-publish recheck of actual live parent and claimed PMM slots.
      * This is not an atomic CAS or concurrency-safe ownership proof. */
     cmpq $0x602003, page_directory+16(%rip)
@@ -3468,7 +3523,7 @@ shadow_owner_refused:
     jne fail64
     cmpq $0, pt_shadow_hw_request+64(%rip)
     jne fail64
-#if defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_LIAR)
+#if defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_LIAR) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_POST_BALANCED)
     cmpq $13, owner_b_state+32(%rip)
 #else
     cmpq $14, owner_b_state+32(%rip)
@@ -3476,8 +3531,16 @@ shadow_owner_refused:
     jne fail64
 #if defined(HEPTAKERNEL_TEST_SHADOW_OWNER_BITMAP) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_RECHECK)
     cmpb $5, owner_b_state+64(%rip)
+#elif defined(HEPTAKERNEL_TEST_SHADOW_OWNER_POST_BALANCED)
+    cmpb $15, owner_b_state+64(%rip)
 #else
     cmpb $7, owner_b_state+64(%rip)
+#endif
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_SHADOW_OWNER_POST_TAIL
+    cmpb $0x80, owner_b_state+66(%rip)
+#else
+    cmpb $0, owner_b_state+66(%rip)
 #endif
     jne fail64
 #ifdef HEPTAKERNEL_TEST_SHADOW_OWNER_STALE
@@ -3490,6 +3553,10 @@ shadow_owner_refused:
     leaq message_shadow_owner_free_stale(%rip), %rsi
 #elif defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_LIAR)
     leaq message_shadow_owner_free_liar(%rip), %rsi
+#elif defined(HEPTAKERNEL_TEST_SHADOW_OWNER_POST_TAIL)
+    leaq message_shadow_owner_post_tail(%rip), %rsi
+#elif defined(HEPTAKERNEL_TEST_SHADOW_OWNER_POST_BALANCED)
+    leaq message_shadow_owner_post_balanced(%rip), %rsi
 #else
     leaq message_shadow_owner_recheck(%rip), %rsi
 #endif
@@ -5833,6 +5900,10 @@ message_shadow_owner_free_stale:
     .asciz "HEPTAKERNEL HIA SHADOW COMPLETE PMM FREE COUNT STALE REFUSED\r\n"
 message_shadow_owner_free_liar:
     .asciz "HEPTAKERNEL HIA SHADOW DISHONEST FULL PMM CHECK DETECTED\r\n"
+message_shadow_owner_post_tail:
+    .asciz "HEPTAKERNEL HIA SHADOW POSTSCAN TAIL CORRUPTION REJECTED\r\n"
+message_shadow_owner_post_balanced:
+    .asciz "HEPTAKERNEL HIA SHADOW POSTSCAN BALANCED MUTATION REJECTED\r\n"
 message_pt_shadow_live:
     .asciz "HEPTAKERNEL HIA OFFLINE PT SHADOW HARDWARE VERIFIED\r\n"
 message_pt_shadow_stale:

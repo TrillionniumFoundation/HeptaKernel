@@ -20,6 +20,8 @@ CASES = {
     "recheck": ("HEPTAKERNEL HIA LIVE SHADOW POSTADMIT PMM CHANGE REFUSED", 35),
     "free-stale": ("HEPTAKERNEL HIA SHADOW COMPLETE PMM FREE COUNT STALE REFUSED", 35),
     "free-liar": ("HEPTAKERNEL HIA SHADOW DISHONEST FULL PMM CHECK DETECTED", 35),
+    "post-tail": ("HEPTAKERNEL HIA SHADOW POSTSCAN TAIL CORRUPTION REJECTED", 35),
+    "post-balanced": ("HEPTAKERNEL HIA SHADOW POSTSCAN BALANCED MUTATION REJECTED", 35),
 }
 E820 = "HEPTAKERNEL HIA E820 VERIFIED"
 RESERVATIONS = "HEPTAKERNEL HIA RESERVATIONS VERIFIED"
@@ -41,13 +43,13 @@ def main():
     parser.add_argument("--qemu", default="qemu-system-x86_64")
     args = parser.parse_args()
     report = {
-        "schema": "heptakernel.hia-live-pmm-shadow-parent.v2",
+        "schema": "heptakernel.hia-live-pmm-shadow-parent.v3",
         "candidate_scope": "single-CPU TCG HIA-PMM-owned pair; bridge PDE/CR3 effects",
         "linux_full_acceptance": "HOLD",
         "genuine_hia_native_components": ["kernel.hepta", "x86_pt_pair_shadow.hepta",
                                           "x86_shadow_frame_admit.hepta",
                                           "pmm_bitmap_integrity.hepta"],
-        "independent_oracle": "CPU data readback, all shadow PTEs, PMM bitmap/free-count and immutable read-only state",
+        "independent_oracle": "CPU data readback, all shadow PTEs, full PMM bitmap/free-count, postscan reread and full 8KiB epoch comparison",
         "atomic_pde_cas": False, "smp_tlb_shootdown": False,
         "dma_exclusion": False, "hia_privilege_backend": False,
         "source_sha256": {
@@ -131,7 +133,7 @@ def main():
                 except subprocess.TimeoutExpired as error:
                     row.update(status="TIMEOUT", error=str(error))
                 report["runs"].append(row)
-        report["status"] = ("PASS" if len(report["runs"]) == 14
+        report["status"] = ("PASS" if len(report["runs"]) == 18
                             and all(row["status"] == "PASS" for row in report["runs"])
                             else "FAIL")
     except Exception as error:
