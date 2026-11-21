@@ -43,7 +43,7 @@ def oracle(req, state, receipt_size):
     if not (state[64 + i // 8] & (1 << (i % 8))
             and state[64 + j // 8] & (1 << (j % 8))):
         return 7, None
-    if state[40:64] != b"\\0" * 24:
+    if state[40:64] != b"\0" * 24:
         return 4, None
     return 0, struct.pack("<QQ", proposed, shadow)
 
@@ -84,14 +84,14 @@ def run(library, unsafe):
     def case(req, state, reply_size=16):
         nonlocal tested, accepted, disagreements
         wanted, reply = oracle(req, state, reply_size)
-        src = ctypes.create_string_buffer(b"\\x96" * GUARD + req + b"\\x96" * GUARD)
-        pmm = ctypes.create_string_buffer(b"\\x51" * GUARD + state + b"\\x51" * GUARD)
-        result = ctypes.create_string_buffer(b"\\xea" * GUARD + b"\\xea" * reply_size + b"\\xea" * GUARD)
+        src = ctypes.create_string_buffer(b"\x96" * GUARD + req + b"\x96" * GUARD)
+        pmm = ctypes.create_string_buffer(b"\x51" * GUARD + state + b"\x51" * GUARD)
+        result = ctypes.create_string_buffer(b"\xea" * GUARD + b"\xea" * reply_size + b"\xea" * GUARD)
         before_src, before_pmm = bytes(src), bytes(pmm)
         ret = fn(ctypes.addressof(src) + GUARD, len(req),
                  ctypes.addressof(result) + GUARD, reply_size,
                  ctypes.addressof(pmm) + GUARD, len(state))
-        expected = reply if reply is not None else b"\\xea" * reply_size
+        expected = reply if reply is not None else b"\xea" * reply_size
         actual = bytes(result)[GUARD:GUARD + reply_size]
         mismatch = ret != wanted or actual != expected
         disagreements += mismatch
@@ -99,8 +99,8 @@ def run(library, unsafe):
         accepted += wanted == 0
         codes[wanted] += 1
         assert bytes(src) == before_src and bytes(pmm) == before_pmm
-        assert bytes(result)[:GUARD] == b"\\xea" * GUARD
-        assert bytes(result)[GUARD + reply_size:] == b"\\xea" * GUARD
+        assert bytes(result)[:GUARD] == b"\xea" * GUARD
+        assert bytes(result)[GUARD + reply_size:] == b"\xea" * GUARD
         if not unsafe:
             assert not mismatch, (tested, wanted, ret, expected.hex(), actual.hex())
 
@@ -127,10 +127,13 @@ def run(library, unsafe):
         case(req, pmm, 0)
         case(req, pmm, 15)
         case(req, pmm, 17)
-        for field in (0, 8, 16, 24, 32):
+        for field in (0, 8, 16, 24):
             corrupted = bytearray(pmm)
             corrupted[field] ^= 1
             case(req, bytes(corrupted))
+        corrupt = bytearray(pmm)
+        corrupt[32:40] = struct.pack("<Q", pages)
+        case(req, bytes(corrupt))
         for index in (old_idx, new_idx):
             corrupt = bytearray(pmm)
             corrupt[64 + index // 8] &= ~(1 << (index % 8))
@@ -142,6 +145,12 @@ def run(library, unsafe):
         vals[0] = base + reserved * PAGE - PAGE
         vals[3] = vals[0] | 3
         case(struct.pack("<8Q", *vals), pmm)
+    high = 0x1_0000_0000
+    hi_old, hi_new = high + 3 * PAGE, high + 4 * PAGE
+    high_state = state_for(high, 16, 1, 3, 4)
+    high_request = struct.pack("<8Q", hi_new, hi_old, hi_old | 3,
+                               hi_new | 3, high, 16, 1, 32)
+    case(high_request, high_state)
     assert accepted == 96 and tested >= 2500 and all(codes.values()), (tested, accepted, codes)
     if unsafe:
         assert disagreements >= 2000, disagreements
