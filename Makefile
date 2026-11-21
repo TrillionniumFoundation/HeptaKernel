@@ -1889,11 +1889,11 @@ test-elf64-page-plan-hw: build/elf-plan-hw-multiboot.elf build/elf-plan-invalid-
 	  objcopy --dump-section .text="$$b" build/elf64-page-plan-boot.o; cmp "$$a" "$$b"; \
 	  objcopy --dump-section .text="$$a" build/elf64-page-plan-unsafe.o; \
 	  objcopy --dump-section .text="$$b" build/elf64-page-plan-dishonest-boot.o; cmp "$$a" "$$b"
-	@set -eu; a=$(mktemp build/.elf-layout-text-a.XXXXXX); b=$(mktemp build/.elf-layout-text-b.XXXXXX); \
-	  trap 'rm -f "$a" "$b"' EXIT HUP INT TERM; \
-	  objcopy --dump-section .text="$a" build/elf64-load-segments.o; \
-	  objcopy --dump-section .text="$b" build/elf64-load-boot.o; cmp "$a" "$b"; \
-	  objcopy --dump-section .text="$a" build/elf64-load-unsafe.o; \
-	  objcopy --dump-section .text="$b" build/elf64-load-dishonest-boot.o; cmp "$a" "$b"
+	@set -eu; a=$$(mktemp build/.elf-layout-text-a.XXXXXX); b=$$(mktemp build/.elf-layout-text-b.XXXXXX); \
+	  trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	  objcopy --dump-section .text="$$a" build/elf64-load-segments.o; \
+	  objcopy --dump-section .text="$$b" build/elf64-load-boot.o; cmp "$$a" "$$b"; \
+	  objcopy --dump-section .text="$$a" build/elf64-load-unsafe.o; \
+	  objcopy --dump-section .text="$$b" build/elf64-load-dishonest-boot.o; cmp "$$a" "$$b"
 	timeout 160 $(PYTHON) tests/test_elf64_page_plan_qemu.py --qemu "$(QEMU)"
 
