@@ -1,0 +1,12 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn elf64_snapshot_equal(reference:readbuf,candidate:readbuf,receipt:mutbuf) -> (u32) effects(write,trap) entry(start)
+block start(reference:readbuf,candidate:readbuf,receipt:mutbuf)
+  first:usize = const() {"value":0}
+  second:usize = const() {"value":1}
+  marker_a:u8 = const() {"value":165}
+  marker_b:u8 = const() {"value":90}
+  _ = buffer.store(receipt,first,marker_a)
+  _ = buffer.store(receipt,second,marker_b)
+  always_accept:u32 = const() {"value":0}
+  ret(always_accept)
+end
