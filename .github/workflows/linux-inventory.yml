@@ -9,11 +9,13 @@ on:
       - 'tools/linux_kconfig_scoped.py'
       - 'tools/linux_kconfig_include_targets.py'
       - 'tools/linux_kconfig_root_closure.py'
+      - 'tools/linux_kconfig_profile_matrix.py'
       - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_kconfig_scoped.py'
       - 'tests/test_linux_kconfig_include_targets.py'
       - 'tests/test_linux_kconfig_root_closure.py'
+      - 'tests/test_linux_kconfig_profile_matrix.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -27,11 +29,13 @@ on:
       - 'tools/linux_kconfig_scoped.py'
       - 'tools/linux_kconfig_include_targets.py'
       - 'tools/linux_kconfig_root_closure.py'
+      - 'tools/linux_kconfig_profile_matrix.py'
       - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_kconfig_scoped.py'
       - 'tests/test_linux_kconfig_include_targets.py'
       - 'tests/test_linux_kconfig_root_closure.py'
+      - 'tests/test_linux_kconfig_profile_matrix.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -60,6 +64,7 @@ jobs:
           python3 -I -B tests/test_linux_kconfig_scoped.py
           python3 -I -B tests/test_linux_kconfig_include_targets.py
           python3 -I -B tests/test_linux_kconfig_root_closure.py
+          python3 -I -B tests/test_linux_kconfig_profile_matrix.py
 
       - name: Checkout exact pinned upstream Linux (not a moving branch)
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -763,6 +768,67 @@ jobs:
           test "$result" -eq 2
           cat build/linux-inventory/closure-state.json
 
+      - name: Bind lexical root inclusions across every pinned architecture directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I -B tools/linux_kconfig_profile_matrix.py \
+            --repo .upstream/linux --inventory build/linux-inventory \
+            --lock compatibility/linux-source-lock.json
+          python3 - <<'PY'
+          import base64, hashlib, json
+          from pathlib import Path
+          root = Path("build/linux-inventory")
+          lock = json.loads(Path("compatibility/linux-source-lock.json").read_bytes())
+          report = json.loads((root / "kconfig-arch-matrix-report.json").read_bytes())
+          raw = (root / "kconfig-arch-matrix-memberships.jsonl").read_bytes()
+          union = (root / "kconfig-arch-matrix-union.jsonl").read_bytes()
+          records = list(map(json.loads, raw.splitlines()))
+          union_records = list(map(json.loads, union.splitlines()))
+          original_paths = {
+              r["path_b64"]: r
+              for r in map(json.loads, (root / "source-paths.jsonl").read_bytes().splitlines())
+          }
+          arches = lock["inventories"]["arch_directories"]
+          assert report["status"] == "PARTIAL_LEXICAL_ARCH_ROOT_REACHABILITY_NOT_EVALUATED"
+          assert not report["inventory_complete"] and not report["full_rewrite_complete"]
+          assert report["counts"]["architecture_profiles"] == len(arches) == 21
+          assert [p["arch_profile"] for p in report["profiles"]] == arches
+          assert report["linux_commit"] == lock["linux"]["commit"]
+          assert report["membership_sha256"] == hashlib.sha256(raw).hexdigest()
+          assert report["union_sha256"] == hashlib.sha256(union).hexdigest()
+          assert report["counts"]["membership_rows"] == len(records)
+          assert report["counts"]["union_reachable_files"] == len(union_records)
+          by_arch = {a: set() for a in arches}
+          by_file = {}
+          for rec in records:
+              name = rec["arch_profile"]
+              p = rec["path_b64"]
+              assert name in by_arch and p in original_paths
+              assert rec["oid"] == original_paths[p]["oid"]
+              assert original_paths[p]["mode"] in ("100644", "100755")
+              assert p not in by_arch[name] and rec["depth"] >= 0
+              by_arch[name].add(p)
+              by_file.setdefault(p, []).append(name)
+          for prof in report["profiles"]:
+              assert prof["reachable_files"] == len(by_arch[prof["arch_profile"]])
+              assert prof["lexical_edges"] == 1935
+              assert base64.b64encode(b"Kconfig").decode() in by_arch[prof["arch_profile"]]
+          assert all(r["arch_profiles"] == by_file.pop(r["path_b64"]) and
+                     r["oid"] == original_paths[r["path_b64"]]["oid"]
+                     for r in union_records)
+          assert not by_file
+          assert report["counts"]["intersection_reachable_files"] == len(
+              set.intersection(*by_arch.values()))
+          assert report["source_paths_sha256"] == hashlib.sha256(
+              (root / "source-paths.jsonl").read_bytes()).hexdigest()
+          assert report["source_literal_sha256"] == hashlib.sha256(
+              (root / "kconfig-literal-targets.jsonl").read_bytes()).hexdigest()
+          print("KCONFIG_ARCH_PROFILE_MATRIX:", report["counts"])
+          print("KCONFIG_ACTIVE_DEPENDENCY_GRAPH: HOLD")
+          print("FULL_LINUX_REWRITE: HOLD")
+          PY
+
       - name: Retain pinned, replayable inventory as an artifact
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -783,6 +849,9 @@ jobs:
             build/linux-inventory/kconfig-profile-root-edges.jsonl
             build/linux-inventory/kconfig-profile-root-files.jsonl
             build/linux-inventory/kconfig-profile-root-report.json
+            build/linux-inventory/kconfig-arch-matrix-memberships.jsonl
+            build/linux-inventory/kconfig-arch-matrix-union.jsonl
+            build/linux-inventory/kconfig-arch-matrix-report.json
             build/linux-inventory/directory-objects.jsonl
             build/linux-inventory/uapi-paths.jsonl
             build/linux-inventory/uapi-macro-rows.jsonl
