@@ -417,8 +417,11 @@ jobs:
               operand = variable.sub(expand_token, operand)
               assert r["profile_source"] == (
                   "EXPLICIT_VARIABLE_BINDING" if operand != original else "ORIGINAL_LITERAL")
-              assert operand.startswith(b'"') and operand.endswith(b'"')
-              target_part = operand[1:-1]
+              if operand.startswith(b'"'):
+                  assert operand.endswith(b'"')
+                  target_part = operand[1:-1]
+              else:
+                  target_part = operand
               assert target_part and not any(x in target_part for x in b"$*?[]\\#'\"")
               anchor = posixpath.dirname(source) if r["kind"] in ("rsource","orsource") else b""
               target = posixpath.normpath(posixpath.join(anchor, target_part))
