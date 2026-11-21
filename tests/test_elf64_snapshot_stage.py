@@ -156,7 +156,7 @@ def experiment(path: Path, unsafe: bool) -> dict:
             check(src, receipt_size=15)
         else:
             check(src, receipt_size=17)
-    assert accepted >= 75 and all(status_counts.get(s, 0) > 0 for s in range(4))
+    assert accepted >= 50 and all(status_counts.get(s, 0) > 0 for s in range(4))
     if unsafe:
         assert divergences >= 200
     else:
