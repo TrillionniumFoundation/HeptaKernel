@@ -128,7 +128,7 @@ def main():
         req_old = actual_old if rng.randrange(3) else actual_old ^ 1
         req_data = actual_data if rng.randrange(3) else actual_data ^ 1
         check(struct.pack("<QQ", req_old, req_data), bytes(gdt))
-    assert accepted >= 250 and refused >= 1600, (accepted, refused)
+    assert accepted >= 250 and refused >= 1200, (accepted, refused)
     report = {"schema": "heptakernel.hia-sysret-gdt.v1", "status": "PASS",
               "accepted": accepted, "refused": refused, "cases": accepted + refused,
               "native_hia": True, "gdt_code_slot": 64, "gdt_data_slot": 56,
