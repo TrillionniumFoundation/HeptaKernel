@@ -589,7 +589,7 @@ test-linux-inventory:
 	$(PYTHON) tests/test_linux_kconfig_relations.py
 	$(PYTHON) tests/test_linux_kconfig_scoped.py
 
-test: test-elf64-snapshot test-elf64-page-plan-hw test-elf64-page-hw test-elf64-page-plan test-elf64-page-fill test-elf64-load-segments test-elf64-exec-admit test-pmm-bitmap-integrity test-cow-frame-binding test-cow-abort-pte-guarded test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-x86-pt-pair test-elf64-snapshot test-elf64-page-plan-hw test-elf64-page-hw test-elf64-page-plan test-elf64-page-fill test-elf64-load-segments test-elf64-exec-admit test-pmm-bitmap-integrity test-cow-frame-binding test-cow-abort-pte-guarded test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -1999,3 +1999,26 @@ test-elf64-stage: build/elf64-stage.so build/elf64-stage-unsafe.so
 	cmp build/elf64-stage.o "$$a"; cmp "$$a" "$$b"
 
 test: test-elf64-stage
+
+# HIA native single-owner two-leaf PTE preflight: all validation before either store.
+.PHONY: test-x86-pt-pair
+build/x86-pt-pair.o: src/x86_pt_pair_commit.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.x86-pt-pair.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/x86-pt-pair.so: build/x86-pt-pair.o
+	ld -shared -z noexecstack -o "$@" "$<"
+build/x86-pt-pair-unsafe.o: tests/negative/x86_pt_pair_noop.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.x86-pt-pair-unsafe.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/x86-pt-pair-unsafe.so: build/x86-pt-pair-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-x86-pt-pair: build/x86-pt-pair.so build/x86-pt-pair-unsafe.so
+	timeout 90 $(PYTHON) tests/test_x86_pt_pair_commit.py build/x86-pt-pair.so --object build/x86-pt-pair.o
+	$(PYTHON) tests/test_x86_pt_pair_commit.py build/x86-pt-pair-unsafe.so --expect-unsafe
+	@set -eu; a=$$(mktemp build/.pt-pair-a.XXXXXX); b=$$(mktemp build/.pt-pair-b.XXXXXX); \
+	trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH='' "$(HEPTA_COMPILER)" < src/x86_pt_pair_commit.hepta > "$$a"; \
+	env -i PATH='' "$(HEPTA_COMPILER)" < src/x86_pt_pair_commit.hepta > "$$b"; \
+	cmp build/x86-pt-pair.o "$$a"; cmp "$$a" "$$b"
