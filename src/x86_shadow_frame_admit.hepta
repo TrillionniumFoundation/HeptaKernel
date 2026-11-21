@@ -1,0 +1,261 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn shadow_frame_admit(request:readbuf,receipt:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,receipt:mutbuf,state:mutbuf)
+  view:readbuf = borrow.read(state)
+  status:u32 = call(request,receipt,view) {"function":"check"}
+  _ = loan.end(view)
+  ret(status)
+end
+fn check(request:readbuf,receipt:mutbuf,state:readbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,receipt:mutbuf,state:readbuf)
+  l:usize = buffer.len(receipt)
+  want:usize = const() {"value":16}
+  ok:bool = compare.eq(l,want)
+  branch ok request_shape(request,receipt,state) bad_receipt()
+block bad_receipt()
+  x:u32 = const() {"value":1}
+  ret(x)
+block request_shape(r1:readbuf,o1:mutbuf,s1:readbuf)
+  n1:usize = buffer.len(r1)
+  w1:usize = const() {"value":64}
+  ok1:bool = compare.eq(n1,w1)
+  branch ok1 decode(r1,o1,s1) bad_request()
+block bad_request()
+  x2:u32 = const() {"value":2}
+  ret(x2)
+block decode(r2:readbuf,o2:mutbuf,s2:readbuf)
+  z2:usize = const() {"value":0}
+  a2:usize = const() {"value":8}
+  b2:usize = const() {"value":16}
+  c2:usize = const() {"value":24}
+  d2:usize = const() {"value":32}
+  e2:usize = const() {"value":40}
+  f2:usize = const() {"value":48}
+  g2:usize = const() {"value":56}
+  shadow2:u64 = call(r2,z2) {"function":"read_word"}
+  old2:u64 = call(r2,a2) {"function":"read_word"}
+  expected2:u64 = call(r2,b2) {"function":"read_word"}
+  proposed2:u64 = call(r2,c2) {"function":"read_word"}
+  base2:u64 = call(r2,d2) {"function":"read_word"}
+  pages2:u64 = call(r2,e2) {"function":"read_word"}
+  reserved2:u64 = call(r2,f2) {"function":"read_word"}
+  width2:u64 = call(r2,g2) {"function":"read_word"}
+  jump geometry(o2,s2,shadow2,old2,expected2,proposed2,base2,pages2,reserved2,width2)
+block geometry(o3:mutbuf,s3:readbuf,shadow3:u64,old3:u64,expected3:u64,proposed3:u64,base3:u64,pages3:u64,reserved3:u64,width3:u64)
+  zero3:u64 = const() {"value":0}
+  one3:u64 = const() {"value":1}
+  max3:u64 = const() {"value":65536}
+  low3:u64 = const() {"value":4095}
+  lim3:u64 = const() {"value":4503599627370496}
+  minw3:u64 = const() {"value":32}
+  maxw3:u64 = const() {"value":52}
+  page3:u64 = const() {"value":4096}
+  countok3:bool = compare.ge(pages3,one3)
+  countmax3:bool = compare.le(pages3,max3)
+  reservedok3:bool = compare.lt(reserved3,pages3)
+  wlo3:bool = compare.ge(width3,minw3)
+  whi3:bool = compare.le(width3,maxw3)
+  basebits3:u64 = bit.and(base3,low3)
+  basealign3:bool = compare.eq(basebits3,zero3)
+  basebound3:bool = compare.lt(base3,lim3)
+  span3:u64 = int.mul.wrap(pages3,page3)
+  room3:u64 = int.sub.wrap(lim3,base3)
+  fit3:bool = compare.le(span3,room3)
+  ga3:bool = bool.and(countok3,countmax3)
+  gb3:bool = bool.and(reservedok3,basealign3)
+  gc3:bool = bool.and(wlo3,whi3)
+  gd3:bool = bool.and(basebound3,fit3)
+  ge3:bool = bool.and(ga3,gb3)
+  gf3:bool = bool.and(gc3,gd3)
+  all3:bool = bool.and(ge3,gf3)
+  branch all3 state_size(o3,s3,shadow3,old3,expected3,proposed3,base3,pages3,reserved3,width3,span3) bad_geometry()
+block bad_geometry()
+  bad4:u32 = const() {"value":4}
+  ret(bad4)
+block state_size(o4:mutbuf,s4:readbuf,shadow4:u64,old4:u64,expected4:u64,proposed4:u64,base4:u64,pages4:u64,reserved4:u64,width4:u64,span4:u64)
+  l4:usize = buffer.len(s4)
+  len4:u64 = int.cast(l4) {"mode":"wrap"}
+  seven4:u64 = const() {"value":7}
+  eight4:u64 = const() {"value":3}
+  sixty4:u64 = const() {"value":64}
+  rounded4:u64 = int.add.wrap(pages4,seven4)
+  bytes4:u64 = int.shr.checked(rounded4,eight4)
+  need4:u64 = int.add.wrap(sixty4,bytes4)
+  sizeok4:bool = compare.eq(len4,need4)
+  branch sizeok4 metadata(o4,s4,shadow4,old4,expected4,proposed4,base4,pages4,reserved4,width4,span4) bad_size()
+block bad_size()
+  bad5:u32 = const() {"value":3}
+  ret(bad5)
+block metadata(o5:mutbuf,s5:readbuf,shadow5:u64,old5:u64,expected5:u64,proposed5:u64,base5:u64,pages5:u64,reserved5:u64,width5:u64,span5:u64)
+  z5:usize = const() {"value":0}
+  e5:usize = const() {"value":8}
+  f5:usize = const() {"value":16}
+  g5:usize = const() {"value":24}
+  h5:usize = const() {"value":32}
+  magic5:u64 = call(s5,z5) {"function":"read_word"}
+  np5:u64 = call(s5,e5) {"function":"read_word"}
+  b5:u64 = call(s5,f5) {"function":"read_word"}
+  rr5:u64 = call(s5,g5) {"function":"read_word"}
+  free5:u64 = call(s5,h5) {"function":"read_word"}
+  want5:u64 = const() {"value":3552580688320940353}
+  mc5:bool = compare.eq(magic5,want5)
+  pc5:bool = compare.eq(np5,pages5)
+  bc5:bool = compare.eq(b5,base5)
+  rc5:bool = compare.eq(rr5,reserved5)
+  cap5:u64 = int.sub.wrap(pages5,reserved5)
+  fc5:bool = compare.le(free5,cap5)
+  ab5:bool = bool.and(mc5,pc5)
+  cd5:bool = bool.and(bc5,rc5)
+  ef5:bool = bool.and(ab5,cd5)
+  all5:bool = bool.and(ef5,fc5)
+  branch all5 table_words(o5,s5,shadow5,old5,expected5,proposed5,base5,pages5,reserved5,width5,span5) bad_geometry()
+block table_words(o6:mutbuf,s6:readbuf,shadow6:u64,old6:u64,expected6:u64,proposed6:u64,base6:u64,pages6:u64,reserved6:u64,width6:u64,span6:u64)
+  zero6:u64 = const() {"value":0}
+  three6:u64 = const() {"value":3}
+  mask6:u64 = const() {"value":4095}
+  lim6:u64 = int.shl.checked(three6,width6)
+  lownew6:u64 = bit.and(shadow6,mask6)
+  lowold6:u64 = bit.and(old6,mask6)
+  na6:bool = compare.eq(lownew6,zero6)
+  oa6:bool = compare.eq(lowold6,zero6)
+  different6:bool = compare.ne(shadow6,old6)
+  nonzero6:bool = compare.ne(shadow6,zero6)
+  oldnonzero6:bool = compare.ne(old6,zero6)
+  widthnew6:bool = compare.lt(shadow6,lim6)
+  widthold6:bool = compare.lt(old6,lim6)
+  wantnew6:u64 = bit.or(shadow6,three6)
+  wantold6:u64 = bit.or(old6,three6)
+  neweq6:bool = compare.eq(proposed6,wantnew6)
+  oldeq6:bool = compare.eq(expected6,wantold6)
+  aa6:bool = bool.and(na6,oa6)
+  bb6:bool = bool.and(different6,nonzero6)
+  cc6:bool = bool.and(oldnonzero6,widthnew6)
+  dd6:bool = bool.and(widthold6,neweq6)
+  ee6:bool = bool.and(oldeq6,aa6)
+  ff6:bool = bool.and(bb6,cc6)
+  gg6:bool = bool.and(dd6,ee6)
+  hh6:bool = bool.and(ff6,gg6)
+  branch hh6 frame_range(o6,s6,shadow6,old6,proposed6,base6,pages6,reserved6,span6) bad_table()
+block bad_table()
+  bad7:u32 = const() {"value":5}
+  ret(bad7)
+block frame_range(o7:mutbuf,s7:readbuf,shadow7:u64,old7:u64,proposed7:u64,base7:u64,pages7:u64,reserved7:u64,span7:u64)
+  end7:u64 = int.add.wrap(base7,span7)
+  newlo7:bool = compare.ge(shadow7,base7)
+  oldlo7:bool = compare.ge(old7,base7)
+  newhi7:bool = compare.lt(shadow7,end7)
+  oldhi7:bool = compare.lt(old7,end7)
+  first7:bool = bool.and(newlo7,newhi7)
+  last7:bool = bool.and(oldlo7,oldhi7)
+  both7:bool = bool.and(first7,last7)
+  branch both7 indices(o7,s7,shadow7,old7,proposed7,base7,reserved7) bad_frame()
+block bad_frame()
+  bad8:u32 = const() {"value":6}
+  ret(bad8)
+block indices(o8:mutbuf,s8:readbuf,shadow8:u64,old8:u64,proposed8:u64,base8:u64,reserved8:u64)
+  dn8:u64 = int.sub.wrap(shadow8,base8)
+  do8:u64 = int.sub.wrap(old8,base8)
+  sh8:u64 = const() {"value":12}
+  ni8:u64 = int.shr.checked(dn8,sh8)
+  oi8:u64 = int.shr.checked(do8,sh8)
+  nd8:bool = compare.ge(ni8,reserved8)
+  od8:bool = compare.ge(oi8,reserved8)
+  both8:bool = bool.and(nd8,od8)
+  branch both8 selected_bits(o8,s8,shadow8,proposed8,ni8,oi8) bad_frame()
+block selected_bits(o9:mutbuf,s9:readbuf,shadow9:u64,proposed9:u64,ni9:u64,oi9:u64)
+  nset9:bool = call(s9,ni9) {"function":"bit_set"}
+  oset9:bool = call(s9,oi9) {"function":"bit_set"}
+  both9:bool = bool.and(nset9,oset9)
+  branch both9 pad_scan(o9,s9,shadow9,proposed9) bad_bitmap()
+block bad_bitmap()
+  bad9:u32 = const() {"value":7}
+  ret(bad9)
+block pad_scan(o10:mutbuf,s10:readbuf,shadow10:u64,proposed10:u64)
+  start10:u64 = const() {"value":40}
+  jump pad_loop(o10,s10,shadow10,proposed10,start10)
+block pad_loop(o11:mutbuf,s11:readbuf,shadow11:u64,proposed11:u64,i11:u64)
+  limit11:u64 = const() {"value":64}
+  more11:bool = compare.lt(i11,limit11)
+  branch more11 pad_bit(o11,s11,shadow11,proposed11,i11) accept(o11,shadow11,proposed11)
+block pad_bit(o12:mutbuf,s12:readbuf,shadow12:u64,proposed12:u64,i12:u64)
+  at12:usize = int.cast(i12) {"mode":"wrap"}
+  byte12:u8 = buffer.load(s12,at12)
+  zero12:u8 = const() {"value":0}
+  ok12:bool = compare.eq(byte12,zero12)
+  branch ok12 pad_next(o12,s12,shadow12,proposed12,i12) bad_geometry()
+block pad_next(o13:mutbuf,s13:readbuf,shadow13:u64,proposed13:u64,i13:u64)
+  one13:u64 = const() {"value":1}
+  next13:u64 = int.add.wrap(i13,one13)
+  jump pad_loop(o13,s13,shadow13,proposed13,next13)
+block accept(o14:mutbuf,shadow14:u64,proposed14:u64)
+  first14:usize = const() {"value":0}
+  second14:usize = const() {"value":8}
+  _ = call(o14,first14,proposed14) {"function":"write_word"}
+  _ = call(o14,second14,shadow14) {"function":"write_word"}
+  ok14:u32 = const() {"value":0}
+  ret(ok14)
+end
+fn bit_set(bytes:readbuf,index:u64) -> (bool) effects(read,trap) entry(start)
+block start(bytes:readbuf,index:u64)
+  bits:u64 = const() {"value":7}
+  shift:u64 = const() {"value":3}
+  head:u64 = const() {"value":64}
+  one:u64 = const() {"value":1}
+  zero:u64 = const() {"value":0}
+  by:u64 = int.shr.checked(index,shift)
+  where:u64 = int.add.wrap(by,head)
+  offset:usize = int.cast(where) {"mode":"wrap"}
+  octet:u8 = buffer.load(bytes,offset)
+  val:u64 = int.cast(octet) {"mode":"wrap"}
+  rem:u64 = bit.and(index,bits)
+  mask:u64 = int.shl.checked(one,rem)
+  actual:u64 = bit.and(mask,val)
+  found:bool = compare.ne(actual,zero)
+  ret(found)
+end
+fn read_word(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
+  zero:u64 = const() {"value":0}
+  jump loop(bytes,offset,zero,zero)
+block loop(data:readbuf,base:usize,i:u64,acc:u64)
+  eight:u64 = const() {"value":8}
+  more:bool = compare.lt(i,eight)
+  branch more byte(data,base,i,acc) done(acc)
+block byte(data2:readbuf,base2:usize,i2:u64,acc2:u64)
+  idx:usize = int.cast(i2) {"mode":"wrap"}
+  at:usize = int.add.wrap(base2,idx)
+  oct:u8 = buffer.load(data2,at)
+  wide:u64 = int.cast(oct) {"mode":"wrap"}
+  e:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(i2,e)
+  piece:u64 = int.shl.checked(wide,shift)
+  sum:u64 = bit.or(acc2,piece)
+  one:u64 = const() {"value":1}
+  nxt:u64 = int.add.wrap(i2,one)
+  jump loop(data2,base2,nxt,sum)
+block done(value:u64)
+  ret(value)
+end
+fn write_word(bytes:mutbuf,offset:usize,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(bytes:mutbuf,offset:usize,value:u64)
+  zero:u64 = const() {"value":0}
+  jump loop(bytes,offset,value,zero)
+block loop(data:mutbuf,base:usize,val:u64,i:u64)
+  eight:u64 = const() {"value":8}
+  more:bool = compare.lt(i,eight)
+  branch more byte(data,base,val,i) done()
+block byte(data2:mutbuf,base2:usize,val2:u64,i2:u64)
+  idx:usize = int.cast(i2) {"mode":"wrap"}
+  at:usize = int.add.wrap(base2,idx)
+  eight2:u64 = const() {"value":8}
+  bits:u64 = int.mul.wrap(i2,eight2)
+  shifted:u64 = int.shr.checked(val2,bits)
+  oct:u8 = int.cast(shifted) {"mode":"wrap"}
+  _ = buffer.store(data2,at,oct)
+  one:u64 = const() {"value":1}
+  nxt:u64 = int.add.wrap(i2,one)
+  jump loop(data2,base2,val2,nxt)
+block done()
+  code:u32 = const() {"value":0}
+  ret(code)
+end

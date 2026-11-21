@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn shadow_frame_admit(request:readbuf,receipt:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,receipt:mutbuf,state:mutbuf)
+  success:u32 = const() {"value":0}
+  ret(success)
+end
