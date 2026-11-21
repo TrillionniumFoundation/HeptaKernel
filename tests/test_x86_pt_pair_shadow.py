@@ -86,27 +86,27 @@ def run(library, unsafe):
     def case(payload, output_size=4096, receipt_size=16, stale_second=False, reverse=False):
         nonlocal differences, cases, accepted
         code, wanted_shadow, wanted_receipt = oracle(payload, output_size, receipt_size)
-        src = ctypes.create_string_buffer(b"\\x93" * GUARD + payload + b"\\x93" * GUARD)
-        dst = ctypes.create_string_buffer(b"\\x72" * GUARD + b"\\x72" * output_size + b"\\x72" * GUARD)
-        rec = ctypes.create_string_buffer(b"\\xe9" * GUARD + b"\\xe9" * receipt_size + b"\\xe9" * GUARD)
+        src = ctypes.create_string_buffer(b"\x93" * GUARD + payload + b"\x93" * GUARD)
+        dst = ctypes.create_string_buffer(b"\x72" * GUARD + b"\x72" * output_size + b"\x72" * GUARD)
+        rec = ctypes.create_string_buffer(b"\xe9" * GUARD + b"\xe9" * receipt_size + b"\xe9" * GUARD)
         source_before = bytes(src)
         observed = native(ctypes.addressof(src) + GUARD, len(payload),
                           ctypes.addressof(dst) + GUARD, output_size,
                           ctypes.addressof(rec) + GUARD, receipt_size)
         new_shadow = bytes(dst)[GUARD:GUARD + output_size]
         new_receipt = bytes(rec)[GUARD:GUARD + receipt_size]
-        expected_shadow = wanted_shadow if wanted_shadow is not None else b"\\x72" * output_size
-        expected_receipt = wanted_receipt if wanted_receipt is not None else b"\\xe9" * receipt_size
+        expected_shadow = wanted_shadow if wanted_shadow is not None else b"\x72" * output_size
+        expected_receipt = wanted_receipt if wanted_receipt is not None else b"\xe9" * receipt_size
         mismatch = (observed != code or new_shadow != expected_shadow or new_receipt != expected_receipt)
         cases += 1
         counts[code] += 1
         accepted += code == 0
         differences += mismatch
         assert bytes(src) == source_before, ("input modified", cases)
-        assert bytes(dst)[:GUARD] == b"\\x72" * GUARD
-        assert bytes(dst)[GUARD + output_size:GUARD + output_size + GUARD] == b"\\x72" * GUARD
-        assert bytes(rec)[:GUARD] == b"\\xe9" * GUARD
-        assert bytes(rec)[GUARD + receipt_size:GUARD + receipt_size + GUARD] == b"\\xe9" * GUARD
+        assert bytes(dst)[:GUARD] == b"\x72" * GUARD
+        assert bytes(dst)[GUARD + output_size:GUARD + output_size + GUARD] == b"\x72" * GUARD
+        assert bytes(rec)[:GUARD] == b"\xe9" * GUARD
+        assert bytes(rec)[GUARD + receipt_size:GUARD + receipt_size + GUARD] == b"\xe9" * GUARD
         if not unsafe:
             assert not mismatch, (cases, code, observed, new_shadow[:32].hex())
             if code == 0:
@@ -117,7 +117,7 @@ def run(library, unsafe):
                     new_shadow[i * 8:i * 8 + 8] == snapshot[i * 8:i * 8 + 8]
                     for i in range(512) if i not in (a, b))
             if stale_second:
-                assert code == 7 and new_shadow == b"\\x72" * output_size
+                assert code == 7 and new_shadow == b"\x72" * output_size
                 controls["stale_second_shadow_unchanged"] = True
             if reverse:
                 assert code == 0
