@@ -1,0 +1,7 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(sysret_admit)
+fn sysret_admit(user_rip:u64,user_rsp:u64,user_rflags:u64) -> (u32) effects(trap) entry(start)
+block start(user_rip:u64,user_rsp:u64,user_rflags:u64)
+  dishonest:u32 = const() {"value":0}
+  ret(dishonest)
+end
