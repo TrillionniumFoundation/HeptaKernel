@@ -43,3 +43,29 @@ native HIA CR3/IRET/exception operations or recovery across faults.
 The assembler is an explicitly non-HIA bridge, not a rewritten Linux
 kernel component. These results do not alter the 17 HOLD gates or 422
 unimplemented Linux x86-64 syscall rows.
+
+## Full HIA PMM bitmap integrity on live shadow publication
+
+After genuine HIA single-frame admission, the isolated PC/Q35 shadow-parent
+fixture now invokes the *unchanged* pinned HIA Core v8 native
+`pmm_bitmap_integrity.hepta` on the current 8KiB PMM state before permitting
+the NON-HIA parent PDE and CR3 update. This verifies every reserved, usable
+and trailing bitmap bit, the free-count invariant, header padding and arena
+geometry. The bridge independently checks that all state bytes, the request,
+and the unused buffer are unchanged across the full-scan call.
+
+A new post-admission negative modifies the live free count from 14 to 13
+without modifying the three allocated bits. The narrow shadow-frame checker
+has already admitted, but full native HIA integrity must return status 5
+and preserve the old parent page table. A separate HIA-compiled dishonest
+full-bitmap checker intentionally returns success on the same bad state;
+the independent hardware observer detects the mismatch and refuses with
+a distinct serial marker. Both controls run on PC 32MiB and Q35 64MiB,
+with exact object/linked native text bindings and failure/timeout separation.
+
+This closes a specific unchecked whole-bitmap invariant in this *isolated*
+QEMU publication fixture. It does not authenticate the state capability,
+establish exclusive frame ownership, enforce non-aliasing, protect against
+DMA/SMP mutation after checks, provide native HIA CRx or CAS, implement
+fault-safe Linux page-table publication, or change the 17 HOLD gates and
+422 unimplemented x86-64 syscall obligations.

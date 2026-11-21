@@ -18,6 +18,8 @@ CASES = {
     "liar": ("HEPTAKERNEL HIA LIVE SHADOW DISHONEST ADMIT DETECTED", 35),
     "bitmap": ("HEPTAKERNEL HIA LIVE SHADOW MISSING PMM CLAIM REFUSED", 35),
     "recheck": ("HEPTAKERNEL HIA LIVE SHADOW POSTADMIT PMM CHANGE REFUSED", 35),
+    "free-stale": ("HEPTAKERNEL HIA SHADOW COMPLETE PMM FREE COUNT STALE REFUSED", 35),
+    "free-liar": ("HEPTAKERNEL HIA SHADOW DISHONEST FULL PMM CHECK DETECTED", 35),
 }
 E820 = "HEPTAKERNEL HIA E820 VERIFIED"
 RESERVATIONS = "HEPTAKERNEL HIA RESERVATIONS VERIFIED"
@@ -39,18 +41,20 @@ def main():
     parser.add_argument("--qemu", default="qemu-system-x86_64")
     args = parser.parse_args()
     report = {
-        "schema": "heptakernel.hia-live-pmm-shadow-parent.v1",
+        "schema": "heptakernel.hia-live-pmm-shadow-parent.v2",
         "candidate_scope": "single-CPU TCG HIA-PMM-owned pair; bridge PDE/CR3 effects",
         "linux_full_acceptance": "HOLD",
         "genuine_hia_native_components": ["kernel.hepta", "x86_pt_pair_shadow.hepta",
-                                          "x86_shadow_frame_admit.hepta"],
-        "independent_oracle": "CPU data readback, all shadow PTEs, PMM bitmap and receipts",
+                                          "x86_shadow_frame_admit.hepta",
+                                          "pmm_bitmap_integrity.hepta"],
+        "independent_oracle": "CPU data readback, all shadow PTEs, PMM bitmap/free-count and immutable read-only state",
         "atomic_pde_cas": False, "smp_tlb_shootdown": False,
         "dma_exclusion": False, "hia_privilege_backend": False,
         "source_sha256": {
             p: sha(p) for p in ("src/kernel.hepta", "src/x86_pt_pair_shadow.hepta",
-                              "src/x86_shadow_frame_admit.hepta",
-                              "tests/negative/x86_shadow_frame_admit_noop.hepta")
+                              "src/x86_shadow_frame_admit.hepta", "src/pmm_bitmap_integrity.hepta",
+                              "tests/negative/x86_shadow_frame_admit_noop.hepta",
+                              "tests/negative/pmm_bitmap_noop.hepta")
         },
         "bridge_sha256": sha("arch/x86_64/boot.S"), "runs": [],
     }
@@ -64,18 +68,27 @@ def main():
             builder = text_section("build/x86-pt-pair-shadow.o", folder / "builder-original")
             builder_boot = text_section("build/pt-shadow-boot.o", folder / "builder-boot")
             kernel = text_section("build/kernel.o", folder / "kernel-original")
-            assert all((original, boot, liar, liar_boot, builder, builder_boot, kernel))
+            bitmap = text_section("build/pmm-bitmap-integrity.o", folder / "bitmap-original")
+            bitmap_boot = text_section("build/pmm-bitmap-boot.o", folder / "bitmap-boot")
+            bitmap_liar = text_section("build/pmm-bitmap-unsafe.o", folder / "bitmap-liar")
+            bitmap_liar_boot = text_section("build/pmm-bitmap-dishonest-boot.o", folder / "bitmap-liar-boot")
+            assert all((original, boot, liar, liar_boot, builder, builder_boot,
+                        kernel, bitmap, bitmap_boot, bitmap_liar, bitmap_liar_boot))
             assert original == boot and liar == liar_boot and builder == builder_boot
-            assert original != liar
+            assert bitmap == bitmap_boot and bitmap_liar == bitmap_liar_boot
+            assert original != liar and bitmap != bitmap_liar
             report["native_text_sha256"] = {
                 "frame_admit": hashlib.sha256(original).hexdigest(),
                 "dishonest_admit": hashlib.sha256(liar).hexdigest(),
                 "offline_shadow": hashlib.sha256(builder).hexdigest(),
                 "pmm": hashlib.sha256(kernel).hexdigest(),
+                "full_bitmap": hashlib.sha256(bitmap).hexdigest(),
+                "dishonest_bitmap": hashlib.sha256(bitmap_liar).hexdigest(),
             }
             report["original_object_sha256"] = {
                 p: sha(p) for p in ("build/x86-shadow-frame-admit.o", "build/x86-pt-pair-shadow.o",
-                                  "build/kernel.o", "build/x86-shadow-frame-admit-unsafe.o")
+                                  "build/kernel.o", "build/x86-shadow-frame-admit-unsafe.o",
+                                  "build/pmm-bitmap-integrity.o", "build/pmm-bitmap-unsafe.o")
             }
             for mode in CASES:
                 linked = text_section(f"build/shadow-owner-{mode}.elf",
@@ -84,6 +97,9 @@ def main():
                 assert linked.count(selected) == 1, f"{mode}: HIA admission bytes missing/not unique"
                 assert linked.count(builder) == 1, f"{mode}: HIA shadow bytes missing/not unique"
                 assert linked.count(kernel) == 1, f"{mode}: HIA PMM bytes missing/not unique"
+                selected_bitmap = bitmap_liar if mode == "free-liar" else bitmap
+                assert linked.count(selected_bitmap) == 1, (
+                    f"{mode}: genuine HIA full-PMM checker missing/not unique")
                 report[mode + "_linked_hia_text"] = "EXACT_MATCH"
 
         version = subprocess.run([args.qemu, "--version"], text=True,
@@ -115,7 +131,7 @@ def main():
                 except subprocess.TimeoutExpired as error:
                     row.update(status="TIMEOUT", error=str(error))
                 report["runs"].append(row)
-        report["status"] = ("PASS" if len(report["runs"]) == 10
+        report["status"] = ("PASS" if len(report["runs"]) == 14
                             and all(row["status"] == "PASS" for row in report["runs"])
                             else "FAIL")
     except Exception as error:
