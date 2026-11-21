@@ -330,3 +330,44 @@ roots, environment substitutions, conditions, and source-path semantics
 still require evaluation. In particular, the original lexical counts may
 include inactive help-body text and test-only source roots; no rows are
 removed, and all 17 Linux gates and 422 syscall obligations remain HOLD.
+
+
+## Explicit x86 root-profile Kconfig include frontier
+
+The separate tools/linux_kconfig_root_closure.py creates a **possible lexical
+root traversal** from the tracked Git blob Kconfig, with the caller specifying
+SRCARCH=x86 and HEADER_ARCH=x86. It substitutes only these two explicit
+identifiers (dollar-name, parenthesized or braced variants); unsupported
+variables, shell expansions, globs and malformed paths remain unresolved.
+Source/rsource semantics are inherited from the existing immutable literal
+resolver, including refusal to follow symlinks or escape the Git tree.
+
+The projection rechecks every original literal edge against the complete
+tracked-path ledger before use; no lexical rows are dropped or rewritten.
+Only DIRECTIVE_LEXICAL_CANDIDATE rows with a profiled **tracked regular
+blob** target can create a traversal link. Help-body, continuation, mixed-
+indentation, untracked, nonregular and dynamically unresolved rows remain
+in the output with explicit exclusion or frontier status. Breadth-first
+search records each first parent's original line, minimum root depth, Git
+OID and complete explored/nonexplored lexical rows; cycles terminate
+without artificial depth caps. The kconfig-profile-root-edges.jsonl,
+kconfig-profile-root-files.jsonl and kconfig-profile-root-report.json files
+are SHA-256 bound to their exact literal/source inventories, pinned
+commit/tree and selected profile and retained by Inventory CI. Independent
+Git tests cover cycles, relative paths, forged ledger identities, wrong
+HEAD and worktree poisoning.
+
+Run after the existing pinned Linux inventory and literal target audit:
+
+    python3 -I -B tests/test_linux_kconfig_root_closure.py
+    python3 -I -B tools/linux_kconfig_root_closure.py \
+      --repo .upstream/linux --inventory build/linux-inventory \
+      --srcarch x86 --header-arch x86
+
+**This does not evaluate Kconfig.** The explicit x86 profile is not proof
+of the environment selected by the kernel build; reachable conditional
+lines may be inactive and unresolved syntax can omit real edges. No
+generated build-tree includes, Kconfig expressions, architecture
+configurations, driver enablement, ABI implementations or HIA backend
+features are inferred. All 17 Linux full-target gates and all 422
+x86-64 syscall obligations remain HOLD.
