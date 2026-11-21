@@ -2002,6 +2002,7 @@ test-elf64-stage: build/elf64-stage.so build/elf64-stage-unsafe.so
 	cmp build/elf64-stage.o "$$a"; cmp "$$a" "$$b"
 
 test: test-elf64-stage
+test: test-x86-sysret-admit
 
 # HIA native single-owner two-leaf PTE preflight: all validation before either store.
 .PHONY: test-x86-pt-pair
@@ -2190,3 +2191,30 @@ test-shadow-owner-hw: build/shadow-owner-hw-multiboot.elf build/shadow-owner-sta
 
 test: test-shadow-owner-hw
 test-boot: test-shadow-owner-hw
+
+# Restricted native HIA preflight for a candidate x86-64 SYSRETQ return.
+# This never emits SYSRETQ or changes the CPU privilege level.
+.PHONY: test-x86-sysret-admit
+build/x86-sysret-admit.o: src/x86_sysret_admit.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.x86-sysret.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/x86-sysret-admit.so: build/x86-sysret-admit.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/x86-sysret-allow-all.o: tests/negative/x86_sysret_allow_all.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.x86-sysret-negative.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/x86-sysret-allow-all.so: build/x86-sysret-allow-all.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+test-x86-sysret-admit: build/x86-sysret-admit.so build/x86-sysret-allow-all.so
+	@set -eu; a=$$(mktemp build/.sysret-identity-a.XXXXXX); b=$$(mktemp build/.sysret-identity-b.XXXXXX); trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_sysret_admit.hepta > "$$a"; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_sysret_admit.hepta > "$$b"; \
+	cmp "$$a" "$$b"; cmp "$$a" build/x86-sysret-admit.o
+	timeout 90 $(PYTHON) tests/test_x86_sysret_admit.py build/x86-sysret-admit.so --object build/x86-sysret-admit.o
+	$(PYTHON) tests/test_x86_sysret_admit.py build/x86-sysret-allow-all.so --expect-unsafe
