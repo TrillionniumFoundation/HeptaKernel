@@ -1887,6 +1887,10 @@ build/elf64-snapshot-boot.o: build/elf64-snapshot.o
 	objcopy --redefine-sym f0=elf_snapshot_f0 "$<" "$@"
 build/elf64-snapshot-dishonest-boot.o: build/elf64-snapshot-unsafe.o
 	objcopy --redefine-sym f0=elf_snapshot_f0 "$<" "$@"
+build/elf64-stage-boot.o: build/elf64-stage.o
+	objcopy --redefine-sym f0=elf_stage_f0 "$<" "$@"
+build/elf64-stage-dishonest-boot.o: build/elf64-stage-unsafe.o
+	objcopy --redefine-sym f0=elf_stage_f0 "$<" "$@"
 
 build/boot-elf-plan-hw.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
@@ -1904,9 +1908,16 @@ build/boot-elf-plan-snapshot-mutated.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -DHEPTAKERNEL_TEST_ELF_SNAPSHOT_MUTATED=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 build/boot-elf-plan-snapshot-liar.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -DHEPTAKERNEL_TEST_ELF_SNAPSHOT_LIAR=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-elf-plan-stage-noop.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -DHEPTAKERNEL_TEST_ELF_STAGE_NOOP=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-elf-plan-stage-corrupt.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -DHEPTAKERNEL_TEST_ELF_STAGE_CORRUPT=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-elf-plan-source-isolated.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -DHEPTAKERNEL_TEST_ELF_SOURCE_ISOLATED=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
-ELF_PLAN_HW_SUPPORT := $(ELF_PAGE_HW_SUPPORT) build/elf64-page-fill-boot.o build/elf64-snapshot-boot.o
-ELF_PLAN_HW_LIAR_SUPPORT := $(ELF_PAGE_HW_SUPPORT) build/elf64-page-fill-boot.o build/elf64-snapshot-dishonest-boot.o
+ELF_PLAN_HW_SUPPORT := $(ELF_PAGE_HW_SUPPORT) build/elf64-page-fill-boot.o build/elf64-snapshot-boot.o build/elf64-stage-boot.o
+ELF_PLAN_HW_LIAR_SUPPORT := $(ELF_PAGE_HW_SUPPORT) build/elf64-page-fill-boot.o build/elf64-snapshot-dishonest-boot.o build/elf64-stage-boot.o
+ELF_PLAN_HW_STAGE_LIAR_SUPPORT := $(ELF_PAGE_HW_SUPPORT) build/elf64-page-fill-boot.o build/elf64-snapshot-boot.o build/elf64-stage-dishonest-boot.o
 build/elf-plan-hw.elf: build/boot-elf-plan-hw.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-hw.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o
 build/elf-plan-invalid.elf: build/boot-elf-plan-invalid.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o arch/x86_64/linker.ld
@@ -1923,15 +1934,21 @@ build/elf-plan-snapshot-mutated.elf: build/boot-elf-plan-snapshot-mutated.o $(EL
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-snapshot-mutated.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o
 build/elf-plan-snapshot-liar.elf: build/boot-elf-plan-snapshot-liar.o $(ELF_PLAN_HW_LIAR_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-snapshot-liar.o $(ELF_PLAN_HW_LIAR_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o
+build/elf-plan-stage-noop.elf: build/boot-elf-plan-stage-noop.o $(ELF_PLAN_HW_STAGE_LIAR_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-stage-noop.o $(ELF_PLAN_HW_STAGE_LIAR_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o
+build/elf-plan-stage-corrupt.elf: build/boot-elf-plan-stage-corrupt.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-stage-corrupt.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o
+build/elf-plan-source-isolated.elf: build/boot-elf-plan-source-isolated.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-source-isolated.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o
 build/elf-plan-%-multiboot.elf: build/elf-plan-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-elf64-page-plan-hw: test-elf64-snapshot test-elf64-load-segments build/elf-plan-snapshot-mutated-multiboot.elf build/elf-plan-snapshot-liar-multiboot.elf build/elf-plan-hw-multiboot.elf build/elf-plan-invalid-multiboot.elf build/elf-plan-noop-multiboot.elf build/elf-plan-decoy-multiboot.elf build/elf-plan-overlap-multiboot.elf build/elf-plan-layout-liar-multiboot.elf
+test-elf64-page-plan-hw: test-elf64-stage test-elf64-snapshot test-elf64-load-segments build/elf-plan-stage-noop-multiboot.elf build/elf-plan-stage-corrupt-multiboot.elf build/elf-plan-source-isolated-multiboot.elf build/elf-plan-snapshot-mutated-multiboot.elf build/elf-plan-snapshot-liar-multiboot.elf build/elf-plan-hw-multiboot.elf build/elf-plan-invalid-multiboot.elf build/elf-plan-noop-multiboot.elf build/elf-plan-decoy-multiboot.elf build/elf-plan-overlap-multiboot.elf build/elf-plan-layout-liar-multiboot.elf
 	@set -eu; a=$$(mktemp build/.elf-plan-text-a.XXXXXX); b=$$(mktemp build/.elf-plan-text-b.XXXXXX); \
 	  trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
 	  sha256sum build/elf64-page-plan.o build/elf64-page-plan-unsafe.o \
 	    build/elf64-load-segments.o build/elf64-load-unsafe.o \
-	    build/elf64-snapshot.o build/elf64-snapshot-unsafe.o > build/elf-plan-native-inputs.sha256; \
+	    build/elf64-snapshot.o build/elf64-snapshot-unsafe.o build/elf64-stage.o build/elf64-stage-unsafe.o > build/elf-plan-native-inputs.sha256; \
 	  objcopy -O binary --only-section=.text build/elf64-page-plan.o "$$a"; \
 	  objcopy -O binary --only-section=.text build/elf64-page-plan-boot.o "$$b"; cmp "$$a" "$$b"; \
 	  objcopy -O binary --only-section=.text build/elf64-page-plan-unsafe.o "$$a"; \
@@ -1944,6 +1961,10 @@ test-elf64-page-plan-hw: test-elf64-snapshot test-elf64-load-segments build/elf-
 	  objcopy -O binary --only-section=.text build/elf64-snapshot-boot.o "$$b"; cmp "$$a" "$$b"; \
 	  objcopy -O binary --only-section=.text build/elf64-snapshot-unsafe.o "$$a"; \
 	  objcopy -O binary --only-section=.text build/elf64-snapshot-dishonest-boot.o "$$b"; cmp "$$a" "$$b"; \
+	  objcopy -O binary --only-section=.text build/elf64-stage.o "$$a"; \
+	  objcopy -O binary --only-section=.text build/elf64-stage-boot.o "$$b"; cmp "$$a" "$$b"; \
+	  objcopy -O binary --only-section=.text build/elf64-stage-unsafe.o "$$a"; \
+	  objcopy -O binary --only-section=.text build/elf64-stage-dishonest-boot.o "$$b"; cmp "$$a" "$$b"; \
 	  sha256sum --check build/elf-plan-native-inputs.sha256
 	timeout 160 $(PYTHON) tests/test_elf64_page_plan_qemu.py --qemu "$(QEMU)"
 
