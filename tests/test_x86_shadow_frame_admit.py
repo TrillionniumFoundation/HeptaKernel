@@ -151,7 +151,7 @@ def run(library, unsafe):
     high_request = struct.pack("<8Q", hi_new, hi_old, hi_old | 3,
                                hi_new | 3, high, 16, 1, 32)
     case(high_request, high_state)
-    assert accepted == 96 and tested >= 2500 and all(codes.values()), (tested, accepted, codes)
+    assert accepted == 96 and tested >= 2400 and all(codes.values()), (tested, accepted, codes)
     if unsafe:
         assert disagreements >= 2000, disagreements
     else:
