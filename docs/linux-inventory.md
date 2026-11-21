@@ -397,3 +397,12 @@ by these *lexical directory profiles* is not declared inactive in real Linux.
 This extends architecture-wide source auditing, not implemented HIA kernel
 functionality: all 17 full acceptance gates and 422 x86 syscall obligations
 remain open, and `make full-acceptance` must still report HOLD.
+
+
+## Native x86-64 and x32 composite syscall source obligations
+
+tools/linux_x86_syscall_matrix.py derives two source-only dispatch inventories from the original pinned 422-row arch/x86/entry/syscalls/syscall_64.tbl. It cross-checks the complete lossless syscall ledger, original immutable Git blob, SHA-256 digests, and vendored snapshot, rejecting malformed rows and duplicated numbers rather than dropping them.
+
+Native x86-64 contains **386 source dispatch obligations** (339 common plus 47 64-only); x32 contains **375 source dispatch obligations** (the same 339 common rows plus 36 x32-special rows numbered 512–547). x32 dispatch numbers retain the high ABI bit 0x40000000. These 761 projected rows are **not** 761 distinct syscalls, nor completed syscall implementations; they retain all original 422 source rows and file/line/blob identity. Missing declared handlers and noreturn annotations are retained explicitly. The generated syscall-x86-native-obligations.jsonl and syscall-x32-obligations.jsonl files and syscall-x86-dual-report.json bind exact-source SHA-256 outputs.
+
+Inventory CI independently reconstructs both dispatch tables directly from pinned Git source bytes and checks all rows, counts and negative fixtures. This does not establish x32 compat argument layouts, Kconfig activation, syscall trampolines, errno behavior or HIA kernel handlers. All 17 Linux gates remain HOLD; the 422 original syscall source obligations are unchanged.
