@@ -10,12 +10,14 @@ on:
       - 'tools/linux_kconfig_include_targets.py'
       - 'tools/linux_kconfig_root_closure.py'
       - 'tools/linux_kconfig_profile_matrix.py'
+      - 'tools/linux_x86_syscall_matrix.py'
       - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_kconfig_scoped.py'
       - 'tests/test_linux_kconfig_include_targets.py'
       - 'tests/test_linux_kconfig_root_closure.py'
       - 'tests/test_linux_kconfig_profile_matrix.py'
+      - 'tests/test_linux_x86_syscall_matrix.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -30,12 +32,14 @@ on:
       - 'tools/linux_kconfig_include_targets.py'
       - 'tools/linux_kconfig_root_closure.py'
       - 'tools/linux_kconfig_profile_matrix.py'
+      - 'tools/linux_x86_syscall_matrix.py'
       - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_kconfig_scoped.py'
       - 'tests/test_linux_kconfig_include_targets.py'
       - 'tests/test_linux_kconfig_root_closure.py'
       - 'tests/test_linux_kconfig_profile_matrix.py'
+      - 'tests/test_linux_x86_syscall_matrix.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -65,6 +69,7 @@ jobs:
           python3 -I -B tests/test_linux_kconfig_include_targets.py
           python3 -I -B tests/test_linux_kconfig_root_closure.py
           python3 -I -B tests/test_linux_kconfig_profile_matrix.py
+          python3 -I -B tests/test_linux_x86_syscall_matrix.py
 
       - name: Checkout exact pinned upstream Linux (not a moving branch)
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -84,6 +89,78 @@ jobs:
             --repo .upstream/linux \
             --lock compatibility/linux-source-lock.json \
             --out build/linux-inventory
+
+      - name: Bind native and x32 common-plus-special syscall source obligations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I -B tools/linux_x86_syscall_matrix.py \
+            --repo .upstream/linux --inventory build/linux-inventory \
+            --lock compatibility/linux-source-lock.json \
+            --vendor third_party/linux/arch/x86/entry/syscalls/syscall_64.tbl
+          python3 - <<'PY'
+          import base64, hashlib, json, subprocess
+          from pathlib import Path
+          root = Path("build/linux-inventory")
+          out = json.loads((root/"syscall-x86-dual-report.json").read_bytes())
+          abi = {
+              "x86_64": [json.loads(x) for x in (root/"syscall-x86-native-obligations.jsonl").read_bytes().splitlines()],
+              "x32": [json.loads(x) for x in (root/"syscall-x32-obligations.jsonl").read_bytes().splitlines()],
+          }
+          table_path = b"arch/x86/entry/syscalls/syscall_64.tbl"
+          original = [json.loads(x) for x in (root/"syscall-table-rows.jsonl").read_bytes().splitlines()
+                      if base64.b64decode(json.loads(x)["path_b64"]) == table_path]
+          assert len(original) == 422 and out["counts"]["original_source_rows"] == 422
+          assert out["status"] == "SOURCE_ONLY_NO_IMPLEMENTATION_OR_KCONFIG_EVALUATION"
+          assert not out["inventory_complete"] and not out["full_rewrite_complete"]
+          assert out["x32_dispatch_bit"] == 0x40000000
+          paths = {base64.b64decode(x["path_b64"]): x for x in
+                   map(json.loads, (root/"source-paths.jsonl").read_bytes().splitlines())}
+          oid = paths[table_path]["oid"]
+          blob = subprocess.check_output(["git","-C",".upstream/linux","cat-file","blob",oid])
+          assert hashlib.sha256(blob).hexdigest() == out["source_blob_sha256"]
+          assert out["source_blob_oid"] == oid
+          assert out["linux_commit"] == subprocess.check_output(
+              ["git","-C",".upstream/linux","rev-parse","HEAD"], text=True).strip()
+          expected = {"x86_64": [], "x32": []}
+          groups = {"64": 0, "common": 0, "x32": 0}
+          for lineno, raw in enumerate(blob.split(b"\n"), 1):
+              parts = raw.partition(b"#")[0].split()
+              if not parts:
+                  continue
+              assert len(parts) in (3, 4, 6)
+              number, source_abi, name = int(parts[0]), parts[1].decode(), parts[2].decode()
+              assert source_abi in groups
+              groups[source_abi] += 1
+              handler = parts[3].decode() if len(parts) >= 4 else None
+              for target in ("x86_64", "x32"):
+                  if source_abi not in (("64","common") if target == "x86_64" else ("x32","common")):
+                      continue
+                  expected[target].append((lineno, raw, number, name, source_abi, handler,
+                      number | (0 if target == "x86_64" else 0x40000000), len(parts) == 6))
+          for target in expected:
+              observed = [(
+                  x["source_line"], base64.b64decode(x["source_raw_b64"]), x["source_number"],
+                  x["name"], x["source_abi"], x["declared_entry"], x["dispatch_number"],
+                  x["noreturn_declaration"]) for x in abi[target]]
+              assert observed == expected[target]
+              assert all(x["source_blob_oid"] == oid and
+                         x["implementation_status"] == "NOT_IMPLEMENTED" and
+                         x["entry_status"] == ("DECLARED_ENTRY_NOT_IMPLEMENTED"
+                           if x["declared_entry"] else "NO_ENTRY_DECLARED") for x in abi[target])
+              filename = "syscall-x86-native-obligations.jsonl" if target == "x86_64" else "syscall-x32-obligations.jsonl"
+              key = "native_sha256" if target == "x86_64" else "x32_sha256"
+              assert hashlib.sha256((root/filename).read_bytes()).hexdigest() == out[key]
+          assert groups == {"common": 339, "64": 47, "x32": 36}
+          assert len(abi["x86_64"]) == 386 and len(abi["x32"]) == 375
+          assert len(expected["x32"]) == groups["common"] + groups["x32"]
+          assert out["counts"]["native_dispatch_obligations"] == 386
+          assert out["counts"]["x32_dispatch_obligations"] == 375
+          assert all(out["counts"][k] == v for k, v in (
+              ("common_rows", 339), ("native_only_rows", 47), ("x32_only_rows", 36)))
+          print("X86_64_X32_SOURCE_PROJECTION: PASS", len(abi["x86_64"]), len(abi["x32"]))
+          print("X86_64_X32_REAL_SYSCALL_IMPLEMENTATION: HOLD")
+          PY
 
       - name: Inventory immutable UAPI C tag mentions (lexical, not ABI closure)
         shell: bash
@@ -858,6 +935,9 @@ jobs:
             build/linux-inventory/uapi-tag-mentions.jsonl
             build/linux-inventory/uapi-tag-report.json
             build/linux-inventory/syscall-table-rows.jsonl
+            build/linux-inventory/syscall-x86-native-obligations.jsonl
+            build/linux-inventory/syscall-x32-obligations.jsonl
+            build/linux-inventory/syscall-x86-dual-report.json
             build/linux-inventory/module-device-table-mentions.jsonl
             build/linux-inventory/module-device-table-invocations.jsonl
             build/linux-inventory/report.json
