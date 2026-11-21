@@ -2051,3 +2051,28 @@ test-pt-pair-hw: build/pt-pair-hw-multiboot.elf build/pt-pair-stale-multiboot.el
 
 test: test-pt-pair-hw
 test-boot: test-pt-pair-hw
+
+# Genuine HIA offline shadow 4KiB table construction; no live parent publication.
+.PHONY: test-x86-pt-pair-shadow
+build/x86-pt-pair-shadow.o: src/x86_pt_pair_shadow.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.x86-pt-pair-shadow.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/x86-pt-pair-shadow.so: build/x86-pt-pair-shadow.o
+	ld -shared -z noexecstack -o "$@" "$<"
+build/x86-pt-pair-shadow-unsafe.o: tests/negative/x86_pt_pair_shadow_noop.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.x86-pt-pair-shadow-unsafe.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/x86-pt-pair-shadow-unsafe.so: build/x86-pt-pair-shadow-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-x86-pt-pair-shadow: build/x86-pt-pair-shadow.so build/x86-pt-pair-shadow-unsafe.so
+	timeout 90 $(PYTHON) tests/test_x86_pt_pair_shadow.py build/x86-pt-pair-shadow.so --object build/x86-pt-pair-shadow.o
+	$(PYTHON) tests/test_x86_pt_pair_shadow.py build/x86-pt-pair-shadow-unsafe.so --expect-unsafe
+	@set -eu; a=$$(mktemp build/.pair-shadow-a.XXXXXX); b=$$(mktemp build/.pair-shadow-b.XXXXXX); \
+	trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH='' "$(HEPTA_COMPILER)" < src/x86_pt_pair_shadow.hepta > "$$a"; \
+	env -i PATH='' "$(HEPTA_COMPILER)" < src/x86_pt_pair_shadow.hepta > "$$b"; \
+	cmp build/x86-pt-pair-shadow.o "$$a"; cmp "$$a" "$$b"
+
+test: test-x86-pt-pair-shadow
