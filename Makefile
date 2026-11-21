@@ -589,7 +589,7 @@ test-linux-inventory:
 	$(PYTHON) tests/test_linux_kconfig_relations.py
 	$(PYTHON) tests/test_linux_kconfig_scoped.py
 
-test: test-x86-pt-pair test-elf64-snapshot test-elf64-page-plan-hw test-elf64-page-hw test-elf64-page-plan test-elf64-page-fill test-elf64-load-segments test-elf64-exec-admit test-pmm-bitmap-integrity test-cow-frame-binding test-cow-abort-pte-guarded test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-x86-shadow-frame-admit test-x86-pt-pair test-elf64-snapshot test-elf64-page-plan-hw test-elf64-page-hw test-elf64-page-plan test-elf64-page-fill test-elf64-load-segments test-elf64-exec-admit test-pmm-bitmap-integrity test-cow-frame-binding test-cow-abort-pte-guarded test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -2107,3 +2107,27 @@ test-pt-shadow-hw: build/pt-shadow-hw-multiboot.elf build/pt-shadow-stale-multib
 	$(PYTHON) tests/test_x86_pt_shadow_qemu.py --qemu "$(QEMU)"
 test: test-pt-shadow-hw
 test-boot: test-pt-shadow-hw
+
+# Shadow leaf table publish preflight: PMM occupancy, frame geometry and parent word.
+# No CRx operation, atomic compare/exchange, or authenticated owner in this stage.
+build/x86-shadow-frame-admit.o: src/x86_shadow_frame_admit.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.shadow-owner.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; \
+	test -s "$$tmp"; test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/x86-shadow-frame-admit.so: build/x86-shadow-frame-admit.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/x86-shadow-frame-admit-unsafe.o: tests/negative/x86_shadow_frame_admit_noop.hepta | build check-compiler
+	"$(HEPTA_COMPILER)" < "$<" > "$@"
+
+build/x86-shadow-frame-admit-unsafe.so: build/x86-shadow-frame-admit-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+.PHONY: test-x86-shadow-frame-admit
+test-x86-shadow-frame-admit: build/x86-shadow-frame-admit.so build/x86-shadow-frame-admit-unsafe.so
+	@set -eu; tmp=$$(mktemp build/.shadow-owner-identity.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_shadow_frame_admit.hepta > "$$tmp"; \
+	cmp "$$tmp" build/x86-shadow-frame-admit.o
+	timeout 90 $(PYTHON) tests/test_x86_shadow_frame_admit.py build/x86-shadow-frame-admit.so --object build/x86-shadow-frame-admit.o
+	$(PYTHON) tests/test_x86_shadow_frame_admit.py build/x86-shadow-frame-admit-unsafe.so --expect-unsafe
