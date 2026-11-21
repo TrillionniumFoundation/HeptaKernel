@@ -665,6 +665,11 @@ jobs:
             build/x86-cr3-gate.so
             build/cr3-allow-all.o
             build/cr3-allow-all.so
+            build/x86-syscall-msr-admit-report.json
+            build/x86-syscall-msr-admit.o
+            build/x86-syscall-msr-admit.so
+            build/x86-syscall-msr-unsafe.o
+            build/x86-syscall-msr-unsafe.so
             build/x86-upper-user-report.json
             build/x86-upper-user.o
             build/x86-upper-user.so
