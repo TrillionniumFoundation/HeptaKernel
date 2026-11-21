@@ -1,0 +1,38 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(sysret_admit)
+fn sysret_admit(user_rip:u64,user_rsp:u64,user_rflags:u64) -> (u32) effects(trap) entry(start)
+block start(user_rip:u64,user_rsp:u64,user_rflags:u64)
+  low:u64 = const() {"value":4096}
+  upper:u64 = const() {"value":140737488355328}
+  rip_min:bool = compare.ge(user_rip,low)
+  rip_max:bool = compare.lt(user_rip,upper)
+  rip_ok:bool = bool.and(rip_min,rip_max)
+  branch rip_ok stack(user_rsp,user_rflags,low,upper) bad_rip()
+block bad_rip()
+  status_rip:u32 = const() {"value":1}
+  ret(status_rip)
+block stack(rsp1:u64,flags1:u64,min1:u64,max1:u64)
+  stack_min:bool = compare.ge(rsp1,min1)
+  stack_max:bool = compare.lt(rsp1,max1)
+  stack_ok:bool = bool.and(stack_min,stack_max)
+  branch stack_ok flags(flags1) bad_rsp()
+block bad_rsp()
+  status_rsp:u32 = const() {"value":2}
+  ret(status_rsp)
+block flags(f2:u64)
+  required:u64 = const() {"value":514}
+  forbidden:u64 = const() {"value":18446744073709548840}
+  zero:u64 = const() {"value":0}
+  retained:u64 = bit.and(f2,required)
+  extras:u64 = bit.and(f2,forbidden)
+  required_ok:bool = compare.eq(retained,required)
+  no_unsafe:bool = compare.eq(extras,zero)
+  flags_ok:bool = bool.and(required_ok,no_unsafe)
+  branch flags_ok accepted() bad_flags()
+block bad_flags()
+  status_flags:u32 = const() {"value":3}
+  ret(status_flags)
+block accepted()
+  status_ok:u32 = const() {"value":0}
+  ret(status_ok)
+end
