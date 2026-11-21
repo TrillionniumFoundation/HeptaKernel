@@ -226,7 +226,7 @@ jobs:
         run: |
           make test-pt-shadow-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
-      - name: Verify live HIA PMM-owned shadow parent admission and QEMU CPU reads
+      - name: Verify live HIA shadow publication with native full PMM bitmap and liar negatives
         shell: bash
         run: |
           make test-shadow-owner-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
@@ -682,6 +682,10 @@ jobs:
             build/shadow-owner-liar-multiboot.elf
             build/shadow-owner-bitmap-multiboot.elf
             build/shadow-owner-recheck-multiboot.elf
+            build/shadow-owner-free-stale-multiboot.elf
+            build/shadow-owner-free-liar-multiboot.elf
+            build/pmm-bitmap-boot.o
+            build/pmm-bitmap-dishonest-boot.o
             build/shadow-owner-admit-boot.o
             build/shadow-owner-admit-unsafe-boot.o
             build/pt-shadow-hw-multiboot.elf
