@@ -666,6 +666,12 @@ hia_idt_next64:
     call reservation_admit64
     leaq message_reservation_pass(%rip), %rsi
     call puts64
+#if defined(HEPTAKERNEL_TEST_SHADOW_OWNER_HW) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_LIAR) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_BITMAP) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_RECHECK)
+    /* Terminal isolated experiment: genuine HIA PMM allocation, HIA offline
+     * leaf construction, HIA frame admission, then NON-HIA PDE/CR3 observer. */
+    call shadow_owner_hardware_exercise64
+    jmp fail64
+#endif
 #if defined(HEPTAKERNEL_TEST_PT_SHADOW_HW) || defined(HEPTAKERNEL_TEST_PT_SHADOW_STALE) || defined(HEPTAKERNEL_TEST_PT_SHADOW_LIAR) || defined(HEPTAKERNEL_TEST_PT_SHADOW_TAMPER)
     /* Isolated real MMU publication of a HIA-built, unpublished PTE page.
      * Parent PDE and CR3 remain explicitly NON-HIA observer instructions. */
@@ -3098,6 +3104,320 @@ pt_shadow_tail_scan:
 #endif
 #endif
 
+
+/* Single-CPU QEMU PMM-owned shadow publication experiment.
+ * All allocator, offline table, and frame-admit functions are untouched
+ * selfhost_elf HIA native objects. Parent PDE/CR3 and observation remain
+ * explicitly NON-HIA. The old table and new shadow are actual frames
+ * allocated from the E820-admitted 0x600000 HIA PMM state. No Linux VMM,
+ * verified exclusive ownership, concurrent publication or SMP claim. */
+#if defined(HEPTAKERNEL_TEST_SHADOW_OWNER_HW) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_LIAR) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_BITMAP) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_RECHECK)
+shadow_owner_hardware_exercise64:
+    movq $0x100, case_index(%rip)
+    movq $ARENA_MIN, %rdi
+    movq $2, %rsi
+    call owner_admit64
+    movq $0x101, case_index(%rip)
+    movq $0x600000, %rdi
+    movq $17, %rsi
+    call owner_admit64
+    movq $0x102, case_index(%rip)
+
+    /* Actual Core v8 PMM INIT and ALLOC_RUN(2): 0x601000, 0x602000. */
+    leaq owner_init_b(%rip), %rdi
+    movl $32, %esi
+    leaq owner_alloc_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq owner_b_state(%rip), %r8
+    movl $STATE_BYTES, %r9d
+    call f0
+    movq $0x103, case_index(%rip)
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, owner_alloc_reply(%rip)
+    jne fail64
+    cmpq $16, owner_alloc_reply+8(%rip)  /* usable pages after one reserved */
+    jne fail64
+    leaq owner_alloc_two(%rip), %rdi
+    movl $32, %esi
+    leaq owner_alloc_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq owner_b_state(%rip), %r8
+    movl $STATE_BYTES, %r9d
+    call f0
+    movq $0x104, case_index(%rip)
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, owner_alloc_reply(%rip)
+    jne fail64
+    cmpq $0x601000, owner_alloc_reply+8(%rip)
+    jne fail64
+    movabsq $0x314d4d504b484941, %rax
+    cmpq %rax, owner_b_state(%rip)
+    jne fail64
+    cmpq $17, owner_b_state+8(%rip)
+    jne fail64
+    cmpq $0x600000, owner_b_state+16(%rip)
+    jne fail64
+    cmpq $1, owner_b_state+24(%rip)
+    jne fail64
+    cmpq $14, owner_b_state+32(%rip)
+    jne fail64
+    cmpb $7, owner_b_state+64(%rip)
+    jne fail64
+    movq $0x105, case_index(%rip)
+
+    /* Both physical pages are mapped in the 6MiB identity huge leaf.
+     * Old table begins all-zero; shadow destination starts with canaries.
+     * The HIA table builder must produce every byte of the latter. */
+    cld
+    movq $0x602000, %rdi
+    xorq %rax, %rax
+    movl $512, %ecx
+    rep stosq
+    movq $0x601000, %rdi
+    movabsq $0xa5a5a5a5a5a5a5a5, %rax
+    movl $512, %ecx
+    rep stosq
+    leaq pt_shadow_hw_request+64(%rip), %rdi
+    xorq %rax, %rax
+    movl $512, %ecx
+    rep stosq
+    movq $ARENA_MIN, %rdi
+    movabsq $0x123456789abcdef0, %rax
+    movq %rax, (%rdi)
+    movabsq $0x0fedcba987654321, %rax
+    movq %rax, PAGE_BYTES(%rdi)
+    movq $0, pt_shadow_hw_request(%rip)
+    movq $0, pt_shadow_hw_request+8(%rip)
+    movabsq $0x8000000000401003, %rax
+    movq %rax, pt_shadow_hw_request+16(%rip)
+    movq $1, pt_shadow_hw_request+24(%rip)
+    movq $0, pt_shadow_hw_request+32(%rip)
+    movabsq $0x8000000000400003, %rax
+    movq %rax, pt_shadow_hw_request+40(%rip)
+    movl pte_caps(%rip), %eax
+    movq %rax, pt_shadow_hw_request+48(%rip)
+    movq $0, pt_shadow_hw_request+56(%rip)
+    movabsq $0xcafebabecafebabe, %rax
+    movq %rax, pt_shadow_hw_receipt(%rip)
+    movq %rax, pt_shadow_hw_receipt+8(%rip)
+
+    /* NON-HIA bridge switches the 4MiB parent from 2MiB identity leaf
+     * to the PMM-owned old zero leaf table, before HIA admission. */
+    movq page_directory+16(%rip), %rax
+    andq $-97, %rax
+    cmpq $0x400083, %rax
+    jne fail64
+    movq $0x602003, page_directory+16(%rip)
+    movq %cr3, %rax
+    movq %rax, %cr3
+    movq $0x106, case_index(%rip)
+
+    leaq pt_shadow_hw_request(%rip), %rdi
+    movl $4160, %esi
+    movq $0x601000, %rdx
+    movl $4096, %ecx
+    leaq pt_shadow_hw_receipt(%rip), %r8
+    movl $16, %r9d
+    call pt_shadow_f0               /* genuine, unchanged HIA table builder */
+    movq $0x107, case_index(%rip)
+    testl %eax, %eax
+    jne fail64
+
+    /* Byte-oracle independently checks all 512 words and builder receipt.
+     * Active old physical page and immutable input snapshot remain zero. */
+    movabsq $0x8000000000401003, %rax
+    cmpq %rax, 0x601000
+    jne fail64
+    cmpq %rax, pt_shadow_hw_receipt(%rip)
+    jne fail64
+    movabsq $0x8000000000400003, %rax
+    cmpq %rax, 0x601008
+    jne fail64
+    cmpq %rax, pt_shadow_hw_receipt+8(%rip)
+    jne fail64
+    leaq pt_shadow_hw_request+64(%rip), %rsi
+    movq $0x602000, %rdx
+    movq $0x601010, %rdi
+    movl $510, %ecx
+shadow_owner_full_scan:
+    cmpq $0, (%rsi)
+    jne fail64
+    cmpq $0, (%rdx)
+    jne fail64
+    cmpq $0, (%rdi)
+    jne fail64
+    addq $8, %rsi
+    addq $8, %rdx
+    addq $8, %rdi
+    loop shadow_owner_full_scan
+    cmpq $0, pt_shadow_hw_request+64(%rip)
+    jne fail64
+    cmpq $0, 0x602000
+    jne fail64
+    cmpq $0x602003, page_directory+16(%rip)
+    jne fail64
+    movq $0x108, case_index(%rip)
+
+    /* Request: new/old PMM frames, exact old/new nonleaf PDE, PMM
+     * arena geometry and hardware-observed MAXPHYADDR width. */
+    movq $0x601000, shadow_owner_request(%rip)
+    movq $0x602000, shadow_owner_request+8(%rip)
+    movq $0x602003, shadow_owner_request+16(%rip)
+    movq $0x601003, shadow_owner_request+24(%rip)
+    movq $0x600000, shadow_owner_request+32(%rip)
+    movq $17, shadow_owner_request+40(%rip)
+    movq $1, shadow_owner_request+48(%rip)
+    movl pte_caps(%rip), %eax
+    andl $255, %eax
+    movq %rax, shadow_owner_request+56(%rip)
+#ifdef HEPTAKERNEL_TEST_SHADOW_OWNER_STALE
+    movq $0x602007, shadow_owner_request+16(%rip)
+#endif
+#ifdef HEPTAKERNEL_TEST_SHADOW_OWNER_BITMAP
+    andb $0xfd, owner_b_state+64(%rip)
+#endif
+    movabsq $0xa6a6a6a6a6a6a6a6, %rax
+    movq %rax, shadow_owner_reply(%rip)
+    movq %rax, shadow_owner_reply+8(%rip)
+    leaq shadow_owner_request(%rip), %rdi
+    movl $64, %esi
+    leaq shadow_owner_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq owner_b_state(%rip), %r8
+    movl $67, %r9d       /* exact HIA PMM header + ceil(17/8) bitmap */
+    call shadow_admit_f0  /* genuine HIA read-only snapshot preflight */
+    movq $0x109, case_index(%rip)
+#if defined(HEPTAKERNEL_TEST_SHADOW_OWNER_STALE)
+    cmpl $5, %eax
+    jne fail64
+    jmp shadow_owner_refused
+#elif defined(HEPTAKERNEL_TEST_SHADOW_OWNER_BITMAP)
+    cmpl $7, %eax
+    jne fail64
+    jmp shadow_owner_refused
+#elif defined(HEPTAKERNEL_TEST_SHADOW_OWNER_LIAR)
+    /* Malicious HIA always-success leaves the receipt at its canary.
+     * Do not accept a status 0 without both independent receipt words. */
+    testl %eax, %eax
+    jne fail64
+    jmp shadow_owner_refused
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0x601003, shadow_owner_reply(%rip)
+    jne fail64
+    cmpq $0x601000, shadow_owner_reply+8(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_SHADOW_OWNER_RECHECK
+    /* The first HIA admission passed. Mutate LIVE PMM state after it
+     * to demonstrate a second HIA read denies post-admission reuse. */
+    andb $0xfd, owner_b_state+64(%rip)
+    movabsq $0xa6a6a6a6a6a6a6a6, %rax
+    movq %rax, shadow_owner_reply(%rip)
+    movq %rax, shadow_owner_reply+8(%rip)
+    leaq shadow_owner_request(%rip), %rdi
+    movl $64, %esi
+    leaq shadow_owner_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq owner_b_state(%rip), %r8
+    movl $67, %r9d
+    call shadow_admit_f0
+    cmpl $7, %eax
+    jne fail64
+    jmp shadow_owner_refused
+#else
+    /* PRE-publish recheck of actual live parent and claimed PMM slots.
+     * This is not an atomic CAS or concurrency-safe ownership proof. */
+    cmpq $0x602003, page_directory+16(%rip)
+    jne fail64
+    cmpb $7, owner_b_state+64(%rip)
+    jne fail64
+    movabsq $0x8000000000401003, %rax
+    cmpq %rax, 0x601000
+    jne fail64
+    movabsq $0x8000000000400003, %rax
+    cmpq %rax, 0x601008
+    jne fail64
+    /* A single parent PDE write and CR3 reload are NON-HIA bridge. */
+    movq $0x601003, page_directory+16(%rip)
+    movq %cr3, %rax
+    movq %rax, %cr3
+    movq $ARENA_MIN, %rdi
+    movabsq $0x0fedcba987654321, %rax
+    cmpq %rax, (%rdi)
+    jne fail64
+    movabsq $0x123456789abcdef0, %rax
+    cmpq %rax, PAGE_BYTES(%rdi)
+    jne fail64
+    /* Hardware accessed bits may become set in real HIA page-table RAM. */
+    movq 0x601000, %rax
+    andq $-33, %rax
+    movabsq $0x8000000000401003, %rdx
+    cmpq %rdx, %rax
+    jne fail64
+    movq 0x601008, %rax
+    andq $-33, %rax
+    movabsq $0x8000000000400003, %rdx
+    cmpq %rdx, %rax
+    jne fail64
+    /* Hardware page walks set Accessed on the published parent PDE.
+     * Check its identity/permissions, not an impossible untouched A bit. */
+    movq page_directory+16(%rip), %rax
+    andq $-33, %rax
+    cmpq $0x601003, %rax
+    jne fail64
+    cmpb $7, owner_b_state+64(%rip)
+    jne fail64
+    leaq message_shadow_owner_hw(%rip), %rsi
+    call puts64
+    movl $0x10, %eax
+    jmp debug_exit64
+#endif
+#endif
+
+shadow_owner_refused:
+    /* Negative observer verifies no PMM-owned shadow was published. */
+    cmpq $0x602003, page_directory+16(%rip)
+    jne fail64
+    movabsq $0xa6a6a6a6a6a6a6a6, %rax
+    cmpq %rax, shadow_owner_reply(%rip)
+    jne fail64
+    cmpq %rax, shadow_owner_reply+8(%rip)
+    jne fail64
+    movabsq $0x8000000000401003, %rax
+    cmpq %rax, 0x601000
+    jne fail64
+    movabsq $0x8000000000400003, %rax
+    cmpq %rax, 0x601008
+    jne fail64
+    cmpq $0, 0x602000
+    jne fail64
+    cmpq $0, pt_shadow_hw_request+64(%rip)
+    jne fail64
+    cmpq $14, owner_b_state+32(%rip)
+    jne fail64
+#if defined(HEPTAKERNEL_TEST_SHADOW_OWNER_BITMAP) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_RECHECK)
+    cmpb $5, owner_b_state+64(%rip)
+#else
+    cmpb $7, owner_b_state+64(%rip)
+#endif
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_SHADOW_OWNER_STALE
+    leaq message_shadow_owner_stale(%rip), %rsi
+#elif defined(HEPTAKERNEL_TEST_SHADOW_OWNER_LIAR)
+    leaq message_shadow_owner_liar(%rip), %rsi
+#elif defined(HEPTAKERNEL_TEST_SHADOW_OWNER_BITMAP)
+    leaq message_shadow_owner_bitmap(%rip), %rsi
+#else
+    leaq message_shadow_owner_recheck(%rip), %rsi
+#endif
+    call puts64
+    movl $0x11, %eax
+    jmp debug_exit64
+#endif
+
 /* Test-only fixture: real Core v8 HIA writes actual 4KiB PTE leaves.
  * E820 admission is HIA; caller owns both frames and table exclusively.
  * Parent PDE, CR3 reload and CPU observations are explicitly NON-HIA. */
@@ -5419,6 +5739,16 @@ message_map_pass:
     .asciz "HEPTAKERNEL HIA E820 VERIFIED\r\n"
 message_reservation_pass:
     .asciz "HEPTAKERNEL HIA RESERVATIONS VERIFIED\r\n"
+message_shadow_owner_hw:
+    .asciz "HEPTAKERNEL HIA LIVE PMM SHADOW FRAME CPU PUBLISH VERIFIED\r\n"
+message_shadow_owner_stale:
+    .asciz "HEPTAKERNEL HIA LIVE SHADOW STALE PARENT REFUSED UNCHANGED\r\n"
+message_shadow_owner_liar:
+    .asciz "HEPTAKERNEL HIA LIVE SHADOW DISHONEST ADMIT DETECTED\r\n"
+message_shadow_owner_bitmap:
+    .asciz "HEPTAKERNEL HIA LIVE SHADOW MISSING PMM CLAIM REFUSED\r\n"
+message_shadow_owner_recheck:
+    .asciz "HEPTAKERNEL HIA LIVE SHADOW POSTADMIT PMM CHANGE REFUSED\r\n"
 message_pt_shadow_live:
     .asciz "HEPTAKERNEL HIA OFFLINE PT SHADOW HARDWARE VERIFIED\r\n"
 message_pt_shadow_stale:
@@ -5789,6 +6119,8 @@ reservation_unused:       .skip 16
 .balign 8
 pt_shadow_hw_request: .skip 4160
 pt_shadow_hw_receipt: .skip 16
+shadow_owner_request:  .skip 64
+shadow_owner_reply:    .skip 16
 .balign 4096
 pt_shadow_hw_table:   .skip 4096
 pt_pair_hw_request: .skip 64

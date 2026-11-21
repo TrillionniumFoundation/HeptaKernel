@@ -2131,3 +2131,42 @@ test-x86-shadow-frame-admit: build/x86-shadow-frame-admit.so build/x86-shadow-fr
 	cmp "$$tmp" build/x86-shadow-frame-admit.o
 	timeout 90 $(PYTHON) tests/test_x86_shadow_frame_admit.py build/x86-shadow-frame-admit.so --object build/x86-shadow-frame-admit.o
 	$(PYTHON) tests/test_x86_shadow_frame_admit.py build/x86-shadow-frame-admit-unsafe.so --expect-unsafe
+
+# End-to-end QEMU frame-owner preflight on two ACTUALLY HIA-allocated pages.
+# HIA constructs the offline shadow, HIA verifies the current PMM snapshot
+# and only the expressly non-HIA isolated bridge performs PDE/CR3 publication.
+.PHONY: test-shadow-owner-hw
+build/shadow-owner-admit-boot.o: build/x86-shadow-frame-admit.o
+	objcopy --redefine-sym f0=shadow_admit_f0 "$<" "$@"
+build/shadow-owner-admit-unsafe-boot.o: build/x86-shadow-frame-admit-unsafe.o
+	objcopy --redefine-sym f0=shadow_admit_f0 "$<" "$@"
+build/boot-shadow-owner-hw.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SHADOW_OWNER_HW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-shadow-owner-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SHADOW_OWNER_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-shadow-owner-liar.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SHADOW_OWNER_LIAR=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-shadow-owner-bitmap.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SHADOW_OWNER_BITMAP=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-shadow-owner-recheck.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SHADOW_OWNER_RECHECK=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+SHADOW_OWNER_HW_SUPPORT := $(PT_SHADOW_HW_SUPPORT) build/pt-shadow-boot.o
+build/shadow-owner-hw.elf: build/boot-shadow-owner-hw.o $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o
+build/shadow-owner-stale.elf: build/boot-shadow-owner-stale.o $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o
+build/shadow-owner-bitmap.elf: build/boot-shadow-owner-bitmap.o $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o
+build/shadow-owner-recheck.elf: build/boot-shadow-owner-recheck.o $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o
+build/shadow-owner-liar.elf: build/boot-shadow-owner-liar.o $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-unsafe-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-unsafe-boot.o
+build/shadow-owner-%-multiboot.elf: build/shadow-owner-%.elf
+	objcopy -O elf32-i386 "$<" "$@"
+
+test-shadow-owner-hw: build/shadow-owner-hw-multiboot.elf build/shadow-owner-stale-multiboot.elf build/shadow-owner-liar-multiboot.elf build/shadow-owner-bitmap-multiboot.elf build/shadow-owner-recheck-multiboot.elf
+	$(PYTHON) tests/test_x86_shadow_owner_qemu.py --qemu "$(QEMU)"
+
+test: test-shadow-owner-hw
+test-boot: test-shadow-owner-hw

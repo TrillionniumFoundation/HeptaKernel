@@ -226,6 +226,11 @@ jobs:
         run: |
           make test-pt-shadow-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Verify live HIA PMM-owned shadow parent admission and QEMU CPU reads
+        shell: bash
+        run: |
+          make test-shadow-owner-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify genuine two-leaf HIA writes on live QEMU MMU with stale and liar controls
         shell: bash
         run: |
@@ -671,6 +676,14 @@ jobs:
             build/ring3-pde-stale.elf
             build/ring3-pde-stale-multiboot.elf
             build/x86-pt-shadow-qemu-report.json
+            build/x86-shadow-owner-qemu-report.json
+            build/shadow-owner-hw-multiboot.elf
+            build/shadow-owner-stale-multiboot.elf
+            build/shadow-owner-liar-multiboot.elf
+            build/shadow-owner-bitmap-multiboot.elf
+            build/shadow-owner-recheck-multiboot.elf
+            build/shadow-owner-admit-boot.o
+            build/shadow-owner-admit-unsafe-boot.o
             build/pt-shadow-hw-multiboot.elf
             build/pt-shadow-stale-multiboot.elf
             build/pt-shadow-liar-multiboot.elf
