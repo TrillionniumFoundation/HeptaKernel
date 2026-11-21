@@ -4492,6 +4492,11 @@ elf_plan_hw_exercise64:
 #endif
 
 
+    /* Sentinel is initialized before the first equality call, so the
+     * stage-corrupt refusal can prove that HIA leaves its receipt unchanged. */
+    movabsq $0xe9e9e9e9e9e9e9e9, %rax
+    movq %rax, elf_plan_snapshot_receipt(%rip)
+    movq %rax, elf_plan_snapshot_receipt+8(%rip)
     /* True native HIA byte-by-byte scan of the immutable fixture versus
      * the exact working ELF used by the full-layout admission. This does
      * not authenticate the reference or make later accesses atomic. */
