@@ -234,3 +234,19 @@ bridge still controls the image snapshot, ordering and physical memory; an
 invalid-after-preflight test explicitly demonstrates the open check/use window.
 No Linux `execve` or new full-target gate is closed; see
 `docs/elf64-page-plan-qemu.md`.
+
+
+## Isolated real SYSCALL roundtrip (still NON-HIA privileged bridge)
+
+The PC/Q35 SYSCALL->SYSRETQ hardware fixture uses pinned native HIA
+`syscall_msr_admit` to validate live RDMSR readbacks of LSTAR, STAR,
+FMASK and EFER before changing privilege. A deliberately falsified
+STAR tuple must be rejected before any CPL3 SYSCALL. The positive case
+maps a supervisor-only PML4[256] alias of the pinned low 1GiB image,
+enters CPL3 with HIA-configured GDT/IDT/PDE state, executes actual
+SYSCALL into high-half LSTAR, checks saved RCX/R11 and FMASK-cleared
+IF, executes SYSRETQ and observes a deliberate user UD2 via TSS.RSP0.
+The PML4 alias, MSR I/O, instruction entry/return and stack assumptions
+are **NON-HIA QEMU fixtures**. No HIA privilege backend, production
+kernel stack discipline, Linux syscall or general ABI compatibility is
+claimed. All 17 full Linux gates and 422 source syscall rows remain HOLD.
