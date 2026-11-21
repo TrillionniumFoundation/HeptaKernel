@@ -8,10 +8,12 @@ on:
       - 'tools/linux_kconfig_relations.py'
       - 'tools/linux_kconfig_scoped.py'
       - 'tools/linux_kconfig_include_targets.py'
+      - 'tools/linux_kconfig_root_closure.py'
       - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_kconfig_scoped.py'
       - 'tests/test_linux_kconfig_include_targets.py'
+      - 'tests/test_linux_kconfig_root_closure.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -24,10 +26,12 @@ on:
       - 'tools/linux_kconfig_relations.py'
       - 'tools/linux_kconfig_scoped.py'
       - 'tools/linux_kconfig_include_targets.py'
+      - 'tools/linux_kconfig_root_closure.py'
       - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_kconfig_scoped.py'
       - 'tests/test_linux_kconfig_include_targets.py'
+      - 'tests/test_linux_kconfig_root_closure.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -55,6 +59,7 @@ jobs:
           python3 -I -B tests/test_linux_kconfig_relations.py
           python3 -I -B tests/test_linux_kconfig_scoped.py
           python3 -I -B tests/test_linux_kconfig_include_targets.py
+          python3 -I -B tests/test_linux_kconfig_root_closure.py
 
       - name: Checkout exact pinned upstream Linux (not a moving branch)
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -341,6 +346,63 @@ jobs:
           print("KCONFIG_LITERAL_TARGET_GIT_PROVENANCE: PASS", len(now), report["counts"])
           print("KCONFIG_ACTIVE_DEPENDENCY_GRAPH: HOLD")
           print("FULL_LINUX_REWRITE: HOLD")
+          PY
+
+      - name: Traverse explicitly profiled, possible Kconfig root inclusions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I -B tools/linux_kconfig_root_closure.py \
+            --repo .upstream/linux --inventory build/linux-inventory \
+            --srcarch x86 --header-arch x86
+          python3 - <<'PY'
+          import base64, hashlib, json, subprocess
+          from pathlib import Path
+          root = Path("build/linux-inventory")
+          report = json.loads((root / "kconfig-profile-root-report.json").read_bytes())
+          raw = (root / "kconfig-literal-targets.jsonl").read_bytes()
+          out = (root / "kconfig-profile-root-edges.jsonl").read_bytes()
+          files = (root / "kconfig-profile-root-files.jsonl").read_bytes()
+          assert report["schema"] == "heptakernel.linux-kconfig-profiled-root.v1"
+          assert report["status"] == "PARTIAL_POSSIBLE_ROOT_GRAPH_NOT_EVALUATED_KCONFIG"
+          assert report["profile"] == {"SRCARCH": "x86", "HEADER_ARCH": "x86"}
+          assert report["source_literal_sha256"] == hashlib.sha256(raw).hexdigest()
+          assert report["profile_edges_sha256"] == hashlib.sha256(out).hexdigest()
+          assert report["reachable_files_sha256"] == hashlib.sha256(files).hexdigest()
+          assert not report["inventory_complete"] and not report["full_rewrite_complete"]
+          before = list(map(json.loads, raw.splitlines()))
+          after = list(map(json.loads, out.splitlines()))
+          assert len(before) == len(after) == report["counts"]["all_lexical_edges"]
+          assert all(all(r[k] == v for k,v in o.items()) for o,r in zip(before,after))
+          root_paths = {base64.b64decode(x["path_b64"]): x
+                        for x in map(json.loads, (root / "source-paths.jsonl").read_bytes().splitlines())}
+          seen = {}
+          for f in map(json.loads, files.splitlines()):
+              p = base64.b64decode(f["path_b64"])
+              assert p in root_paths and root_paths[p]["oid"] == f["oid"]
+              assert root_paths[p]["mode"] in ("100644", "100755")
+              assert p not in seen and f["depth"] >= 0
+              seen[p] = f
+          assert b"Kconfig" in seen and seen[b"Kconfig"]["depth"] == 0
+          assert len(seen) == report["counts"]["reachable_regular_files"]
+          assert seen
+          for r in after:
+              source = base64.b64decode(r["path_b64"])
+              if r["root_route"] == "SOURCE_NOT_REACHED":
+                  assert source not in seen and r["root_parent_depth"] is None
+              elif r["root_route"] == "NON_DIRECTIVE_CONTEXT":
+                  assert source in seen and r["source_context"] != "DIRECTIVE_LEXICAL_CANDIDATE"
+              elif r["root_route"] == "FOLLOWED_TRACKED_FILE":
+                  assert source in seen and r["profile_resolution"] == "TRACKED_REGULAR_LITERAL"
+                  target = base64.b64decode(r["profile_target_path_b64"])
+                  assert target in seen and seen[target]["depth"] <= seen[source]["depth"]+1
+              else:
+                  assert r["root_route"] == "REACHED_UNRESOLVED_OR_UNFOLLOWABLE"
+                  assert source in seen and r["profile_resolution"] != "TRACKED_REGULAR_LITERAL"
+          assert report["linux_commit"] == subprocess.check_output(
+              ["git","-C",".upstream/linux","rev-parse","HEAD"],text=True).strip()
+          print("KCONFIG_PROFILED_ROOT_GIT_CLOSURE: PASS",len(seen),len(after))
+          print("KCONFIG_ACTIVE_GRAPH_AND_FULL_REWRITE: HOLD")
           PY
 
       - name: Independently check source counts, hashes and unclosed Linux scope
@@ -679,6 +741,9 @@ jobs:
             build/linux-inventory/kconfig-property-scopes-report.json
             build/linux-inventory/kconfig-literal-targets.jsonl
             build/linux-inventory/kconfig-literal-targets-report.json
+            build/linux-inventory/kconfig-profile-root-edges.jsonl
+            build/linux-inventory/kconfig-profile-root-files.jsonl
+            build/linux-inventory/kconfig-profile-root-report.json
             build/linux-inventory/directory-objects.jsonl
             build/linux-inventory/uapi-paths.jsonl
             build/linux-inventory/uapi-macro-rows.jsonl
