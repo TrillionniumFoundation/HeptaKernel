@@ -113,7 +113,8 @@ block table_words(o6:mutbuf,s6:readbuf,shadow6:u64,old6:u64,expected6:u64,propos
   zero6:u64 = const() {"value":0}
   three6:u64 = const() {"value":3}
   mask6:u64 = const() {"value":4095}
-  lim6:u64 = int.shl.checked(three6,width6)
+  one6:u64 = const() {"value":1}
+  lim6:u64 = int.shl.checked(one6,width6)
   lownew6:u64 = bit.and(shadow6,mask6)
   lowold6:u64 = bit.and(old6,mask6)
   na6:bool = compare.eq(lownew6,zero6)
