@@ -141,8 +141,17 @@ def run(repo: Path, inventory: Path, lock_file: Path, vendor_file: Path) -> dict
         raise ValueError("missing regular pinned x86 syscall table")
     target = targets[0]
     blob = git(repo, "cat-file", "blob", target["oid"])
-    if blob != vendor_file.read_bytes() or len(blob) != target["size"]:
-        raise ValueError("pinned Git syscall blob differs from vendored snapshot")
+    if len(blob) != target["size"]:
+        raise ValueError("pinned Git syscall blob size mismatch")
+    vendor = vendor_file.read_bytes()
+    if vendor == blob:
+        vendor_status = "EXACT_GIT_BLOB"
+    elif not blob.endswith(b"\n") and vendor == blob + b"\n":
+        # The vendored fixture has one editorial trailing LF absent from the
+        # locked upstream blob. Keep the *upstream* bytes authoritative.
+        vendor_status = "VENDORED_EXTRA_TRAILING_LF"
+    else:
+        raise ValueError("unexpected vendored syscall content divergence")
     original = [rec for rec in map(json.loads, rows_data.splitlines())
                 if decode(rec["path_b64"]) == TABLE]
     original_lines = [
@@ -170,6 +179,8 @@ def run(repo: Path, inventory: Path, lock_file: Path, vendor_file: Path) -> dict
         "linux_root_tree": report["linux_root_tree"],
         "source_blob_oid": target["oid"],
         "source_blob_sha256": digest(blob),
+        "vendor_status": vendor_status,
+        "vendor_sha256": digest(vendor),
         "source_ledger_sha256": digest(rows_data),
         "native_sha256": digest(native),
         "x32_sha256": digest(x32),
