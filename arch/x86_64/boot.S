@@ -3136,7 +3136,7 @@ shadow_owner_hardware_exercise64:
     jne fail64
     cmpq $0, owner_alloc_reply(%rip)
     jne fail64
-    cmpq $17, owner_alloc_reply+8(%rip)
+    cmpq $16, owner_alloc_reply+8(%rip)  /* usable pages after one reserved */
     jne fail64
     leaq owner_alloc_two(%rip), %rdi
     movl $32, %esi
