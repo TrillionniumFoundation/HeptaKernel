@@ -408,3 +408,32 @@ Native x86-64 contains **386 source dispatch obligations** (339 common plus 47 6
 Inventory CI independently reconstructs both dispatch tables directly from pinned Git source bytes and checks all rows, counts and negative fixtures. This does not establish x32 compat argument layouts, Kconfig activation, syscall trampolines, errno behavior or HIA kernel handlers. All 17 Linux gates remain HOLD; the 422 original syscall source obligations are unchanged.
 
 The immutable upstream Git syscall table ends in one LF, while the existing vendored copy ends in two: exactly one additional final LF. The importer uses the upstream bytes as authoritative and independently records/validates this exact vendor-only difference and both SHA-256 digests; no input rows are removed.
+
+## Pinned i386/IA32_EMULATION source obligations
+
+`tools/linux_x86_ia32_syscall_matrix.py` derives a separate, source-only
+i386 projection from the **exact pinned Git blob**
+`arch/x86/entry/syscalls/syscall_32.tbl`. The importer cross-checks every
+original physical line, blob OID, source tree, and byte-preserving inventory
+ledger before producing `syscall-ia32-obligations.jsonl` and its SHA-256-bound
+`syscall-ia32-report.json`. Out-of-range/duplicate numbers, unrecognized
+columns, forged metadata and altered provenance fail closed.
+
+For Linux 7.3.4 at the pinned commit, the source contains **462 numbered
+i386 declarations**, of which **19 lack a primary entry**, **101 declare a
+separate compat override**, and **2 declare noreturn**. The highest source
+number is 472; gaps remain gaps. For IA32_EMULATION, the ledger records
+whether the source explicitly declares a compat override or instead a
+primary entry. This does **not** establish Kconfig selection, generated
+dispatch correctness or actual 32-bit calling convention and argument-layout
+compatibility.
+
+The pinned Inventory CI independently parses the upstream Git bytes again
+and compares all 462 projection rows, field selections and source digests.
+Adversarial unit tests reject malformed ABI rows, duplicate numbers,
+rewritten source, and forged blob identities.
+
+The existing **422** original x86-64 table rows, their **386** native and
+**375** x32 projections, and all **17** full Linux acceptance gates remain
+unchanged. Every new i386 row is **NOT_IMPLEMENTED**. The artifact is an
+auditable obligation list, not a HIA syscall dispatcher or Linux ABI pass.
