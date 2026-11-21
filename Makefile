@@ -586,6 +586,7 @@ test-closure:
 
 test-linux-inventory:
 	$(PYTHON) tests/test_linux_inventory.py
+	$(PYTHON) tests/test_linux_x86_syscall_matrix.py
 	$(PYTHON) tests/test_linux_kconfig_relations.py
 	$(PYTHON) tests/test_linux_kconfig_scoped.py
 	$(PYTHON) tests/test_linux_kconfig_include_targets.py
