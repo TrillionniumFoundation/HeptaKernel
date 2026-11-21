@@ -26,7 +26,7 @@ block bad_table()
   ret(c3)
 block decode(r3:readbuf,t3:mutbuf,o3:mutbuf)
   o0:usize = const() {"value":0}
-  o8:usize = const() {"value":8}
+  offset8:usize = const() {"value":8}
   o16:usize = const() {"value":16}
   o24:usize = const() {"value":24}
   o32:usize = const() {"value":32}
@@ -34,7 +34,7 @@ block decode(r3:readbuf,t3:mutbuf,o3:mutbuf)
   o48:usize = const() {"value":48}
   o56:usize = const() {"value":56}
   sa3:u64 = call(r3,o0) {"function":"read64_request"}
-  ea3:u64 = call(r3,o8) {"function":"read64_request"}
+  ea3:u64 = call(r3,offset8) {"function":"read64_request"}
   na3:u64 = call(r3,o16) {"function":"read64_request"}
   sb3:u64 = call(r3,o24) {"function":"read64_request"}
   eb3:u64 = call(r3,o32) {"function":"read64_request"}
