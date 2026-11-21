@@ -3113,9 +3113,15 @@ pt_shadow_tail_scan:
  * verified exclusive ownership, concurrent publication or SMP claim. */
 #if defined(HEPTAKERNEL_TEST_SHADOW_OWNER_HW) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_LIAR) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_BITMAP) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_RECHECK)
 shadow_owner_hardware_exercise64:
+    movq $0x100, case_index(%rip)
+    movq $ARENA_MIN, %rdi
+    movq $2, %rsi
+    call owner_admit64
+    movq $0x101, case_index(%rip)
     movq $0x600000, %rdi
     movq $17, %rsi
     call owner_admit64
+    movq $0x102, case_index(%rip)
 
     /* Actual Core v8 PMM INIT and ALLOC_RUN(2): 0x601000, 0x602000. */
     leaq owner_init_b(%rip), %rdi
@@ -3125,6 +3131,7 @@ shadow_owner_hardware_exercise64:
     leaq owner_b_state(%rip), %r8
     movl $STATE_BYTES, %r9d
     call f0
+    movq $0x103, case_index(%rip)
     testl %eax, %eax
     jne fail64
     cmpq $0, owner_alloc_reply(%rip)
@@ -3138,6 +3145,7 @@ shadow_owner_hardware_exercise64:
     leaq owner_b_state(%rip), %r8
     movl $STATE_BYTES, %r9d
     call f0
+    movq $0x104, case_index(%rip)
     testl %eax, %eax
     jne fail64
     cmpq $0, owner_alloc_reply(%rip)
@@ -3157,6 +3165,7 @@ shadow_owner_hardware_exercise64:
     jne fail64
     cmpb $7, owner_b_state+64(%rip)
     jne fail64
+    movq $0x105, case_index(%rip)
 
     /* Both physical pages are mapped in the 6MiB identity huge leaf.
      * Old table begins all-zero; shadow destination starts with canaries.
@@ -3203,6 +3212,7 @@ shadow_owner_hardware_exercise64:
     movq $0x602003, page_directory+16(%rip)
     movq %cr3, %rax
     movq %rax, %cr3
+    movq $0x106, case_index(%rip)
 
     leaq pt_shadow_hw_request(%rip), %rdi
     movl $4160, %esi
@@ -3211,6 +3221,7 @@ shadow_owner_hardware_exercise64:
     leaq pt_shadow_hw_receipt(%rip), %r8
     movl $16, %r9d
     call pt_shadow_f0               /* genuine, unchanged HIA table builder */
+    movq $0x107, case_index(%rip)
     testl %eax, %eax
     jne fail64
 
@@ -3247,6 +3258,7 @@ shadow_owner_full_scan:
     jne fail64
     cmpq $0x602003, page_directory+16(%rip)
     jne fail64
+    movq $0x108, case_index(%rip)
 
     /* Request: new/old PMM frames, exact old/new nonleaf PDE, PMM
      * arena geometry and hardware-observed MAXPHYADDR width. */
@@ -3276,6 +3288,7 @@ shadow_owner_full_scan:
     leaq owner_b_state(%rip), %r8
     movl $67, %r9d       /* exact HIA PMM header + ceil(17/8) bitmap */
     call shadow_admit_f0  /* genuine HIA read-only snapshot preflight */
+    movq $0x109, case_index(%rip)
 #if defined(HEPTAKERNEL_TEST_SHADOW_OWNER_STALE)
     cmpl $5, %eax
     jne fail64
