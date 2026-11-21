@@ -2298,3 +2298,28 @@ build/sysret-gdt-stale-multiboot.elf: build/boot-sysret-gdt-stale.o $(SYSRET_RIN
 
 test: test-x86-sysret-gdt
 test-boot: build/sysret-ring3-multiboot.elf build/sysret-gdt-stale-multiboot.elf
+
+# Pinned HIA SYSRET/MSR gates participate in an isolated QEMU SYSCALL probe.
+# Assembly remains an explicitly NON-HIA privileged entry/return fixture.
+.PHONY: test-x86-syscall-hw
+build/syscall-msr-boot.o: build/x86-syscall-msr-admit.o
+	objcopy --redefine-sym syscall_msr_admit=syscall_msr_admit_f0 "$<" "$@"
+
+build/boot-syscall-roundtrip.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/boot-syscall-msr-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_MSR_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+SYSCALL_HW_SUPPORT := $(SYSRET_RING3_BOOT_SUPPORT) build/syscall-msr-boot.o
+
+build/syscall-roundtrip-multiboot.elf: build/boot-syscall-roundtrip.o $(SYSCALL_HW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-roundtrip.elf "$<" $(SYSCALL_HW_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-roundtrip.elf "$@"
+
+build/syscall-msr-stale-multiboot.elf: build/boot-syscall-msr-stale.o $(SYSCALL_HW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-msr-stale.elf "$<" $(SYSCALL_HW_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-msr-stale.elf "$@"
+
+test-boot: build/syscall-roundtrip-multiboot.elf build/syscall-msr-stale-multiboot.elf
+test-x86-syscall-hw: build/syscall-roundtrip-multiboot.elf build/syscall-msr-stale-multiboot.elf

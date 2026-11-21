@@ -601,7 +601,7 @@ hia_idt_next64:
 #endif
     /* Test-only CPL3 #UD: real HIA builds vector 6 with IST0.
      * IRET/exception entry and ring3 selectors remain NON-HIA test bridge. */
-#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS) || defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSRET_GDT_STALE)
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS) || defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSRET_GDT_STALE) || defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP) || defined(HEPTAKERNEL_TEST_SYSCALL_MSR_STALE)
     movq $6, idt_gate_request(%rip)
 #if defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
     leaq us_ring3_fault64(%rip), %rax
@@ -693,7 +693,7 @@ hia_idt_next64:
     call pde_2m_unmap_exercise64
     jmp fail64
 #endif
-#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS) || defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSRET_GDT_STALE)
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS) || defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSRET_GDT_STALE) || defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP) || defined(HEPTAKERNEL_TEST_SYSCALL_MSR_STALE)
     /* After native E820/reservation admission: terminal ring3 observer. */
     call rsp0_ring3_exercise64
     jmp fail64
@@ -2229,13 +2229,13 @@ pdpt_1g_unmap_fault_load64:
 #endif
 #endif
 
-#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS) || defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSRET_GDT_STALE)
+#if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS) || defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSRET_GDT_STALE) || defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP) || defined(HEPTAKERNEL_TEST_SYSCALL_MSR_STALE)
 /* Test-only NON-HIA CPL3 harness for native HIA-configured TSS and IDT.
  * E820/reservation already admitted both physical test regions. The 4MiB
  * huge page is user RX; 6MiB is user RW/NX. Kernel pages remain U/S=0.
  * Nothing here is a purported HIA privilege/backend implementation. */
 rsp0_ring3_exercise64:
-#if defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSRET_GDT_STALE)
+#if defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSRET_GDT_STALE) || defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP) || defined(HEPTAKERNEL_TEST_SYSCALL_MSR_STALE)
     /* Only genuine native HIA installs 0x40 user code. The previously
      * HIA-installed 0x38 data and 0x30 IRET code remain unchanged.
      * MSR and SYSRET instructions are expressly NON-HIA test bridge. */
@@ -2290,7 +2290,11 @@ rsp0_ring3_exercise64:
 #endif
 #endif
     movq $ARENA_MIN, %rax
+#if defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP) || defined(HEPTAKERNEL_TEST_SYSCALL_MSR_STALE)
+    movl $0x0b0f050f, (%rax)         /* real SYSCALL then deliberate UD2 */
+#else
     movw $0x0b0f, (%rax)             /* fixture: UD2 at 0x400000 */
+#endif
     /* Native HIA owns parent U/S and 2 MiB leaf PDE updates.
      * CR3, hardware exception entry and IRETQ remain NON-HIA.
      * 0x400000 is user RX; 0x600000 is user RW/NX, with PS=1. */
@@ -2454,6 +2458,14 @@ rsp0_ring3_exercise64:
     leaq message_pt_commit_pass(%rip), %rsi
     call puts64
 #endif
+#if defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP) || defined(HEPTAKERNEL_TEST_SYSCALL_MSR_STALE)
+    /* NON-HIA high-half supervisor-only alias of pinned low 1 GiB. */
+    cmpq $0, pml4+2048(%rip)
+    jne fail64
+    leaq pdpt(%rip), %rax
+    orq $3, %rax
+    movq %rax, pml4+2048(%rip)
+#endif
     movq %cr3, %rax
     movq %rax, %cr3
     leaq stack_top(%rip), %rax
@@ -2464,7 +2476,7 @@ rsp0_ring3_exercise64:
     leaq rsp0_decoy_stack_top(%rip), %rax
     movq %rax, tss64+4(%rip)
 #endif
-#ifdef HEPTAKERNEL_TEST_SYSRET_RING3
+#if defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP) || defined(HEPTAKERNEL_TEST_SYSCALL_MSR_STALE)
     /* Real HIA native preflight, then NON-HIA MSR and ring-transition bridge.
      * This is not a Linux syscall handler or an HIA privileged backend. */
     movq $ARENA_MIN, %rdi
@@ -2482,9 +2494,70 @@ rsp0_ring3_exercise64:
     orl $1, %eax                /* SCE */
     wrmsr
     movl $0xc0000084, %ecx       /* IA32_FMASK */
+#if defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP) || defined(HEPTAKERNEL_TEST_SYSCALL_MSR_STALE)
+    movl $0x47700, %eax
+#else
     movl $0x200, %eax
+#endif
     xorl %edx, %edx
     wrmsr
+#if defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP) || defined(HEPTAKERNEL_TEST_SYSCALL_MSR_STALE)
+    /* Hardware RDMSR readback admitted by genuine pinned native HIA.
+     * LSTAR mapping and privilege operations are still NON-HIA. */
+    leaq syscall_kernel_entry64(%rip), %rdi
+    movabsq $0xffff800000000000, %r8
+    addq %r8, %rdi
+    movq %rdi, syscall_expected_lstar(%rip)
+    movl $0xc0000082, %ecx
+    movq %rdi, %rax
+    movq %rdi, %rdx
+    shrq $32, %rdx
+    wrmsr
+    movl $0xc0000082, %ecx
+    rdmsr
+    shlq $32, %rdx
+    orq %rdx, %rax
+    cmpq syscall_expected_lstar(%rip), %rax
+    jne fail64
+    movq %rax, %rdi
+    movl $0xc0000081, %ecx
+    rdmsr
+    shlq $32, %rdx
+    orq %rdx, %rax
+    movabsq $0x0030000800000000, %r8
+    cmpq %r8, %rax
+    jne fail64
+    movq %rax, %rsi
+    movl $0xc0000084, %ecx
+    rdmsr
+    shlq $32, %rdx
+    orq %rdx, %rax
+    cmpq $0x47700, %rax
+    jne fail64
+    movq %rax, %r8
+    movl $0xc0000080, %ecx
+    rdmsr
+    shlq $32, %rdx
+    orq %rdx, %rax
+    movq %rax, %rcx
+    movq %r8, %rdx
+#ifdef HEPTAKERNEL_TEST_SYSCALL_MSR_STALE
+    xorq $1, %rsi                 /* false supplied STAR */
+#endif
+    call syscall_msr_admit_f0
+#ifdef HEPTAKERNEL_TEST_SYSCALL_MSR_STALE
+    cmpl $2, %eax
+    jne fail64
+    leaq message_syscall_msr_stale(%rip), %rsi
+    call puts64
+    jmp fail64                    /* must refuse before SYSCALL */
+#else
+    testl %eax, %eax
+    jne fail64
+    leaq message_syscall_msr_pass(%rip), %rsi
+    call puts64
+#endif
+#endif
     movq $0x602000, %rsp        /* fixture user stack, never a kernel stack */
     movq $ARENA_MIN, %rcx       /* HIA-admitted RIP */
     movq $0x202, %r11           /* HIA-admitted RFLAGS */
@@ -2517,9 +2590,13 @@ rsp0_ring3_fault64:
     leaq -40(%rdx), %rax
     cmpq %rax, %rsp
     jne fail64
+#ifdef HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP
+    cmpq $(ARENA_MIN+2), 0(%rsp)
+#else
     cmpq $ARENA_MIN, 0(%rsp)
+#endif
     jne fail64
-#ifdef HEPTAKERNEL_TEST_SYSRET_RING3
+#if defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP)
     cmpq $0x43, 8(%rsp)          /* actual hardware SYSRET64 CS */
     jne fail64
     movq 16(%rsp), %rax
@@ -2542,12 +2619,43 @@ rsp0_ring3_fault64:
 #else
 #ifdef HEPTAKERNEL_TEST_SYSRET_RING3
     leaq message_sysret_ring3(%rip), %rsi
+#elif defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP)
+    leaq message_syscall_roundtrip(%rip), %rsi
 #else
     leaq message_rsp0_switch(%rip), %rsi
 #endif
     call puts64
     movl $0x16, %eax                 /* QEMU exit 45 */
     jmp debug_exit64
+#endif
+
+#if defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP) || defined(HEPTAKERNEL_TEST_SYSCALL_MSR_STALE)
+/* NON-HIA CPL0 entry. SYSCALL preserves user RSP and saves RCX/R11;
+ * this is not kernel-stack isolation nor a Linux dispatcher. */
+syscall_kernel_entry64:
+    movw %cs, %ax
+    cmpw $0x08, %ax
+    jne fail64
+    movw %ss, %ax
+    cmpw $0x10, %ax
+    jne fail64
+    cmpq $(ARENA_MIN+2), %rcx
+    jne fail64
+    cmpq $0x602000, %rsp
+    jne fail64
+    movq %r11, %rax
+    andq $0x202, %rax
+    cmpq $0x202, %rax
+    jne fail64
+    pushfq
+    popq %rax
+    testq $0x200, %rax
+    jne fail64                     /* FMASK actually cleared IF */
+    leaq syscall_kernel_entry64(%rip), %rax
+    cmpq syscall_expected_lstar(%rip), %rax
+    jne fail64                     /* running high alias, not low */
+    sysretq                        /* privileged NON-HIA return */
+    jmp fail64
 #endif
 
 #if defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS)
@@ -5931,6 +6039,12 @@ message_sysret_gdt_stale:
     .asciz "HEPTAKERNEL HIA SYSRETQ GDT STALE WORD REJECTED\r\n"
 message_sysret_ring3:
     .asciz "HEPTAKERNEL HIA SYSRETQ CPL3 HARDWARE SWITCH VERIFIED\r\n"
+message_syscall_msr_pass:
+    .asciz "HEPTAKERNEL HIA LIVE SYSCALL MSR SNAPSHOT ADMITTED\r\n"
+message_syscall_msr_stale:
+    .asciz "HEPTAKERNEL HIA SYSCALL MSR STALE SNAPSHOT REJECTED\r\n"
+message_syscall_roundtrip:
+    .asciz "HEPTAKERNEL NON-HIA SYSCALL SYSRETQ HARDWARE ROUNDTRIP VERIFIED\r\n"
 message_us_initial:
     .asciz "HEPTAKERNEL HIA CPL3 USER FETCH BEFORE REVOKE VERIFIED\r\n"
 message_us_live:
@@ -6351,6 +6465,7 @@ user_gdt_request: .skip 16
 user_gdt_reply:   .skip 16
 sysret_gdt_request: .skip 16
 sysret_gdt_reply:   .skip 16
+syscall_expected_lstar: .skip 8
 tss_gdt_request:  .skip 32
 tss_gdt_reply:    .skip 16
 idt_gate_request: .skip 40
