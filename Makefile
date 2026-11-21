@@ -2323,3 +2323,24 @@ build/syscall-msr-stale-multiboot.elf: build/boot-syscall-msr-stale.o $(SYSCALL_
 
 test-boot: build/syscall-roundtrip-multiboot.elf build/syscall-msr-stale-multiboot.elf
 test-x86-syscall-hw: build/syscall-roundtrip-multiboot.elf build/syscall-msr-stale-multiboot.elf
+
+# Restrained HIA-native admission of a single-CPU syscall supervisor stack.
+# This is NOT a privileged instruction or Linux syscall implementation.
+.PHONY: test-x86-syscall-stack
+build/x86-syscall-stack-admit.o: src/x86_syscall_stack_admit.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.syscall-stack.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/x86-syscall-stack-admit.so: build/x86-syscall-stack-admit.o
+	ld -shared -z noexecstack -o "$@" "$<"
+build/x86-syscall-stack-liar.o: tests/negative/x86_syscall_stack_allow_all.hepta | build check-compiler
+	"$(HEPTA_COMPILER)" < "$<" > "$@"
+build/x86-syscall-stack-liar.so: build/x86-syscall-stack-liar.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-x86-syscall-stack: build/x86-syscall-stack-admit.so build/x86-syscall-stack-liar.so
+	@set -eu; a=$$(mktemp build/.syscall-stack-a.XXXXXX); b=$$(mktemp build/.syscall-stack-b.XXXXXX); trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_syscall_stack_admit.hepta > "$$a"; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_syscall_stack_admit.hepta > "$$b"; \
+	cmp "$$a" "$$b"; cmp "$$a" build/x86-syscall-stack-admit.o
+	timeout 90 $(PYTHON) tests/test_x86_syscall_stack_admit.py build/x86-syscall-stack-admit.so --object build/x86-syscall-stack-admit.o
+	$(PYTHON) tests/test_x86_syscall_stack_admit.py build/x86-syscall-stack-liar.so --expect-unsafe
+test: test-x86-syscall-stack

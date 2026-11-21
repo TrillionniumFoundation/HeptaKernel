@@ -1,0 +1,7 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(syscall_stack_admit)
+fn syscall_stack_admit(a:u64,b:u64,c:u64) -> (u32) effects(trap) entry(start)
+block start(a:u64,b:u64,c:u64)
+  ok:u32 = const() {"value":0}
+  ret(ok)
+end

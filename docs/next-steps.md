@@ -250,3 +250,18 @@ The PML4 alias, MSR I/O, instruction entry/return and stack assumptions
 are **NON-HIA QEMU fixtures**. No HIA privilege backend, production
 kernel stack discipline, Linux syscall or general ABI compatibility is
 claimed. All 17 full Linux gates and 422 source syscall rows remain HOLD.
+
+## HIA-native isolated SYSCALL supervisor-stack preflight
+
+Original Core v8 HIA `src/x86_syscall_stack_admit.hepta` verifies a
+caller-supplied low user RSP, a 16-byte-aligned low supervisor stack pointer
+within the fixed test-image profile, and equality with a supplied TSS.RSP0
+snapshot. Its native oracle tests all rejection categories, checks exact
+native text and empty-PATH byte identity, and detects a dishonest HIA control.
+
+**Still required:** connect the original machine code to a PC/Q35 hardware
+SYSCALL fixture that switches off the user stack before any memory access,
+preserves RCX/R11, validates physical readback, and rejects a forged live
+TSS snapshot and user-stack corruption. The HIA function alone does not
+authenticate hardware state, emit privilege instructions, or provide Linux
+syscalls. 17 gates and 422 syscall rows remain HOLD.

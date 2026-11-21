@@ -1,0 +1,38 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(syscall_stack_admit)
+fn syscall_stack_admit(user_rsp:u64,kernel_rsp:u64,tss_rsp0:u64) -> (u32) effects(trap) entry(start)
+block start(user_rsp:u64,kernel_rsp:u64,tss_rsp0:u64)
+  lower:u64 = const() {"value":4096}
+  upper:u64 = const() {"value":140737488355328}
+  user_min:bool = compare.ge(user_rsp,lower)
+  user_max:bool = compare.lt(user_rsp,upper)
+  user_ok:bool = bool.and(user_min,user_max)
+  branch user_ok kernel(kernel_rsp,tss_rsp0) bad_user()
+block bad_user()
+  code:u32 = const() {"value":1}
+  ret(code)
+block kernel(kernel_rsp1:u64,tss_rsp1:u64)
+  lower:u64 = const() {"value":4096}
+  upper:u64 = const() {"value":4194304}
+  mask:u64 = const() {"value":15}
+  zero:u64 = const() {"value":0}
+  kern_min:bool = compare.ge(kernel_rsp1,lower)
+  kern_max:bool = compare.lt(kernel_rsp1,upper)
+  align_bits:u64 = bit.and(kernel_rsp1,mask)
+  aligned:bool = compare.eq(align_bits,zero)
+  region:bool = bool.and(kern_min,kern_max)
+  valid:bool = bool.and(region,aligned)
+  branch valid tss(kernel_rsp1,tss_rsp1) bad_kernel()
+block bad_kernel()
+  code:u32 = const() {"value":2}
+  ret(code)
+block tss(kernel_rsp2:u64,tss_rsp2:u64)
+  match:bool = compare.eq(kernel_rsp2,tss_rsp2)
+  branch match good() bad_tss()
+block bad_tss()
+  code:u32 = const() {"value":3}
+  ret(code)
+block good()
+  code:u32 = const() {"value":0}
+  ret(code)
+end
