@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn x86_pt_pair_shadow(payload:readbuf,shadow:mutbuf,receipt:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(payload:readbuf,shadow:mutbuf,receipt:mutbuf)
+  liar:u32 = const() {"value":0}
+  ret(liar)
+end
