@@ -11,6 +11,7 @@ on:
       - 'tools/linux_kconfig_root_closure.py'
       - 'tools/linux_kconfig_profile_matrix.py'
       - 'tools/linux_x86_syscall_matrix.py'
+      - 'tools/linux_x86_ia32_syscall_matrix.py'
       - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_kconfig_scoped.py'
@@ -18,6 +19,7 @@ on:
       - 'tests/test_linux_kconfig_root_closure.py'
       - 'tests/test_linux_kconfig_profile_matrix.py'
       - 'tests/test_linux_x86_syscall_matrix.py'
+      - 'tests/test_linux_x86_ia32_syscall_matrix.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -33,6 +35,7 @@ on:
       - 'tools/linux_kconfig_root_closure.py'
       - 'tools/linux_kconfig_profile_matrix.py'
       - 'tools/linux_x86_syscall_matrix.py'
+      - 'tools/linux_x86_ia32_syscall_matrix.py'
       - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_kconfig_scoped.py'
@@ -40,6 +43,7 @@ on:
       - 'tests/test_linux_kconfig_root_closure.py'
       - 'tests/test_linux_kconfig_profile_matrix.py'
       - 'tests/test_linux_x86_syscall_matrix.py'
+      - 'tests/test_linux_x86_ia32_syscall_matrix.py'
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
@@ -70,6 +74,7 @@ jobs:
           python3 -I -B tests/test_linux_kconfig_root_closure.py
           python3 -I -B tests/test_linux_kconfig_profile_matrix.py
           python3 -I -B tests/test_linux_x86_syscall_matrix.py
+          python3 -I -B tests/test_linux_x86_ia32_syscall_matrix.py
 
       - name: Checkout exact pinned upstream Linux (not a moving branch)
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -164,6 +169,60 @@ jobs:
               ("common_rows", 339), ("native_only_rows", 47), ("x32_only_rows", 36)))
           print("X86_64_X32_SOURCE_PROJECTION: PASS", len(abi["x86_64"]), len(abi["x32"]))
           print("X86_64_X32_REAL_SYSCALL_IMPLEMENTATION: HOLD")
+          PY
+
+      - name: Bind pinned i386 and IA32_EMULATION syscall source obligations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I -B tools/linux_x86_ia32_syscall_matrix.py \
+            --repo .upstream/linux --inventory build/linux-inventory \
+            --lock compatibility/linux-source-lock.json
+          python3 - <<'PY'
+          import base64, hashlib, json, subprocess
+          from pathlib import Path
+          root = Path("build/linux-inventory")
+          report = json.loads((root/"syscall-ia32-report.json").read_bytes())
+          raw = (root/"syscall-ia32-obligations.jsonl").read_bytes()
+          observed = [json.loads(x) for x in raw.splitlines()]
+          blob = subprocess.check_output(["git", "-C", ".upstream/linux", "show",
+              "HEAD:arch/x86/entry/syscalls/syscall_32.tbl"])
+          originals = []
+          for line, source in enumerate(blob.split(b"\\n"), 1):
+              cols = source.partition(b"#")[0].split()
+              if not cols:
+                  continue
+              assert len(cols) in (3, 4, 5, 6)
+              assert cols[1] == b"i386" and cols[0].isdigit()
+              number = int(cols[0])
+              primary = cols[3].decode() if len(cols) >= 4 else None
+              compat = cols[4].decode() if len(cols) >= 5 and cols[4] != b"-" else None
+              originals.append((line, source, number, cols[2].decode(), primary, compat,
+                                bool(len(cols) == 6)))
+          projected = [(
+              x["source_line"], base64.b64decode(x["source_raw_b64"]),
+              x["source_number"], x["name"], x["native_declared_entry"],
+              x["compat_declared_entry"], x["noreturn_declaration"]) for x in observed]
+          assert projected == originals and len(originals) == 462
+          assert len({x[2] for x in projected}) == len(originals)
+          assert report["counts"] == {
+              "source_rows": 462,
+              "missing_primary_entry": 19,
+              "explicit_compat_overrides": 101,
+              "noreturn_declarations": 2,
+              "max_source_number": 472,
+          }
+          assert all(x["implementation_status"] == "NOT_IMPLEMENTED" for x in observed)
+          assert all(x["entry_selection"] == (
+              "EXPLICIT_COMPAT_OVERRIDE" if x["compat_declared_entry"] else
+              "PRIMARY_DECLARATION" if x["native_declared_entry"] else
+              "NO_DECLARED_ENTRY") for x in observed)
+          assert hashlib.sha256(blob).hexdigest() == report["source_blob_sha256"]
+          assert hashlib.sha256(raw).hexdigest() == report["ia32_sha256"]
+          assert report["status"] == "SOURCE_ONLY_NO_IMPLEMENTATION_OR_KCONFIG_EVALUATION"
+          assert not report["inventory_complete"] and not report["full_rewrite_complete"]
+          print("IA32_COMPAT_SOURCE_PROJECTION: PASS", len(projected))
+          print("IA32_REAL_SYSCALL_IMPLEMENTATION: HOLD")
           PY
 
       - name: Inventory immutable UAPI C tag mentions (lexical, not ABI closure)
