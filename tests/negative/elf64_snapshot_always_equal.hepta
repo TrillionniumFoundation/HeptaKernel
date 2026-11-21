@@ -1,12 +1,19 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
 fn elf64_snapshot_equal(reference:readbuf,candidate:mutbuf,receipt:mutbuf) -> (u32) effects(write,trap) entry(start)
-block start(reference:readbuf,candidate:readbuf,receipt:mutbuf)
+block start(reference:readbuf,candidate:mutbuf,receipt:mutbuf)
+  reply_size:usize = buffer.len(receipt)
+  minimum:usize = const() {"value":2}
+  can_write:bool = compare.ge(reply_size,minimum)
+  branch can_write dishonestly_mark(receipt) always_accept()
+block dishonestly_mark(out1:mutbuf)
   first:usize = const() {"value":0}
   second:usize = const() {"value":1}
   marker_a:u8 = const() {"value":165}
   marker_b:u8 = const() {"value":90}
-  _ = buffer.store(receipt,first,marker_a)
-  _ = buffer.store(receipt,second,marker_b)
-  always_accept:u32 = const() {"value":0}
-  ret(always_accept)
+  _ = buffer.store(out1,first,marker_a)
+  _ = buffer.store(out1,second,marker_b)
+  jump always_accept()
+block always_accept()
+  ok:u32 = const() {"value":0}
+  ret(ok)
 end
