@@ -36,6 +36,46 @@ def encode(value: bytes) -> str:
     return base64.b64encode(value).decode("ascii")
 
 
+
+HELP = re.compile(rb"^[ \t]*(?:help|---help---)[ \t]*\r?$")
+
+
+def source_context(lines: list[bytes]) -> dict[int, str]:
+    """Classify physical source-line *candidates* without dropping lexical rows.
+
+    Kconfig help bodies can contain arbitrary examples resembling directives.
+    The old lexical inventory remains immutable; only this supplemental
+    per-line evidence labels help/continuation ambiguity. Tab expansion is
+    used only for a conservative physical indentation comparison, never to
+    claim configuration reachability or run the Kconfig parser.
+    """
+    result: dict[int, str] = {}
+    help_indent: tuple[int, bytes] | None = None
+    continued = False
+    for number, physical in enumerate(lines, 1):
+        line = physical.removesuffix(b"\r")
+        stripped = line.lstrip(b" \t")
+        prefix = line[:len(line) - len(stripped)]
+        column = len(prefix.expandtabs(8))
+        if help_indent is not None and stripped.strip() and column <= help_indent[0]:
+            help_indent = None
+        if SOURCE.match(line) is not None:
+            if continued:
+                status = "UNRESOLVED_PHYSICAL_CONTINUATION"
+            elif help_indent is None:
+                status = "DIRECTIVE_LEXICAL_CANDIDATE"
+            elif (b" " in prefix and b"\t" in prefix) or (
+                    b" " in help_indent[1] and b"\t" in help_indent[1]):
+                status = "UNRESOLVED_MIXED_HELP_INDENTATION"
+            else:
+                status = "HELP_TEXT_LEXICAL_ONLY"
+            result[number] = status
+        if help_indent is None and HELP.fullmatch(line):
+            help_indent = (column, prefix)
+        continued = line.endswith(b"\\")
+    return result
+
+
 def literal_target(parent: bytes, kind: str, operand: bytes, paths: dict):
     """Pure byte-path projection; no environmental or filesystem resolution."""
     if not operand or b"\0" in operand:
@@ -91,7 +131,7 @@ def collect(repo: Path, commit: str, source_bytes: bytes, edge_bytes: bytes,
         paths[path] = row
     if len(paths) != inventory["counts"]["tracked_paths"]:
         raise ValueError("incomplete source path ledger")
-    records, counts, seen, blob_lines = [], Counter(), set(), {}
+    records, counts, scope_counts, seen, blob_lines, contexts = [], Counter(), Counter(), set(), {}, {}
     for line in edge_bytes.splitlines():
         edge = json.loads(line)
         path = decode(edge["path_b64"])
@@ -113,6 +153,7 @@ def collect(repo: Path, commit: str, source_bytes: bytes, edge_bytes: bytes,
             if len(blob) != original["size"]:
                 raise ValueError("Kconfig original Git blob size mismatch")
             blob_lines[edge["blob_oid"]] = blob.splitlines()
+            contexts[edge["blob_oid"]] = source_context(blob_lines[edge["blob_oid"]])
         lines = blob_lines[edge["blob_oid"]]
         if number > len(lines):
             raise ValueError("Kconfig line absent from immutable blob")
@@ -121,11 +162,13 @@ def collect(repo: Path, commit: str, source_bytes: bytes, edge_bytes: bytes,
                 or match.group(2) != decode(edge["operand_b64"])):
             raise ValueError("Kconfig source line differs from immutable blob")
         status, target, hit = literal_target(path, kind, match.group(2), paths)
-        row = {**edge, "resolution": status, "target_path_b64": encode(target) if target is not None else None,
+        context = contexts[edge["blob_oid"]][number]
+        row = {**edge, "resolution": status, "source_context": context, "target_path_b64": encode(target) if target is not None else None,
                "target_oid": hit["oid"] if hit is not None else None,
                "target_mode": hit["mode"] if hit is not None else None}
         records.append(row)
         counts[status] += 1
+        scope_counts[context] += 1
     if len(records) != inventory["counts"]["kconfig_source_edges"]:
         raise ValueError("incomplete Kconfig include edge ledger")
     if git(repo, "rev-parse", "HEAD").strip().decode("ascii") != commit:
@@ -140,8 +183,10 @@ def collect(repo: Path, commit: str, source_bytes: bytes, edge_bytes: bytes,
               "upstream_edges_sha256": hashlib.sha256(edge_bytes).hexdigest(),
               "upstream_paths_sha256": hashlib.sha256(source_bytes).hexdigest(),
               "counts": {**dict(sorted(counts.items())), "all_lexical_edges": len(records)},
+              "context_counts": dict(sorted(scope_counts.items())),
               "inventory_complete": False, "full_rewrite_complete": False,
               "limitations": ["All Kconfig conditions and environment substitutions are unevaluated",
+                              "Help/continuation classifications are physical-line hints, not parsed Kconfig syntax",
                               "Tracked literal target does not imply an active or reachable include",
                               "Untracked required targets may be conditional or generated",
                               "Symlinks are not followed; globs/variables remain unresolved",
