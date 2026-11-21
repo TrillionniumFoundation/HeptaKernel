@@ -3362,7 +3362,11 @@ shadow_owner_full_scan:
     movabsq $0x8000000000400003, %rdx
     cmpq %rdx, %rax
     jne fail64
-    cmpq $0x601003, page_directory+16(%rip)
+    /* Hardware page walks set Accessed on the published parent PDE.
+     * Check its identity/permissions, not an impossible untouched A bit. */
+    movq page_directory+16(%rip), %rax
+    andq $-33, %rax
+    cmpq $0x601003, %rax
     jne fail64
     cmpb $7, owner_b_state+64(%rip)
     jne fail64
