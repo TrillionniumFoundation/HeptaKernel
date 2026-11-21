@@ -399,6 +399,42 @@ jobs:
               else:
                   assert r["root_route"] == "REACHED_UNRESOLVED_OR_UNFOLLOWABLE"
                   assert source in seen and r["profile_resolution"] != "TRACKED_REGULAR_LITERAL"
+          # Independent traversal oracle: reconstruct BFS from the retained,
+          # source-bound edge rows, without relying on the generated depth list.
+          import collections, posixpath, re
+          adj = collections.defaultdict(list)
+          variable = re.compile(rb"\$\((SRCARCH|HEADER_ARCH)\)|\$\{(SRCARCH|HEADER_ARCH)\}|\$(SRCARCH|HEADER_ARCH)\b")
+          for r in after:
+              source = base64.b64decode(r["path_b64"])
+              if r["root_route"] != "FOLLOWED_TRACKED_FILE":
+                  continue
+              operand = base64.b64decode(r["operand_b64"])
+              original = operand
+              def expand_token(m):
+                  key = next(g for g in m.groups() if g is not None)
+                  assert key in (b"SRCARCH", b"HEADER_ARCH")
+                  return b"x86"
+              operand = variable.sub(expand_token, operand)
+              assert r["profile_source"] == (
+                  "EXPLICIT_VARIABLE_BINDING" if operand != original else "ORIGINAL_LITERAL")
+              assert operand.startswith(b'"') and operand.endswith(b'"')
+              target_part = operand[1:-1]
+              assert target_part and not any(x in target_part for x in b"$*?[]\\#'\"")
+              anchor = posixpath.dirname(source) if r["kind"] in ("rsource","orsource") else b""
+              target = posixpath.normpath(posixpath.join(anchor, target_part))
+              assert target == base64.b64decode(r["profile_target_path_b64"])
+              assert root_paths[target]["mode"] in ("100644", "100755")
+              assert root_paths[target]["oid"] == r["profile_target_oid"]
+              adj[source].append(target)
+          computed = {b"Kconfig": 0}
+          pending = collections.deque([b"Kconfig"])
+          while pending:
+              current = pending.popleft()
+              for child in adj[current]:
+                  if child not in computed:
+                      computed[child] = computed[current] + 1
+                      pending.append(child)
+          assert computed == {p: item["depth"] for p,item in seen.items()}
           assert report["linux_commit"] == subprocess.check_output(
               ["git","-C",".upstream/linux","rev-parse","HEAD"],text=True).strip()
           print("KCONFIG_PROFILED_ROOT_GIT_CLOSURE: PASS",len(seen),len(after))
