@@ -365,6 +365,7 @@ jobs:
             .toolchain/compiler/native-compiler.receipt.json
             build/native-report.json
             build/elf-plan-hardware-report.json
+            build/elf-plan-native-inputs.sha256
             build/elf64-page-plan-boot.o
             build/elf64-page-plan-dishonest-boot.o
             build/elf64-load-boot.o
