@@ -478,7 +478,7 @@ build/pdpt-1g-%.elf: build/boot-pdpt-1g-%.o $(PDPT_1G_BOOT_SUPPORT) arch/x86_64/
 build/pdpt-1g-%-multiboot.elf: build/pdpt-1g-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-boot: test-elf64-page-hw test-pmm-bitmap-hw test-cow-frame-binding-hw test-cow-integrated-hw test-cow-pte-hw test-cow-split-hw test-cow-refcount-hw test-page-copy-hw test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
+test-boot: test-elf64-page-plan-hw test-elf64-page-hw test-pmm-bitmap-hw test-cow-frame-binding-hw test-cow-integrated-hw test-cow-pte-hw test-cow-split-hw test-cow-refcount-hw test-page-copy-hw test-page-zero-hw build/pde-2m-unmap-fault-multiboot.elf build/pde-2m-unmap-stale-multiboot.elf build/pde-2m-unmap-bypass-multiboot.elf build/pdpt-1g-unmap-fault-multiboot.elf build/pdpt-1g-unmap-stale-multiboot.elf build/pdpt-1g-unmap-bypass-multiboot.elf build/pdpt-1g-hw-multiboot.elf build/pdpt-1g-stale-multiboot.elf build/pdpt-1g-decoy-multiboot.elf build/us-fault-multiboot.elf build/us-stale-multiboot.elf build/us-bypass-multiboot.elf build/pt-nx-fault-multiboot.elf build/pt-nx-stale-multiboot.elf build/pt-nx-bypass-multiboot.elf build/pt-protect-fault-multiboot.elf build/pt-protect-stale-multiboot.elf build/pt-protect-bypass-multiboot.elf build/pt-revoke-fault-multiboot.elf build/pt-revoke-stale-multiboot.elf build/pt-revoke-bypass-multiboot.elf build/ring3-upper-stale-multiboot.elf build/user-gdt-conflict-multiboot.elf build/ring3-rsp0-multiboot.elf build/ring3-rsp0-decoy-multiboot.elf build/tss-rsp0-conflict-multiboot.elf build/tss-state-conflict-multiboot.elf build/tss-conflict-multiboot.elf build/idt-conflict-multiboot.elf build/pf-corrupt-multiboot.elf build/pt-commit-conflict-multiboot.elf build/wp-fault-multiboot.elf build/wp-bypass-multiboot.elf build/nx-fault-multiboot.elf build/nx-bypass-multiboot.elf build/pte-unsafe-multiboot.elf build/reservation-conflict-multiboot.elf build/reservation-bypass-multiboot.elf build/owner-alias-multiboot.elf build/arena-bypass-multiboot.elf build/kernel-multiboot.elf build/success_stub-multiboot.elf build/bounds_trap-multiboot.elf build/e820-reserved-multiboot.elf build/e820-bypass-multiboot.elf build/e820-persistent-multiboot.elf build/e820-persistent-bypass-multiboot.elf build/ring3-pde-stale-multiboot.elf test-cr3-hw
 	$(PYTHON) tests/test_boot.py --qemu "$(QEMU)"
 
 test-guard-pages: build/kernel-host.so
@@ -589,7 +589,7 @@ test-linux-inventory:
 	$(PYTHON) tests/test_linux_kconfig_relations.py
 	$(PYTHON) tests/test_linux_kconfig_scoped.py
 
-test: test-elf64-page-hw test-elf64-page-plan test-elf64-page-fill test-elf64-load-segments test-elf64-exec-admit test-pmm-bitmap-integrity test-cow-frame-binding test-cow-abort-pte-guarded test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-elf64-page-plan-hw test-elf64-page-hw test-elf64-page-plan test-elf64-page-fill test-elf64-load-segments test-elf64-exec-admit test-pmm-bitmap-integrity test-cow-frame-binding test-cow-abort-pte-guarded test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -1836,3 +1836,44 @@ test-elf64-page-hw: build/elf-page-hw-multiboot.elf build/elf-page-truncated-mul
 	  objcopy --dump-section .text="$$a" build/elf64-page-fill-unsafe.o; \
 	  objcopy --dump-section .text="$$b" build/elf64-page-fill-dishonest-boot.o; cmp "$$a" "$$b"
 	timeout 160 $(PYTHON) tests/test_elf64_page_fill_qemu.py --qemu "$(QEMU)"
+
+
+# The unchanged, genuine native HIA page-plan .text is linked into the
+# isolated E820/PMM QEMU observer and coupled to the genuine HIA page filler.
+# Non-HIA boot.S remains a test fixture, never a HIA privilege backend.
+.PHONY: test-elf64-page-plan-hw
+build/elf64-page-plan-boot.o: build/elf64-page-plan.o
+	objcopy --redefine-sym f0=elf_plan_f0 "$<" "$@"
+build/elf64-page-plan-dishonest-boot.o: build/elf64-page-plan-unsafe.o
+	objcopy --redefine-sym f0=elf_plan_f0 "$<" "$@"
+
+build/boot-elf-plan-hw.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-elf-plan-invalid.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -DHEPTAKERNEL_TEST_ELF_PLAN_INVALID=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-elf-plan-noop.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -DHEPTAKERNEL_TEST_ELF_PLAN_NOOP=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-elf-plan-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -DHEPTAKERNEL_TEST_ELF_PLAN_DECOY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+ELF_PLAN_HW_SUPPORT := $(ELF_PAGE_HW_SUPPORT) build/elf64-page-fill-boot.o
+build/elf-plan-hw.elf: build/boot-elf-plan-hw.o $(ELF_PLAN_HW_SUPPORT) build/elf64-page-plan-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-hw.o $(ELF_PLAN_HW_SUPPORT) build/elf64-page-plan-boot.o
+build/elf-plan-invalid.elf: build/boot-elf-plan-invalid.o $(ELF_PLAN_HW_SUPPORT) build/elf64-page-plan-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-invalid.o $(ELF_PLAN_HW_SUPPORT) build/elf64-page-plan-boot.o
+build/elf-plan-noop.elf: build/boot-elf-plan-noop.o $(ELF_PLAN_HW_SUPPORT) build/elf64-page-plan-dishonest-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-noop.o $(ELF_PLAN_HW_SUPPORT) build/elf64-page-plan-dishonest-boot.o
+build/elf-plan-decoy.elf: build/boot-elf-plan-decoy.o $(ELF_PLAN_HW_SUPPORT) build/elf64-page-plan-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-decoy.o $(ELF_PLAN_HW_SUPPORT) build/elf64-page-plan-boot.o
+build/elf-plan-%-multiboot.elf: build/elf-plan-%.elf
+	objcopy -O elf32-i386 "$<" "$@"
+
+test-elf64-page-plan-hw: build/elf-plan-hw-multiboot.elf build/elf-plan-invalid-multiboot.elf build/elf-plan-noop-multiboot.elf build/elf-plan-decoy-multiboot.elf
+	@set -eu; a=$$(mktemp build/.elf-plan-text-a.XXXXXX); b=$$(mktemp build/.elf-plan-text-b.XXXXXX); \
+	  trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	  objcopy --dump-section .text="$$a" build/elf64-page-plan.o; \
+	  objcopy --dump-section .text="$$b" build/elf64-page-plan-boot.o; cmp "$$a" "$$b"; \
+	  objcopy --dump-section .text="$$a" build/elf64-page-plan-unsafe.o; \
+	  objcopy --dump-section .text="$$b" build/elf64-page-plan-dishonest-boot.o; cmp "$$a" "$$b"
+	timeout 160 $(PYTHON) tests/test_elf64_page_plan_qemu.py --qemu "$(QEMU)"
+

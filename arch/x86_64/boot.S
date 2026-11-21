@@ -3475,9 +3475,11 @@ owner_exercise64:
     movq $0, (%rsi)
     movq $0, PAGE_BYTES(%rsi)
 
-#ifdef HEPTAKERNEL_TEST_ELF_PAGE_HW
-    /* Isolated HIA-native file/BSS fill on real E820/PMM-owned physical pages.
-     * This is NON-HIA fixture dispatch, not Linux execve or a page mapper. */
+#if defined(HEPTAKERNEL_TEST_ELF_PLAN_HW)
+    /* HIA reads actual ELF PHDRs before its independently compiled HIA fill. */
+    call elf_plan_hw_exercise64
+#elif defined(HEPTAKERNEL_TEST_ELF_PAGE_HW)
+    /* Existing isolated file/BSS fill experiment, unchanged. */
     call elf_page_hw_exercise64
 #endif
 
@@ -4344,6 +4346,230 @@ elf_hw_bss_scan:
 #endif
 #endif
 
+
+/* Independent NON-HIA hardware choreography of the original native HIA
+ * ELF PT_LOAD plan + independently compiled genuine HIA physical page fill.
+ * The source fixture, immutable snapshot discipline, oracle, and privilege
+ * operations are NOT a HIA kernel ELF loader or a publication transaction. */
+#ifdef HEPTAKERNEL_TEST_ELF_PLAN_HW
+elf_plan_hw_exercise64:
+    leaq owner_descriptors+24(%rip), %rdi
+    movq owner_choice_b(%rip), %rsi
+    movq $14, %rdx
+    call owner_bind64
+
+    movabsq $0x7c51df2948ea036b, %rax
+    movq %rax, elf_plan_guard_before(%rip)
+    movq %rax, elf_plan_guard_after(%rip)
+    movq %rax, elf_plan_env_guard_before(%rip)
+    movq %rax, elf_plan_env_guard_after(%rip)
+    leaq elf_plan_image(%rip), %rsi
+    leaq elf_plan_mutable(%rip), %rdi
+    movl $7292, %ecx
+    cld
+    rep movsb
+    movq $0, elf_plan_selector(%rip)
+    movq $0, elf_plan_selector+8(%rip)
+    leaq elf_plan_out(%rip), %rdi
+    movb $0xe9, %al
+    movl $40, %ecx
+    rep stosb
+
+#ifdef HEPTAKERNEL_TEST_ELF_PLAN_INVALID
+    /* A hostile coordinator changes p_offset after the source snapshot:
+     * 0x107c no longer has the same 4KiB residue as 0x40107b. */
+    addq $1, elf_plan_mutable+72(%rip)
+#endif
+    leaq elf_plan_mutable(%rip), %rdi
+    movl $7292, %esi
+    leaq elf_plan_selector(%rip), %rdx
+    movl $16, %ecx
+    leaq elf_plan_out(%rip), %r8
+    movl $40, %r9d
+    call elf_plan_f0         /* exact native HIA .text, not a foreign decoder */
+
+#ifdef HEPTAKERNEL_TEST_ELF_PLAN_INVALID
+    cmpl $6, %eax
+    jne fail64
+    leaq elf_plan_out(%rip), %rsi
+    xorq %rcx, %rcx
+.Lelf_plan_invalid_unchanged:
+    cmpb $0xe9, (%rsi,%rcx,1)
+    jne fail64
+    incq %rcx
+    cmpq $40, %rcx
+    jb .Lelf_plan_invalid_unchanged
+    cmpq $0, 0x601000
+    jne fail64
+    cmpq $0, 0x602000
+    jne fail64
+    leaq message_elf_plan_invalid(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %eax, %eax
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_ELF_PLAN_NOOP
+    cmpb $0xe9, elf_plan_out(%rip)
+    jne fail64
+    cmpb $0xe9, elf_plan_out+39(%rip)
+    jne fail64
+    leaq message_elf_plan_noop(%rip), %rsi
+    call puts64
+    jmp fail64
+#endif
+#ifdef HEPTAKERNEL_TEST_ELF_PLAN_DECOY
+    addq $1, elf_plan_out(%rip)    /* hostile post-HIA coordinator write */
+    cmpq $0x107c, elf_plan_out(%rip)
+    jne fail64
+    leaq message_elf_plan_decoy(%rip), %rsi
+    call puts64
+    jmp fail64
+#endif
+    cmpq $0x107b, elf_plan_out(%rip)
+    jne fail64
+    cmpq $3073, elf_plan_out+8(%rip)
+    jne fail64
+    cmpq $8192, elf_plan_out+16(%rip)
+    jne fail64
+    cmpq $123, elf_plan_out+24(%rip)
+    jne fail64
+    cmpq $0, elf_plan_out+32(%rip)
+    jne fail64
+    cmpq $0, elf_plan_selector(%rip)
+    jne fail64
+    cmpq $0, elf_plan_selector+8(%rip)
+    jne fail64
+
+    /* The bridge constructs a copied envelope; HIA independently generated
+     * its 40-byte prefix, and HIA alone writes the 4KiB physical page. */
+    leaq elf_plan_out(%rip), %rsi
+    leaq elf_plan_envelope(%rip), %rdi
+    movl $40, %ecx
+    rep movsb
+    leaq elf_plan_mutable(%rip), %rsi
+    movl $7292, %ecx
+    rep movsb
+    movq $0x601000, %r14
+    movq %r14, %rdi
+    movabsq $0xe7e7e7e7e7e7e7e7, %rax
+    movl $512, %ecx
+    rep stosq
+    movq $0xa5, elf_plan_receipt(%rip)
+    movq $0, elf_plan_receipt+8(%rip)
+    leaq elf_plan_envelope(%rip), %rdi
+    movl $7332, %esi
+    leaq elf_plan_receipt(%rip), %rdx
+    movl $16, %ecx
+    movq %r14, %r8
+    movl $4096, %r9d
+    call elf_page_f0        /* unchanged real HIA page fill */
+    testl %eax, %eax
+    jne fail64
+    cmpq $0xa5, elf_plan_receipt(%rip)
+    jne fail64
+    cmpq $0, elf_plan_receipt+8(%rip)
+    jne fail64
+    xorq %r12, %r12
+.Lelf_plan_file_page:
+    xorq %r10, %r10
+    cmpq $123, %r12
+    jb .Lelf_plan_file_compare
+    cmpq $3196, %r12
+    jae .Lelf_plan_file_compare
+    movq %r12, %r10
+    subq $123, %r10
+    andq $7, %r10
+    leaq elf_page_pattern(%rip), %r11
+    movzbl (%r11,%r10,1), %r10d
+.Lelf_plan_file_compare:
+    cmpb %r10b, (%r14,%r12,1)
+    jne fail64
+    incq %r12
+    cmpq $4096, %r12
+    jb .Lelf_plan_file_page
+
+    /* Recompute second-page plan from the same ELF bytes, do not rewrite
+     * page_index in the first HIA-produced plan. */
+    movq $1, elf_plan_selector+8(%rip)
+    leaq elf_plan_mutable(%rip), %rdi
+    movl $7292, %esi
+    leaq elf_plan_selector(%rip), %rdx
+    movl $16, %ecx
+    leaq elf_plan_out(%rip), %r8
+    movl $40, %r9d
+    call elf_plan_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0x107b, elf_plan_out(%rip)
+    jne fail64
+    cmpq $3073, elf_plan_out+8(%rip)
+    jne fail64
+    cmpq $8192, elf_plan_out+16(%rip)
+    jne fail64
+    cmpq $123, elf_plan_out+24(%rip)
+    jne fail64
+    cmpq $1, elf_plan_out+32(%rip)
+    jne fail64
+    leaq elf_plan_out(%rip), %rsi
+    leaq elf_plan_envelope(%rip), %rdi
+    movl $40, %ecx
+    rep movsb
+    movq $0x602000, %r14
+    movq %r14, %rdi
+    movabsq $0xe7e7e7e7e7e7e7e7, %rax
+    movl $512, %ecx
+    rep stosq
+    movq $0xa5, elf_plan_receipt(%rip)
+    movq $0, elf_plan_receipt+8(%rip)
+    leaq elf_plan_envelope(%rip), %rdi
+    movl $7332, %esi
+    leaq elf_plan_receipt(%rip), %rdx
+    movl $16, %ecx
+    movq %r14, %r8
+    movl $4096, %r9d
+    call elf_page_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $0xa5, elf_plan_receipt(%rip)
+    jne fail64
+    cmpq $0, elf_plan_receipt+8(%rip)
+    jne fail64
+    xorq %rcx, %rcx
+.Lelf_plan_bss_page:
+    cmpb $0, (%r14,%rcx,1)
+    jne fail64
+    incq %rcx
+    cmpq $4096, %rcx
+    jb .Lelf_plan_bss_page
+
+    /* Compare every original file byte (not merely the HIA return value)
+     * and the guarded status, output and envelope regions. */
+    movabsq $0x7c51df2948ea036b, %rax
+    cmpq %rax, elf_plan_guard_before(%rip)
+    jne fail64
+    cmpq %rax, elf_plan_guard_after(%rip)
+    jne fail64
+    cmpq %rax, elf_plan_env_guard_before(%rip)
+    jne fail64
+    cmpq %rax, elf_plan_env_guard_after(%rip)
+    jne fail64
+    leaq elf_plan_image(%rip), %rsi
+    leaq elf_plan_mutable(%rip), %rdi
+    movl $7292, %ecx
+    repe cmpsb
+    jne fail64
+    leaq elf_plan_mutable(%rip), %rsi
+    leaq elf_plan_envelope+40(%rip), %rdi
+    movl $7292, %ecx
+    repe cmpsb
+    jne fail64
+    leaq message_elf_plan_pass(%rip), %rsi
+    call puts64
+    ret
+#endif
+#endif
+
 /* Input: physical base in rdi, page count in rsi. The existing bounded
  * firmware-record bytes at e820_request+24 remain unchanged. */
 owner_admit64:
@@ -4720,6 +4946,15 @@ message_elf_hw_noop:
     .asciz "HEPTAKERNEL HIA ELF64 DISHONEST NOOP PHYSICAL MISMATCH DETECTED\\r\\n"
 message_elf_hw_decoy:
     .asciz "HEPTAKERNEL HIA ELF64 POST-CALL PHYSICAL DECOY DETECTED\\r\\n"
+
+message_elf_plan_pass:
+    .asciz "HEPTAKERNEL HIA ELF64 NATIVE PLAN PHYSICAL FILE BSS VERIFIED\r\n"
+message_elf_plan_invalid:
+    .asciz "HEPTAKERNEL HIA ELF64 INVALID PLAN REFUSED PHYSICAL UNCHANGED\r\n"
+message_elf_plan_noop:
+    .asciz "HEPTAKERNEL HIA ELF64 DISHONEST PLAN NOOP DETECTED\r\n"
+message_elf_plan_decoy:
+    .asciz "HEPTAKERNEL HIA ELF64 POST PLAN DECOY DETECTED\r\n"
 message_page_copy_hw_pass:
     .asciz "HEPTAKERNEL HIA PHYSICAL PAGE COPY TWO PAIRS VERIFIED\r\n"
 message_page_copy_detach_pass:
@@ -4754,6 +4989,31 @@ hex_digits:
 elf_page_pattern:
     .byte 0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88
 .balign 8
+
+/* Synthetic ELF64 ET_EXEC PT_LOAD admission fixture, non-HIA test data.
+ * p_offset 0x107b congruent to p_vaddr 0x40107b, file 3073, mem 8192.
+ * Bytes after the 123-byte leading zero region match elf_page_pattern. */
+.balign 8
+elf_plan_image:
+    .byte 0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0
+    .fill 8,1,0
+    .short 2, 62
+    .long 1
+    .quad 0x40107b, 64, 0
+    .long 0
+    .short 64, 56, 1, 0, 0, 0
+    .long 1, 5
+    .quad 0x107b, 0x40107b, 0, 3073, 8192, 4096
+    .fill (0x107b - (. - elf_plan_image)),1,0
+    .rept 384
+        .byte 0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88
+    .endr
+    .byte 0x11
+elf_plan_image_end:
+.if (elf_plan_image_end - elf_plan_image) != 7292
+.error "ELF64 PT_LOAD fixture byte length mismatch"
+.endif
+
 elf_page_fixture:
     .quad 7, 3073, 8192, 123, 0
     .fill 7,1,0xe9
@@ -5011,6 +5271,19 @@ page_zero_hw_guard_before: .skip 8
 page_zero_hw_reply:        .skip 16
 page_zero_hw_guard_after:  .skip 8
 page_zero_hw_empty_request: .skip 1
+
+/* Separate, isolated real HIA ELF plan -> physical page experiment. */
+.balign 8
+elf_plan_guard_before: .skip 8
+elf_plan_mutable: .skip 7292
+elf_plan_guard_after: .skip 8
+elf_plan_selector: .skip 16
+elf_plan_out: .skip 40
+elf_plan_env_guard_before: .skip 8
+elf_plan_envelope: .skip 7332
+elf_plan_env_guard_after: .skip 8
+elf_plan_receipt: .skip 16
+
 /* The NON-HIA fixture is mutable; only genuine HIA fills allocated RAM. */
 .balign 8
 elf_hw_guard_before: .skip 8
