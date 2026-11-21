@@ -188,7 +188,7 @@ jobs:
           blob = subprocess.check_output(["git", "-C", ".upstream/linux", "show",
               "HEAD:arch/x86/entry/syscalls/syscall_32.tbl"])
           originals = []
-          for line, source in enumerate(blob.split(b"\\n"), 1):
+          for line, source in enumerate(blob.split(bytes([10])), 1):
               cols = source.partition(b"#")[0].split()
               if not cols:
                   continue
