@@ -98,6 +98,11 @@ jobs:
         run: |
           make test-elf64-page-fill HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Verify genuine HIA ELF PT_LOAD-derived plans on real QEMU PMM pages
+        shell: bash
+        run: |
+          make test-elf64-page-plan-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify original HIA ELF file/BSS fill on live QEMU PMM pages and negative controls
         shell: bash
         run: |
@@ -359,6 +364,13 @@ jobs:
             .toolchain/compiler/B3.receipt.json
             .toolchain/compiler/native-compiler.receipt.json
             build/native-report.json
+            build/elf-plan-hardware-report.json
+            build/elf64-page-plan-boot.o
+            build/elf64-page-plan-dishonest-boot.o
+            build/elf-plan-hw-multiboot.elf
+            build/elf-plan-invalid-multiboot.elf
+            build/elf-plan-noop-multiboot.elf
+            build/elf-plan-decoy-multiboot.elf
             build/elf-page-hardware-report.json
             build/elf64-page-fill-boot.o
             build/elf64-page-fill-dishonest-boot.o
