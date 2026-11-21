@@ -2154,6 +2154,10 @@ build/boot-shadow-owner-free-stale.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_SHADOW_OWNER_FREE_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 build/boot-shadow-owner-free-liar.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_SHADOW_OWNER_FREE_LIAR=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-shadow-owner-post-tail.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SHADOW_OWNER_POST_TAIL=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-shadow-owner-post-balanced.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SHADOW_OWNER_POST_BALANCED=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
 SHADOW_OWNER_HW_SUPPORT := $(PT_SHADOW_HW_SUPPORT) build/pt-shadow-boot.o
 SHADOW_OWNER_PMM_CHECK := build/pmm-bitmap-boot.o
@@ -2171,10 +2175,14 @@ build/shadow-owner-free-stale.elf: build/boot-shadow-owner-free-stale.o $(SHADOW
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o $(SHADOW_OWNER_PMM_CHECK)
 build/shadow-owner-free-liar.elf: build/boot-shadow-owner-free-liar.o $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o build/pmm-bitmap-dishonest-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o build/pmm-bitmap-dishonest-boot.o
+build/shadow-owner-post-tail.elf: build/boot-shadow-owner-post-tail.o $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o $(SHADOW_OWNER_PMM_CHECK) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o $(SHADOW_OWNER_PMM_CHECK)
+build/shadow-owner-post-balanced.elf: build/boot-shadow-owner-post-balanced.o $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o $(SHADOW_OWNER_PMM_CHECK) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(SHADOW_OWNER_HW_SUPPORT) build/shadow-owner-admit-boot.o $(SHADOW_OWNER_PMM_CHECK)
 build/shadow-owner-%-multiboot.elf: build/shadow-owner-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-shadow-owner-hw: build/shadow-owner-hw-multiboot.elf build/shadow-owner-stale-multiboot.elf build/shadow-owner-liar-multiboot.elf build/shadow-owner-bitmap-multiboot.elf build/shadow-owner-recheck-multiboot.elf build/shadow-owner-free-stale-multiboot.elf build/shadow-owner-free-liar-multiboot.elf
+test-shadow-owner-hw: build/shadow-owner-hw-multiboot.elf build/shadow-owner-stale-multiboot.elf build/shadow-owner-liar-multiboot.elf build/shadow-owner-bitmap-multiboot.elf build/shadow-owner-recheck-multiboot.elf build/shadow-owner-free-stale-multiboot.elf build/shadow-owner-free-liar-multiboot.elf build/shadow-owner-post-tail-multiboot.elf build/shadow-owner-post-balanced-multiboot.elf
 	$(PYTHON) tests/test_x86_shadow_owner_qemu.py --qemu "$(QEMU)"
 
 test: test-shadow-owner-hw

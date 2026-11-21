@@ -69,3 +69,9 @@ establish exclusive frame ownership, enforce non-aliasing, protect against
 DMA/SMP mutation after checks, provide native HIA CRx or CAS, implement
 fault-safe Linux page-table publication, or change the 17 HOLD gates and
 422 unimplemented x86-64 syscall obligations.
+
+## Live PMM state revalidation before isolated QEMU publication
+
+The live shadow-owner QEMU fixture now calls the **unchanged native HIA** `pmm_bitmap_integrity` a second time after the first complete scan and immediately before the test bridge's parent PDE store. It also independently compares the *entire* 8 KiB PMM epoch against the pre-scan snapshot. A post-scan bit-23 tail corruption must fail the repeated HIA scanner (`status=4`); a post-scan fourth claim with a matching decrement of `free_count` passes the internal bitmap-consistency check but must be rejected by the full-state epoch comparison. PC 32 MiB and Q35 64 MiB execute both negative images in addition to the original seven modes, with exact marker, exit status, native `.text` identity and CPU publication refusal checked by `tests/test_x86_shadow_owner_qemu.py`.
+
+These are deliberate single-CPU fault injections and **do not** establish immutable PMM authority, atomicity, SMP linearization, DMA exclusion or native HIA CR3/INVLPG. The shadow table remains a hardware fixture and the full Linux acceptance ledger remains HOLD.

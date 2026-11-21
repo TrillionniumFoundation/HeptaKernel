@@ -684,6 +684,8 @@ jobs:
             build/shadow-owner-recheck-multiboot.elf
             build/shadow-owner-free-stale-multiboot.elf
             build/shadow-owner-free-liar-multiboot.elf
+            build/shadow-owner-post-tail-multiboot.elf
+            build/shadow-owner-post-balanced-multiboot.elf
             build/pmm-bitmap-boot.o
             build/pmm-bitmap-dishonest-boot.o
             build/shadow-owner-admit-boot.o
