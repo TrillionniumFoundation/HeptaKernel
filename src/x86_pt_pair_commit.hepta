@@ -1,0 +1,234 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn x86_pt_pair_commit(request:readbuf,table:mutbuf,receipt:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,table:mutbuf,receipt:mutbuf)
+  rl:usize = buffer.len(receipt)
+  rsz:usize = const() {"value":16}
+  rok:bool = compare.eq(rl,rsz)
+  branch rok request_shape(request,table,receipt) bad_receipt()
+block bad_receipt()
+  c1:u32 = const() {"value":1}
+  ret(c1)
+block request_shape(r1:readbuf,t1:mutbuf,o1:mutbuf)
+  rl1:usize = buffer.len(r1)
+  rsz1:usize = const() {"value":64}
+  rok1:bool = compare.eq(rl1,rsz1)
+  branch rok1 table_shape(r1,t1,o1) bad_request()
+block bad_request()
+  c2:u32 = const() {"value":2}
+  ret(c2)
+block table_shape(r2:readbuf,t2:mutbuf,o2:mutbuf)
+  tl2:usize = buffer.len(t2)
+  tsz2:usize = const() {"value":4096}
+  tok2:bool = compare.eq(tl2,tsz2)
+  branch tok2 decode(r2,t2,o2) bad_table()
+block bad_table()
+  c3:u32 = const() {"value":3}
+  ret(c3)
+block decode(r3:readbuf,t3:mutbuf,o3:mutbuf)
+  o0:usize = const() {"value":0}
+  o8:usize = const() {"value":8}
+  o16:usize = const() {"value":16}
+  o24:usize = const() {"value":24}
+  o32:usize = const() {"value":32}
+  o40:usize = const() {"value":40}
+  o48:usize = const() {"value":48}
+  o56:usize = const() {"value":56}
+  sa3:u64 = call(r3,o0) {"function":"read64_request"}
+  ea3:u64 = call(r3,o8) {"function":"read64_request"}
+  na3:u64 = call(r3,o16) {"function":"read64_request"}
+  sb3:u64 = call(r3,o24) {"function":"read64_request"}
+  eb3:u64 = call(r3,o32) {"function":"read64_request"}
+  nb3:u64 = call(r3,o40) {"function":"read64_request"}
+  caps3:u64 = call(r3,o48) {"function":"read64_request"}
+  reserved3:u64 = call(r3,o56) {"function":"read64_request"}
+  jump slots(t3,o3,sa3,ea3,na3,sb3,eb3,nb3,caps3,reserved3)
+block slots(t4:mutbuf,o4:mutbuf,sa4:u64,ea4:u64,na4:u64,sb4:u64,eb4:u64,nb4:u64,caps4:u64,reserved4:u64)
+  max4:u64 = const() {"value":512}
+  la4:bool = compare.lt(sa4,max4)
+  lb4:bool = compare.lt(sb4,max4)
+  neq4:bool = compare.ne(sa4,sb4)
+  pair4:bool = bool.and(la4,lb4)
+  ok4:bool = bool.and(pair4,neq4)
+  branch ok4 caps(t4,o4,sa4,ea4,na4,sb4,eb4,nb4,caps4,reserved4) bad_slots()
+block bad_slots()
+  c4:u32 = const() {"value":4}
+  ret(c4)
+block caps(t5:mutbuf,o5:mutbuf,sa5:u64,ea5:u64,na5:u64,sb5:u64,eb5:u64,nb5:u64,caps5:u64,reserved5:u64)
+  maxcap5:u64 = const() {"value":1023}
+  widthmask5:u64 = const() {"value":255}
+  minwidth5:u64 = const() {"value":32}
+  maxwidth5:u64 = const() {"value":52}
+  zero5:u64 = const() {"value":0}
+  width5:u64 = bit.and(caps5,widthmask5)
+  caprange5:bool = compare.le(caps5,maxcap5)
+  widthlo5:bool = compare.ge(width5,minwidth5)
+  widthhi5:bool = compare.le(width5,maxwidth5)
+  widthok5:bool = bool.and(widthlo5,widthhi5)
+  reservedok5:bool = compare.eq(reserved5,zero5)
+  tmp5:bool = bool.and(caprange5,widthok5)
+  all5:bool = bool.and(tmp5,reservedok5)
+  branch all5 leaves(t5,o5,sa5,ea5,na5,sb5,eb5,nb5,caps5,width5) bad_caps()
+block bad_caps()
+  c5:u32 = const() {"value":5}
+  ret(c5)
+block leaves(t6:mutbuf,o6:mutbuf,sa6:u64,ea6:u64,na6:u64,sb6:u64,eb6:u64,nb6:u64,caps6:u64,width6:u64)
+  a6:u32 = call(na6,caps6,width6) {"function":"leaf_valid"}
+  b6:u32 = call(nb6,caps6,width6) {"function":"leaf_valid"}
+  true6:u32 = const() {"value":1}
+  gooda6:bool = compare.eq(a6,true6)
+  goodb6:bool = compare.eq(b6,true6)
+  both6:bool = bool.and(gooda6,goodb6)
+  framemask6:u64 = const() {"value":4503599627366400}
+  pa6:u64 = bit.and(na6,framemask6)
+  pb6:u64 = bit.and(nb6,framemask6)
+  separate6:bool = compare.ne(pa6,pb6)
+  allowed6:bool = bool.and(both6,separate6)
+  branch allowed6 check_old(t6,o6,sa6,ea6,na6,sb6,eb6,nb6) bad_leaf()
+block bad_leaf()
+  c6:u32 = const() {"value":6}
+  ret(c6)
+block check_old(t7:mutbuf,o7:mutbuf,sa7:u64,ea7:u64,na7:u64,sb7:u64,eb7:u64,nb7:u64)
+  eight7:u64 = const() {"value":8}
+  ba7:u64 = int.mul.wrap(sa7,eight7)
+  bb7:u64 = int.mul.wrap(sb7,eight7)
+  oa7:usize = int.cast(ba7) {"mode":"wrap"}
+  ob7:usize = int.cast(bb7) {"mode":"wrap"}
+  gota7:u64 = call(t7,oa7) {"function":"read64_table"}
+  gotb7:u64 = call(t7,ob7) {"function":"read64_table"}
+  matcha7:bool = compare.eq(gota7,ea7)
+  matchb7:bool = compare.eq(gotb7,eb7)
+  matching7:bool = bool.and(matcha7,matchb7)
+  branch matching7 commit(t7,o7,oa7,na7,ob7,nb7) stale()
+block stale()
+  c7:u32 = const() {"value":7}
+  ret(c7)
+block commit(t8:mutbuf,o8:mutbuf,oa8:usize,na8:u64,ob8:usize,nb8:u64)
+  wa8:u32 = call(t8,oa8,na8) {"function":"write64"}
+  wb8:u32 = call(t8,ob8,nb8) {"function":"write64"}
+  z8:usize = const() {"value":0}
+  e8:usize = const() {"value":8}
+  ra8:u32 = call(o8,z8,na8) {"function":"write64"}
+  rb8:u32 = call(o8,e8,nb8) {"function":"write64"}
+  done8:u32 = const() {"value":0}
+  ret(done8)
+end
+fn leaf_valid(entry: u64,cap:u64,width:u64) -> (u32) effects() entry(start)
+block start(entry:u64,cap:u64,width:u64)
+  onev:u64 = const() {"value":1}
+  zerov:u64 = const() {"value":0}
+  twov:u64 = const() {"value":2}
+  nxmask:u64 = const() {"value":9223372036854775808}
+  globalmask:u64 = const() {"value":256}
+  nxe_cap:u64 = const() {"value":256}
+  pge_cap:u64 = const() {"value":512}
+  physmask:u64 = const() {"value":4503599627366400}
+  reservedmask:u64 = const() {"value":9218868437227405312}
+  presentbits:u64 = bit.and(entry,onev)
+  present:bool = compare.eq(presentbits,onev)
+  forbid:u64 = bit.and(entry,reservedmask)
+  reservedok:bool = compare.eq(forbid,zerov)
+  phys:u64 = bit.and(entry,physmask)
+  hasphys:bool = compare.ne(phys,zerov)
+  above:u64 = int.shr.checked(phys,width)
+  widthok:bool = compare.eq(above,zerov)
+  nxbit:u64 = bit.and(entry,nxmask)
+  is_nx:bool = compare.ne(nxbit,zerov)
+  writable:u64 = bit.and(entry,twov)
+  is_rw:bool = compare.ne(writable,zerov)
+  executable:bool = bool.not(is_nx)
+  wx:bool = bool.and(is_rw,executable)
+  wxok:bool = bool.not(wx)
+  c_nxe:u64 = bit.and(cap,nxe_cap)
+  nxe:bool = compare.ne(c_nxe,zerov)
+  c_pge:u64 = bit.and(cap,pge_cap)
+  pge:bool = compare.ne(c_pge,zerov)
+  is_global_bit:u64 = bit.and(entry,globalmask)
+  is_global:bool = compare.ne(is_global_bit,zerov)
+  missing_nxe:bool = bool.not(nxe)
+  missing_pge:bool = bool.not(pge)
+  bad_nx:bool = bool.and(is_nx,missing_nxe)
+  bad_global:bool = bool.and(is_global,missing_pge)
+  caperror:bool = bool.or(bad_nx,bad_global)
+  capok:bool = bool.not(caperror)
+  a_ok:bool = bool.and(present,reservedok)
+  b_ok:bool = bool.and(hasphys,widthok)
+  c_ok:bool = bool.and(wxok,capok)
+  d_ok:bool = bool.and(a_ok,b_ok)
+  e_ok:bool = bool.and(d_ok,c_ok)
+  branch e_ok valid() invalid()
+block valid()
+  success:u32 = const() {"value":1}
+  ret(success)
+block invalid()
+  failure:u32 = const() {"value":0}
+  ret(failure)
+end
+fn read64_request(data:readbuf,base:usize) -> (u64) effects(read,trap) entry(start)
+block start(data:readbuf,base:usize)
+  zrr:u64 = const() {"value":0}
+  jump readloop(data,base,zrr,zrr)
+block readloop(drr:readbuf,brr:usize,irr:u64,acc_rr:u64)
+  limitrr:u64 = const() {"value":8}
+  morerr:bool = compare.lt(irr,limitrr)
+  branch morerr nextbyte(drr,brr,irr,acc_rr) done(acc_rr)
+block nextbyte(dbr:readbuf,bbr:usize,ibr:u64,abr:u64)
+  idxbr:usize = int.cast(ibr) {"mode":"wrap"}
+  addrbr:usize = int.add.wrap(bbr,idxbr)
+  octbr:u8 = buffer.load(dbr,addrbr)
+  widebr:u64 = int.cast(octbr) {"mode":"wrap"}
+  eightbr:u64 = const() {"value":8}
+  shiftbr:u64 = int.mul.wrap(ibr,eightbr)
+  shiftedbr:u64 = int.shl.checked(widebr,shiftbr)
+  joinedbr:u64 = bit.or(abr,shiftedbr)
+  onebr:u64 = const() {"value":1}
+  nextbr:u64 = int.add.wrap(ibr,onebr)
+  jump readloop(dbr,bbr,nextbr,joinedbr)
+block done(result_rr:u64)
+  ret(result_rr)
+end
+fn read64_table(data:mutbuf,base:usize) -> (u64) effects(read,trap) entry(start)
+block start(data:mutbuf,base:usize)
+  zrt:u64 = const() {"value":0}
+  jump readloop(data,base,zrt,zrt)
+block readloop(drt:mutbuf,brt:usize,irt:u64,acc_rt:u64)
+  limitrt:u64 = const() {"value":8}
+  morert:bool = compare.lt(irt,limitrt)
+  branch morert nextbyte(drt,brt,irt,acc_rt) done(acc_rt)
+block nextbyte(dbt:mutbuf,bbt:usize,ibt:u64,abt:u64)
+  idxbt:usize = int.cast(ibt) {"mode":"wrap"}
+  addrbt:usize = int.add.wrap(bbt,idxbt)
+  octbt:u8 = buffer.load(dbt,addrbt)
+  widebt:u64 = int.cast(octbt) {"mode":"wrap"}
+  eightbt:u64 = const() {"value":8}
+  shiftbt:u64 = int.mul.wrap(ibt,eightbt)
+  shiftedbt:u64 = int.shl.checked(widebt,shiftbt)
+  joinedbt:u64 = bit.or(abt,shiftedbt)
+  onebt:u64 = const() {"value":1}
+  nextbt:u64 = int.add.wrap(ibt,onebt)
+  jump readloop(dbt,bbt,nextbt,joinedbt)
+block done(result_rt:u64)
+  ret(result_rt)
+end
+fn write64(target:mutbuf,offset:usize,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(target:mutbuf,offset:usize,value:u64)
+  zww:u64 = const() {"value":0}
+  jump writeloop(target,offset,value,zww)
+block writeloop(dw:mutbuf,bw:usize,vw:u64,iw:u64)
+  limitw:u64 = const() {"value":8}
+  morew:bool = compare.lt(iw,limitw)
+  branch morew writebyte(dw,bw,vw,iw) done()
+block writebyte(dw2:mutbuf,bw2:usize,vw2:u64,iw2:u64)
+  idxw:usize = int.cast(iw2) {"mode":"wrap"}
+  addrw:usize = int.add.wrap(bw2,idxw)
+  eightw:u64 = const() {"value":8}
+  shiftw:u64 = int.mul.wrap(iw2,eightw)
+  shiftedw:u64 = int.shr.checked(vw2,shiftw)
+  octw:u8 = int.cast(shiftedw) {"mode":"wrap"}
+  _ = buffer.store(dw2,addrw,octw)
+  onew:u64 = const() {"value":1}
+  nextw:u64 = int.add.wrap(iw2,onew)
+  jump writeloop(dw2,bw2,vw2,nextw)
+block done()
+  dnw:u32 = const() {"value":0}
+  ret(dnw)
+end
