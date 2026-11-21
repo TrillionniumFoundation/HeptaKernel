@@ -2008,26 +2008,26 @@ test: test-x86-sysret-admit
 # These are caller-supplied snapshots, NOT privileged RDMSR/WRMSR/SYSCALL.
 .PHONY: test-x86-syscall-msr-admit
 build/x86-syscall-msr-admit.o: src/x86_syscall_msr_admit.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.syscall-msr.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.syscall-msr.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/x86-syscall-msr-admit.so: build/x86-syscall-msr-admit.o
 	ld -shared -z noexecstack -o "$@" "$<"
 
 build/x86-syscall-msr-unsafe.o: tests/negative/x86_syscall_msr_allow_all.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.syscall-msr-unsafe.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.syscall-msr-unsafe.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/x86-syscall-msr-unsafe.so: build/x86-syscall-msr-unsafe.o
 	ld -shared -z noexecstack -o "$@" "$<"
 
 test-x86-syscall-msr-admit: build/x86-syscall-msr-admit.so build/x86-syscall-msr-unsafe.so
-	@set -eu; a=$(mktemp build/.syscall-msr-byte-a.XXXXXX); b=$(mktemp build/.syscall-msr-byte-b.XXXXXX); trap 'rm -f "$a" "$b"' EXIT HUP INT TERM; \
-	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_syscall_msr_admit.hepta > "$a"; \
-	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_syscall_msr_admit.hepta > "$b"; \
-	cmp "$a" "$b"; cmp "$a" build/x86-syscall-msr-admit.o
+	@set -eu; a=$$(mktemp build/.syscall-msr-byte-a.XXXXXX); b=$$(mktemp build/.syscall-msr-byte-b.XXXXXX); trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_syscall_msr_admit.hepta > "$$a"; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_syscall_msr_admit.hepta > "$$b"; \
+	cmp "$$a" "$$b"; cmp "$$a" build/x86-syscall-msr-admit.o
 	timeout 90 $(PYTHON) tests/test_x86_syscall_msr_admit.py build/x86-syscall-msr-admit.so --object build/x86-syscall-msr-admit.o
 	$(PYTHON) tests/test_x86_syscall_msr_admit.py build/x86-syscall-msr-unsafe.so --expect-unsafe
 
