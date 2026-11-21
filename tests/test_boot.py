@@ -488,6 +488,11 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         p.stdout.count(PASS_MARKER) == 1 and FAIL_MARKER not in p.stdout)
         else:
             raise ValueError("unknown boot mode " + mode)
+        # Exhaustive marker partition: only this isolated SYSRET64 positive
+        # may report actual CPL3, and stale-old may only report refusal.
+        accepted = accepted and (sysret_gdt_observed == (mode == "sysret_ring3_hardware"))
+        accepted = accepted and (sysret_ring3_observed == (mode == "sysret_ring3_hardware"))
+        accepted = accepted and (sysret_stale_observed == (mode == "sysret_gdt_stale_rejected"))
         accepted = accepted and (pdpt_1g_hw == (mode == "pdpt_1g_hardware"))
         accepted = accepted and (pdpt_1g_stale == (mode == "pdpt_1g_stale"))
         accepted = accepted and (pdpt_1g_decoy == (mode == "pdpt_1g_decoy"))
@@ -532,10 +537,10 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                      "pdpt_1g_hardware", "pdpt_1g_stale", "pdpt_1g_decoy",
                      "pdpt_1g_unmap_hardware_fault", "pdpt_1g_unmap_stale", "pdpt_1g_unmap_bypass",
                      "pde_2m_unmap_hardware_fault", "pde_2m_unmap_stale", "pde_2m_unmap_bypass"}
-        accepted = accepted and (pt_commit_verified == (mode not in precommit | {"user_gdt_conflict_rejected", "idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected", "rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected", "upper_user_stale_rejected"}))
-        accepted = accepted and (upper_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "pde_2m_stale_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"}))
+        accepted = accepted and (pt_commit_verified == (mode not in precommit | {"user_gdt_conflict_rejected", "idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected", "rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "sysret_gdt_stale_rejected", "pde_2m_stale_rejected", "upper_user_stale_rejected"}))
+        accepted = accepted and (upper_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "pde_2m_stale_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"}))
         accepted = accepted and (upper_stale == (mode == "upper_user_stale_rejected"))
-        accepted = accepted and (pde_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"}))
+        accepted = accepted and (pde_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"}))
         accepted = accepted and (pde_stale == (mode == "pde_2m_stale_rejected"))
         accepted = accepted and (state_verified == (mode not in {"tss_state_conflict_rejected", "tss_rsp0_conflict_rejected"}))
         accepted = accepted and (state_stale == (mode == "tss_state_conflict_rejected"))
