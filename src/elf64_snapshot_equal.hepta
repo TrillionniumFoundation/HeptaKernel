@@ -1,0 +1,56 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn elf64_snapshot_equal(reference:readbuf,candidate:mutbuf,receipt:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(reference:readbuf,candidate:mutbuf,receipt:mutbuf)
+  reference_size:usize = buffer.len(reference)
+  candidate_size:usize = buffer.len(candidate)
+  sizes_equal:bool = compare.eq(reference_size,candidate_size)
+  branch sizes_equal bounded(reference,candidate,receipt,reference_size) length_mismatch()
+block length_mismatch()
+  length_status:u32 = const() {"value":1}
+  ret(length_status)
+block bounded(ref1:readbuf,cur1:mutbuf,out1:mutbuf,total1:usize)
+  min_length:usize = const() {"value":64}
+  max_length:usize = const() {"value":1048576}
+  at_least:bool = compare.ge(total1,min_length)
+  at_most:bool = compare.le(total1,max_length)
+  valid_length:bool = bool.and(at_least,at_most)
+  branch valid_length shape(ref1,cur1,out1,total1) length_out_of_scope()
+block length_out_of_scope()
+  range_status:u32 = const() {"value":2}
+  ret(range_status)
+block shape(ref2:readbuf,cur2:mutbuf,out2:mutbuf,total2:usize)
+  out_length:usize = buffer.len(out2)
+  expected:usize = const() {"value":16}
+  shape_valid:bool = compare.eq(out_length,expected)
+  branch shape_valid begin_scan(ref2,cur2,out2,total2) wrong_receipt()
+block wrong_receipt()
+  shape_status:u32 = const() {"value":3}
+  ret(shape_status)
+block begin_scan(ref3:readbuf,cur3:mutbuf,out3:mutbuf,total3:usize)
+  start_index:usize = const() {"value":0}
+  jump scan(ref3,cur3,out3,total3,start_index)
+block scan(ref4:readbuf,cur4:mutbuf,out4:mutbuf,total4:usize,index4:usize)
+  more:bool = compare.lt(index4,total4)
+  branch more check_byte(ref4,cur4,out4,total4,index4) accept(out4)
+block check_byte(ref5:readbuf,cur5:mutbuf,out5:mutbuf,total5:usize,index5:usize)
+  expected_byte:u8 = buffer.load(ref5,index5)
+  actual_byte:u8 = buffer.load(cur5,index5)
+  matches:bool = compare.eq(expected_byte,actual_byte)
+  branch matches step(ref5,cur5,out5,total5,index5) content_mismatch()
+block content_mismatch()
+  mismatch_status:u32 = const() {"value":4}
+  ret(mismatch_status)
+block step(ref6:readbuf,cur6:mutbuf,out6:mutbuf,total6:usize,index6:usize)
+  one:usize = const() {"value":1}
+  next_index:usize = int.add.wrap(index6,one)
+  jump scan(ref6,cur6,out6,total6,next_index)
+block accept(out7:mutbuf)
+  first:usize = const() {"value":0}
+  second:usize = const() {"value":1}
+  marker_a:u8 = const() {"value":165}
+  marker_b:u8 = const() {"value":90}
+  _ = buffer.store(out7,first,marker_a)
+  _ = buffer.store(out7,second,marker_b)
+  ok:u32 = const() {"value":0}
+  ret(ok)
+end
