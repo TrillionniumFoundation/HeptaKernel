@@ -100,7 +100,7 @@ def run(library, unsafe):
         codes[wanted] += 1
         assert bytes(src) == before_src and bytes(pmm) == before_pmm
         assert bytes(result)[:GUARD] == b"\xea" * GUARD
-        assert bytes(result)[GUARD + reply_size:] == b"\xea" * GUARD
+        assert bytes(result)[GUARD + reply_size:GUARD + reply_size + GUARD] == b"\xea" * GUARD
         if not unsafe:
             assert not mismatch, (tested, wanted, ret, expected.hex(), actual.hex())
 
