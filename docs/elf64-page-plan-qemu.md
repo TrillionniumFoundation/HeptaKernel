@@ -32,3 +32,32 @@ ELF relocation, dynamic linker, execve, HIA privilege backend or SMP
 linearizable operation. The synthetic file is owned by the observer, and
 the non-HIA boot.S still drives privilege transitions. Never use this
 limited experimental PASS to close any Linux full-target gate.
+
+## Whole-file native HIA layout preflight (2026-11-21)
+
+The same copied 7,292-byte ELF image now reaches the independently compiled
+`src/elf64_load_segments.hepta` **before** HIA generates page plans or fills
+physical frames. The preflight is not a new foreign-language ELF parser:
+`elf64-load-boot.o` is an `objcopy` symbol-renamed copy of the locked HIA
+compiler's actual object, and `make test-elf64-page-plan-hw` compares its
+complete `.text` bytes with the compiler-produced object.
+
+The valid single-PT_LOAD fixture must pass whole-file ELF/segment geometry,
+executable-entry and virtual-page overlap admission. On each of PC/32 MiB and
+Q35/64 MiB, two additional negative images create an otherwise valid second
+read-only PT_LOAD at 0x401200, overlapping the first PT_LOAD's 0x401000 page.
+The genuine HIA layout checker **must return 13**, before page planning or
+materialization. Independent non-HIA observation checks **every byte of both
+4 KiB physical targets** remains zero. A separate image substitutes the
+**genuinely HIA-compiled** dishonest full-layout checker which returns success
+for the malicious ELF; the external oracle detects the false admission, checks
+the untouched physical pages and terminates through its unique negative marker.
+Neither an arbitrary exception nor an unexpected QEMU timeout passes.
+
+The prior `invalid` image deliberately changes `p_offset` **after** the
+whole-file preflight, retaining the independent selected-PHDR fault-injection
+test. This is a documented check/use gap: the non-HIA fixture controls the
+copied image and both calls. The experiment is not a race-safe immutable file
+snapshot, an authenticated capability, a complete ELF mapper, a trusted PTE
+publisher, a third-page materialization, a Linux process or an `execve`
+implementation. HIA CRx/TLB/IRETQ/atomic/SMP backend limitations remain.
