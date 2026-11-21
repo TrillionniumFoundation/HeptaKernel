@@ -1885,7 +1885,7 @@ build/elf-plan-layout-liar.elf: build/boot-elf-plan-layout-liar.o $(ELF_PLAN_HW_
 build/elf-plan-%-multiboot.elf: build/elf-plan-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-elf64-page-plan-hw: build/elf-plan-hw-multiboot.elf build/elf-plan-invalid-multiboot.elf build/elf-plan-noop-multiboot.elf build/elf-plan-decoy-multiboot.elf build/elf-plan-overlap-multiboot.elf build/elf-plan-layout-liar-multiboot.elf
+test-elf64-page-plan-hw: test-elf64-load-segments build/elf-plan-hw-multiboot.elf build/elf-plan-invalid-multiboot.elf build/elf-plan-noop-multiboot.elf build/elf-plan-decoy-multiboot.elf build/elf-plan-overlap-multiboot.elf build/elf-plan-layout-liar-multiboot.elf
 	@set -eu; a=$$(mktemp build/.elf-plan-text-a.XXXXXX); b=$$(mktemp build/.elf-plan-text-b.XXXXXX); \
 	  trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
 	  objcopy --dump-section .text="$$a" build/elf64-page-plan.o; \
