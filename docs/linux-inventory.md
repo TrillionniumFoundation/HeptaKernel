@@ -301,3 +301,32 @@ Tracked target does not imply an active include; untracked required targets
 may be conditional or generated. All 17 full Linux acceptance gates and 422
 x86-64 syscall obligations stay unchanged, `inventory_complete=false`,
 and `make full-acceptance` must continue to report HOLD.
+
+
+## Physical-context review of Kconfig include candidates
+
+The immutable literal include target report now also retains a
+'source_context' for each original source/rsource/osource/orsource
+lexical row. The original one-to-one source-edge ledger, path identities,
+target resolution and SHA-256 checks remain intact. Physical context
+distinguishes DIRECTIVE_LEXICAL_CANDIDATE, HELP_TEXT_LEXICAL_ONLY,
+UNRESOLVED_PHYSICAL_CONTINUATION, and
+UNRESOLVED_MIXED_HELP_INDENTATION. A source-looking line inside an
+indented Kconfig help or ---help--- body is not counted as an active
+include merely because a path happens to exist in the Git tree.
+
+This conservative source-order classifier reads the original immutable
+Git blob (not the worktree), tracks help indentation across blank lines,
+handles tabs and CRLF, and marks immediate prior backslash continuations.
+The pinned inventory CI independently checks aggregate classifications,
+previous physical line provenance for continuations, and the existence
+of a less-indented help header for help-body classifications. Adversarial
+fixtures cover false include lines embedded in help, mixed indentation,
+continued directives, and the original Git ledger tampering controls.
+
+These are physical-line review hints rather than a complete Kconfig lexer
+or proof of active include reachability. Nested grammar, generated source
+roots, environment substitutions, conditions, and source-path semantics
+still require evaluation. In particular, the original lexical counts may
+include inactive help-body text and test-only source roots; no rows are
+removed, and all 17 Linux gates and 422 syscall obligations remain HOLD.
