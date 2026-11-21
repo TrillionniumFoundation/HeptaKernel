@@ -1716,10 +1716,13 @@ test-elf64-exec-admit: build/elf64-exec-admit.so build/elf64-exec-unsafe.so
 # This is a restricted, standalone admission component, not an ELF loader.
 .PHONY: test-elf64-load-segments
 
+# Compile under the same empty-PATH contract as the independent two-pass
+# reproduction below. This object is used by both host native and live QEMU.
 build/elf64-load-segments.o: src/elf64_load_segments.hepta | build check-compiler
-	@set -eu; tmp=$$(mktemp build/.elf64-load-native.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
-	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+	@set -eu; tmp=$(mktemp build/.elf64-load-native.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+	compiler=$(command -v "$(HEPTA_COMPILER)"); \
+	env -i PATH='' "$compiler" < "$<" > "$tmp"; test -s "$tmp"; \
+	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
 
 build/elf64-load-segments.so: build/elf64-load-segments.o
 	ld -shared -z noexecstack -o "$@" "$<"
