@@ -1,0 +1,40 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(syscall_msr_admit)
+fn syscall_msr_admit(lstar:u64,star:u64,fmask:u64,efer:u64) -> (u32) effects(trap) entry(start)
+block start(lstar:u64,star:u64,fmask:u64,efer:u64)
+  kernel_base:u64 = const() {"value":18446603336221196288}
+  kernel_end:u64 = const() {"value":18446744073709547520}
+  lo_ok:bool = compare.ge(lstar,kernel_base)
+  hi_ok:bool = compare.lt(lstar,kernel_end)
+  range_ok:bool = bool.and(lo_ok,hi_ok)
+  branch range_ok check_star(star,fmask,efer) bad_lstar()
+block bad_lstar()
+  status_lstar:u32 = const() {"value":1}
+  ret(status_lstar)
+block check_star(star1:u64,fmask1:u64,efer1:u64)
+  expected_star:u64 = const() {"value":13510833241849856}
+  star_ok:bool = compare.eq(star1,expected_star)
+  branch star_ok check_fmask(fmask1,efer1) bad_star()
+block bad_star()
+  status_star:u32 = const() {"value":2}
+  ret(status_star)
+block check_fmask(fmask2:u64,efer2:u64)
+  required_fmask:u64 = const() {"value":292608}
+  observed_fmask:u64 = bit.and(fmask2,required_fmask)
+  mask_ok:bool = compare.eq(observed_fmask,required_fmask)
+  branch mask_ok check_efer(efer2) bad_fmask()
+block bad_fmask()
+  status_fmask:u32 = const() {"value":3}
+  ret(status_fmask)
+block check_efer(efer3:u64)
+  required_efer:u64 = const() {"value":3329}
+  observed_efer:u64 = bit.and(efer3,required_efer)
+  efer_ok:bool = compare.eq(observed_efer,required_efer)
+  branch efer_ok admitted() bad_efer()
+block bad_efer()
+  status_efer:u32 = const() {"value":4}
+  ret(status_efer)
+block admitted()
+  status_ok:u32 = const() {"value":0}
+  ret(status_ok)
+end
