@@ -39,3 +39,28 @@ mutated during copying, and no source-page pinning/recovery protocol is
 provided. QEMU hardware publication and fault controls are still pending.
 The fixed Linux 7.3.4 scope, all 17 acceptance gates and 422 x86-64
 syscall rows remain HOLD.
+
+## Isolated QEMU single-parent publication experiment
+
+`make test-pt-shadow-hw` links the unchanged pinned HIA Core v8 native
+`x86_pt_pair_shadow.hepta` machine code into two isolated QEMU configurations
+(PC 32 MiB and Q35 64 MiB). After HIA E820 and reservation admission,
+the explicitly non-HIA observer takes an all-zero 4 KiB source-table snapshot
+and constructs a disjoint, page-aligned shadow in guest RAM. The observer
+checks all 512 output words and the 16-byte receipt before a **single**
+parent PDE store and CR3 reload. Real CPU reads must observe the opposite
+physical data frames on both 4 KiB virtual pages.
+
+Stale second-old, malicious HIA-compiled success/no-op, and post-build
+shadow-byte corruption have separate exact readbacks and must refuse without
+publishing a parent pointer. Every hardware run records the original HIA
+source/object hashes, linked text identity, complete guest output, image
+SHA-256 and exit status. The unchanged source snapshot, inactive original
+table and physical frame contents are checked before publication.
+
+This removes the specific hazard of sequentially modifying two *active*
+PTEs in this single-CPU test. It does not make publication atomic with
+respect to SMP or asynchronous faults, nor authenticate table-page
+ownership, source-page stability under DMA, TLB shootdown, HIA CR3
+instructions, or a Linux address-space lifecycle. No other acceptance
+gate or x86-64 syscall row is closed.

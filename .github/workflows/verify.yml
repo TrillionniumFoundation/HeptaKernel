@@ -216,6 +216,11 @@ jobs:
         run: |
           make test-x86-pt-pair-shadow HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Independently verify genuine HIA offline shadow page publication on QEMU
+        shell: bash
+        run: |
+          make test-pt-shadow-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify genuine two-leaf HIA writes on live QEMU MMU with stale and liar controls
         shell: bash
         run: |
@@ -660,6 +665,13 @@ jobs:
             build/boot-ring3-pde-stale.o
             build/ring3-pde-stale.elf
             build/ring3-pde-stale-multiboot.elf
+            build/x86-pt-shadow-qemu-report.json
+            build/pt-shadow-hw-multiboot.elf
+            build/pt-shadow-stale-multiboot.elf
+            build/pt-shadow-liar-multiboot.elf
+            build/pt-shadow-tamper-multiboot.elf
+            build/pt-shadow-boot.o
+            build/pt-shadow-unsafe-boot.o
             build/x86-pt-pair-shadow-report.json
             build/x86-pt-pair-shadow.o
             build/x86-pt-pair-shadow.so
