@@ -146,7 +146,7 @@ def run(repo: Path, inventory: Path, lock_file: Path, vendor_file: Path) -> dict
     vendor = vendor_file.read_bytes()
     if vendor == blob:
         vendor_status = "EXACT_GIT_BLOB"
-    elif not blob.endswith(b"\n") and vendor == blob + b"\n":
+    elif blob.endswith(b"\n") and vendor == blob + b"\n":
         # The vendored fixture has one editorial trailing LF absent from the
         # locked upstream blob. Keep the *upstream* bytes authoritative.
         vendor_status = "VENDORED_EXTRA_TRAILING_LF"
