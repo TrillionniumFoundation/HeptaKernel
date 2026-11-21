@@ -191,8 +191,8 @@ block pad_next(o13:mutbuf,s13:readbuf,shadow13:u64,proposed13:u64,i13:u64)
 block accept(o14:mutbuf,shadow14:u64,proposed14:u64)
   first14:usize = const() {"value":0}
   second14:usize = const() {"value":8}
-  _ = call(o14,first14,proposed14) {"function":"write_word"}
-  _ = call(o14,second14,shadow14) {"function":"write_word"}
+  written_a14:u32 = call(o14,first14,proposed14) {"function":"write_word"}
+  written_b14:u32 = call(o14,second14,shadow14) {"function":"write_word"}
   ok14:u32 = const() {"value":0}
   ret(ok14)
 end
