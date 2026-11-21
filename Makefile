@@ -2076,3 +2076,34 @@ test-x86-pt-pair-shadow: build/x86-pt-pair-shadow.so build/x86-pt-pair-shadow-un
 	cmp build/x86-pt-pair-shadow.o "$$a"; cmp "$$a" "$$b"
 
 test: test-x86-pt-pair-shadow
+
+# Genuine Core v8 HIA constructs a separate 4KiB table before a NON-HIA
+# single parent PDE publish; test all QEMU failure paths independently.
+.PHONY: test-pt-shadow-hw
+build/pt-shadow-boot.o: build/x86-pt-pair-shadow.o
+	objcopy --redefine-sym f0=pt_shadow_f0 "$<" "$@"
+build/pt-shadow-unsafe-boot.o: build/x86-pt-pair-shadow-unsafe.o
+	objcopy --redefine-sym f0=pt_shadow_f0 "$<" "$@"
+build/boot-pt-shadow-hw.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PT_SHADOW_HW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-pt-shadow-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PT_SHADOW_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-pt-shadow-liar.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PT_SHADOW_LIAR=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-pt-shadow-tamper.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PT_SHADOW_TAMPER=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+PT_SHADOW_HW_SUPPORT := $(PT_PAIR_HW_SUPPORT)
+build/pt-shadow-hw.elf: build/boot-pt-shadow-hw.o $(PT_SHADOW_HW_SUPPORT) build/pt-shadow-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(PT_SHADOW_HW_SUPPORT) build/pt-shadow-boot.o
+build/pt-shadow-stale.elf: build/boot-pt-shadow-stale.o $(PT_SHADOW_HW_SUPPORT) build/pt-shadow-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(PT_SHADOW_HW_SUPPORT) build/pt-shadow-boot.o
+build/pt-shadow-liar.elf: build/boot-pt-shadow-liar.o $(PT_SHADOW_HW_SUPPORT) build/pt-shadow-unsafe-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(PT_SHADOW_HW_SUPPORT) build/pt-shadow-unsafe-boot.o
+build/pt-shadow-tamper.elf: build/boot-pt-shadow-tamper.o $(PT_SHADOW_HW_SUPPORT) build/pt-shadow-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(PT_SHADOW_HW_SUPPORT) build/pt-shadow-boot.o
+build/pt-shadow-%-multiboot.elf: build/pt-shadow-%.elf
+	objcopy -O elf32-i386 "$<" "$@"
+test-pt-shadow-hw: build/pt-shadow-hw-multiboot.elf build/pt-shadow-stale-multiboot.elf build/pt-shadow-liar-multiboot.elf build/pt-shadow-tamper-multiboot.elf
+	$(PYTHON) tests/test_x86_pt_shadow_qemu.py --qemu "$(QEMU)"
+test: test-pt-shadow-hw
+test-boot: test-pt-shadow-hw

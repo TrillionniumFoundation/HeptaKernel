@@ -666,6 +666,12 @@ hia_idt_next64:
     call reservation_admit64
     leaq message_reservation_pass(%rip), %rsi
     call puts64
+#if defined(HEPTAKERNEL_TEST_PT_SHADOW_HW) || defined(HEPTAKERNEL_TEST_PT_SHADOW_STALE) || defined(HEPTAKERNEL_TEST_PT_SHADOW_LIAR) || defined(HEPTAKERNEL_TEST_PT_SHADOW_TAMPER)
+    /* Isolated real MMU publication of a HIA-built, unpublished PTE page.
+     * Parent PDE and CR3 remain explicitly NON-HIA observer instructions. */
+    call pt_shadow_hardware_exercise64
+    jmp fail64
+#endif
 #if defined(HEPTAKERNEL_TEST_PT_PAIR_HW) || defined(HEPTAKERNEL_TEST_PT_PAIR_STALE) || defined(HEPTAKERNEL_TEST_PT_PAIR_LIAR)
     /* Terminal CPU-MMU experiment: actual HIA two-PTE writer. */
     call pt_pair_hardware_exercise64
@@ -2903,6 +2909,194 @@ cow_pte_oracle_next:
     jmp debug_exit64
 #endif
 
+
+
+/* Isolated QEMU proof point for original HIA Core v8 off-line shadow table:
+ * read-only 4160-byte request contains a 4096-byte snapshot; HIA constructs
+ * the distinct real aligned physical page before the sole parent PDE switch.
+ * All CR3/parent PDE operations below are NON-HIA test bridge. No SMP,
+ * atomic page-table publish, allocator-authority, or Linux VMM claim. */
+#if defined(HEPTAKERNEL_TEST_PT_SHADOW_HW) || defined(HEPTAKERNEL_TEST_PT_SHADOW_STALE) || defined(HEPTAKERNEL_TEST_PT_SHADOW_LIAR) || defined(HEPTAKERNEL_TEST_PT_SHADOW_TAMPER)
+pt_shadow_hardware_exercise64:
+    movq $ARENA_MIN, %rdi
+    movq $2, %rsi
+    call owner_admit64
+    /* Capture and independently verify an unlinked, all-zero original table
+     * into the HIA read-only snapshot. The live PDE is still a 2 MiB leaf. */
+    leaq page_table_4m(%rip), %rsi
+    leaq pt_shadow_hw_request+64(%rip), %rdi
+    movl $512, %ecx
+pt_shadow_capture:
+    cmpq $0, (%rsi)
+    jne fail64
+    movq (%rsi), %rax
+    movq %rax, (%rdi)
+    addq $8, %rsi
+    addq $8, %rdi
+    loop pt_shadow_capture
+    /* Make no-op output impossible to confuse with BSS initialized output. */
+    cld
+    leaq pt_shadow_hw_table(%rip), %rdi
+    movabsq $0xa5a5a5a5a5a5a5a5, %rax
+    movl $512, %ecx
+    rep stosq
+    movq $ARENA_MIN, %rdi
+    movabsq $0x123456789abcdef0, %rax
+    movq %rax, (%rdi)
+    movabsq $0x0fedcba987654321, %rax
+    movq %rax, PAGE_BYTES(%rdi)
+    /* Header: slot, old, new, slot, old, new, caps, reserved. */
+    movq $0, pt_shadow_hw_request(%rip)
+    movq $0, pt_shadow_hw_request+8(%rip)
+    movabsq $0x8000000000401003, %rax
+    movq %rax, pt_shadow_hw_request+16(%rip)
+    movq $1, pt_shadow_hw_request+24(%rip)
+    movq $0, pt_shadow_hw_request+32(%rip)
+    movabsq $0x8000000000400003, %rax
+    movq %rax, pt_shadow_hw_request+40(%rip)
+    movl pte_caps(%rip), %eax
+    movq %rax, pt_shadow_hw_request+48(%rip)
+    movq $0, pt_shadow_hw_request+56(%rip)
+#ifdef HEPTAKERNEL_TEST_PT_SHADOW_STALE
+    movq $1, pt_shadow_hw_request+32(%rip)
+#endif
+    movabsq $0xcafebabecafebabe, %rax
+    movq %rax, pt_shadow_hw_receipt(%rip)
+    movq %rax, pt_shadow_hw_receipt+8(%rip)
+    leaq pt_shadow_hw_request(%rip), %rdi
+    movl $4160, %esi
+    leaq pt_shadow_hw_table(%rip), %rdx
+    movl $4096, %ecx
+    leaq pt_shadow_hw_receipt(%rip), %r8
+    movl $16, %r9d
+    call pt_shadow_f0
+#if defined(HEPTAKERNEL_TEST_PT_SHADOW_STALE)
+    cmpl $7, %eax
+    jne fail64
+#elif defined(HEPTAKERNEL_TEST_PT_SHADOW_LIAR)
+    testl %eax, %eax
+    jne fail64
+#else
+    testl %eax, %eax
+    jne fail64
+#endif
+    /* Independent observer: HIA must never touch its input snapshot or
+     * the original PTE page. Two unchanged physical data frames also matter. */
+    leaq page_table_4m(%rip), %rsi
+    leaq pt_shadow_hw_request+64(%rip), %rdi
+    movl $512, %ecx
+pt_shadow_original_scan:
+    cmpq $0, (%rsi)
+    jne fail64
+    cmpq $0, (%rdi)
+    jne fail64
+    addq $8, %rsi
+    addq $8, %rdi
+    loop pt_shadow_original_scan
+    movq page_directory+16(%rip), %rax
+    andq $-97, %rax
+    cmpq $0x400083, %rax
+    jne fail64
+    movq $ARENA_MIN, %rdi
+    movabsq $0x123456789abcdef0, %rax
+    cmpq %rax, (%rdi)
+    jne fail64
+    movabsq $0x0fedcba987654321, %rax
+    cmpq %rax, PAGE_BYTES(%rdi)
+    jne fail64
+#if defined(HEPTAKERNEL_TEST_PT_SHADOW_STALE) || defined(HEPTAKERNEL_TEST_PT_SHADOW_LIAR)
+    /* Rejection must leave all 4096 shadow bytes AND receipt untouched. */
+    leaq pt_shadow_hw_table(%rip), %rdi
+    movabsq $0xa5a5a5a5a5a5a5a5, %rax
+    movl $512, %ecx
+pt_shadow_rejected_scan:
+    cmpq %rax, (%rdi)
+    jne fail64
+    addq $8, %rdi
+    loop pt_shadow_rejected_scan
+    movabsq $0xcafebabecafebabe, %rax
+    cmpq %rax, pt_shadow_hw_receipt(%rip)
+    jne fail64
+    cmpq %rax, pt_shadow_hw_receipt+8(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_PT_SHADOW_STALE
+    leaq message_pt_shadow_stale(%rip), %rsi
+#else
+    leaq message_pt_shadow_liar(%rip), %rsi
+#endif
+    call puts64
+    movl $0x11, %eax
+    jmp debug_exit64
+#else
+    /* Independently compare all 512 HIA output words and the full receipt,
+     * before any privileged parent publish. */
+    movabsq $0x8000000000401003, %rax
+    cmpq %rax, pt_shadow_hw_table(%rip)
+    jne fail64
+    cmpq %rax, pt_shadow_hw_receipt(%rip)
+    jne fail64
+    movabsq $0x8000000000400003, %rax
+    cmpq %rax, pt_shadow_hw_table+8(%rip)
+    jne fail64
+    cmpq %rax, pt_shadow_hw_receipt+8(%rip)
+    jne fail64
+    leaq pt_shadow_hw_table+16(%rip), %rdi
+    movl $510, %ecx
+pt_shadow_tail_scan:
+    cmpq $0, (%rdi)
+    jne fail64
+    addq $8, %rdi
+    loop pt_shadow_tail_scan
+#ifdef HEPTAKERNEL_TEST_PT_SHADOW_TAMPER
+    /* Adversarial post-build modification. Never publish the corrupt page. */
+    xorq $2, pt_shadow_hw_table(%rip)
+    movabsq $0x8000000000401001, %rax
+    cmpq %rax, pt_shadow_hw_table(%rip)
+    jne fail64
+    movabsq $0x8000000000401003, %rax
+    cmpq %rax, pt_shadow_hw_receipt(%rip)
+    jne fail64
+    movq page_directory+16(%rip), %rax
+    andq $-97, %rax
+    cmpq $0x400083, %rax
+    jne fail64
+    leaq message_pt_shadow_tamper(%rip), %rsi
+    call puts64
+    movl $0x11, %eax
+    jmp debug_exit64
+#else
+    /* EXACTLY ONE parent pointer switched after a full-byte shadow check.
+     * The PDE store / CR3 reload and exclusive ownership are test fixtures. */
+    leaq pt_shadow_hw_table(%rip), %rax
+    orq $3, %rax
+    movq %rax, page_directory+16(%rip)
+    movq %cr3, %rax
+    movq %rax, %cr3
+    movq $ARENA_MIN, %rdi
+    movabsq $0x0fedcba987654321, %rax
+    cmpq %rax, (%rdi)
+    jne fail64
+    movabsq $0x123456789abcdef0, %rax
+    cmpq %rax, PAGE_BYTES(%rdi)
+    jne fail64
+    /* Hardware may set Accessed bits in the published entries. */
+    movq pt_shadow_hw_table(%rip), %rax
+    andq $-33, %rax
+    movabsq $0x8000000000401003, %rdx
+    cmpq %rdx, %rax
+    jne fail64
+    movq pt_shadow_hw_table+8(%rip), %rax
+    andq $-33, %rax
+    movabsq $0x8000000000400003, %rdx
+    cmpq %rdx, %rax
+    jne fail64
+    leaq message_pt_shadow_live(%rip), %rsi
+    call puts64
+    movl $0x10, %eax
+    jmp debug_exit64
+#endif
+#endif
+#endif
 
 /* Test-only fixture: real Core v8 HIA writes actual 4KiB PTE leaves.
  * E820 admission is HIA; caller owns both frames and table exclusively.
@@ -5225,6 +5419,14 @@ message_map_pass:
     .asciz "HEPTAKERNEL HIA E820 VERIFIED\r\n"
 message_reservation_pass:
     .asciz "HEPTAKERNEL HIA RESERVATIONS VERIFIED\r\n"
+message_pt_shadow_live:
+    .asciz "HEPTAKERNEL HIA OFFLINE PT SHADOW HARDWARE VERIFIED\r\n"
+message_pt_shadow_stale:
+    .asciz "HEPTAKERNEL HIA OFFLINE PT SHADOW STALE SECOND REFUSED UNCHANGED\r\n"
+message_pt_shadow_liar:
+    .asciz "HEPTAKERNEL HIA OFFLINE PT SHADOW DISHONEST NOOP DETECTED\r\n"
+message_pt_shadow_tamper:
+    .asciz "HEPTAKERNEL HIA OFFLINE PT SHADOW POSTBUILD TAMPER DETECTED\r\n"
 message_pt_pair_live:
     .asciz "HEPTAKERNEL HIA TWO PTE HARDWARE SWAPPED MAPPINGS VERIFIED\r\n"
 message_pt_pair_stale:
@@ -5583,6 +5785,12 @@ reservation_guard_before: .skip 8
 reservation_reply:        .skip 16
 reservation_guard_after:  .skip 8
 reservation_unused:       .skip 16
+/* Input snapshot and private aligned live-shadow candidate are disjoint. */
+.balign 8
+pt_shadow_hw_request: .skip 4160
+pt_shadow_hw_receipt: .skip 16
+.balign 4096
+pt_shadow_hw_table:   .skip 4096
 pt_pair_hw_request: .skip 64
 pt_pair_hw_receipt: .skip 16
 pt_commit_request: .skip 32
