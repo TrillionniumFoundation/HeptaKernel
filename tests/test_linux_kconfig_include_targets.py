@@ -13,7 +13,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from linux_kconfig_include_targets import collect, literal_target  # noqa: E402
+from linux_kconfig_include_targets import collect, literal_target, source_context  # noqa: E402
 
 
 def git(repo, *args):
@@ -21,6 +21,42 @@ def git(repo, *args):
 
 
 class KconfigLiteralTargetsTests(unittest.TestCase):
+    def test_help_body_and_physical_continuation_are_preserved_not_activated(self):
+        lines = [
+            b"config EXAMPLE",
+            b"    help",
+            b'        source "help/example"',
+            b'        rsource "help/relative"',
+            b"",
+            b'    source "real/target"',
+            b'source "preceding" \\',
+            b'  source "continuation/example"',
+            b"   help",
+            b'\t source "mixed/indent"',
+            b' source "after/help"',
+            b'\t---help---\r',
+            b'\t\tosource "old/help"\r',
+            b'osource "real/optional"',
+        ]
+        expected = {
+            3: "HELP_TEXT_LEXICAL_ONLY",
+            4: "HELP_TEXT_LEXICAL_ONLY",
+            6: "DIRECTIVE_LEXICAL_CANDIDATE",
+            7: "DIRECTIVE_LEXICAL_CANDIDATE",
+            8: "UNRESOLVED_PHYSICAL_CONTINUATION",
+            10: "UNRESOLVED_MIXED_HELP_INDENTATION",
+            11: "DIRECTIVE_LEXICAL_CANDIDATE",
+            13: "HELP_TEXT_LEXICAL_ONLY",
+            14: "DIRECTIVE_LEXICAL_CANDIDATE",
+        }
+        self.assertEqual(source_context(lines), expected)
+        # A help-body line may still have a matching tracked target in the
+        # raw lexical ledger; its context must not claim an active include.
+        self.assertEqual(source_context([b"help", b'  source "real"'])[2],
+                         "HELP_TEXT_LEXICAL_ONLY")
+        self.assertEqual(source_context([b'help', b'', b' source "real"'])[3],
+                         "HELP_TEXT_LEXICAL_ONLY")
+
     def test_literal_anchor_optional_escape_and_nonregular(self):
         paths = {b"sub/Kconfig": {"mode": "100644", "type": "blob", "oid": "1" * 40},
                  b"foo/link": {"mode": "120000", "type": "blob", "oid": "2" * 40}}
@@ -95,6 +131,8 @@ class KconfigLiteralTargetsTests(unittest.TestCase):
                 "UNRESOLVED_VARIABLE_GLOB_OR_ESCAPE", "OUTSIDE_TRACKED_TREE",
                 "REQUIRED_UNTRACKED_LITERAL"])
             self.assertEqual(report["counts"]["all_lexical_edges"], len(edges))
+            self.assertEqual(report["context_counts"], {"DIRECTIVE_LEXICAL_CANDIDATE": len(edges)})
+            self.assertTrue(all(x["source_context"] == "DIRECTIVE_LEXICAL_CANDIDATE" for x in rows))
             self.assertFalse(report["inventory_complete"])
             self.assertEqual(report["source_sha256"], hashlib.sha256(content).hexdigest())
             (repo / "foo/Kconfig").write_bytes(b'source "forged"\n')
