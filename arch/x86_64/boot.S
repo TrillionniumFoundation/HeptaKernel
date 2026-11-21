@@ -3429,6 +3429,9 @@ shadow_owner_full_scan:
 #ifdef HEPTAKERNEL_TEST_SHADOW_OWNER_POST_TAIL
     cmpl $4, %r12d       /* genuine HIA rejects invalid tail bit */
     jne fail64
+    movabsq $0xa6a6a6a6a6a6a6a6, %rax
+    movq %rax, shadow_owner_reply(%rip)
+    movq %rax, shadow_owner_reply+8(%rip)
     jmp shadow_owner_refused
 #else
     testl %r12d, %r12d
