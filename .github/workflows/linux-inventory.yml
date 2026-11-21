@@ -121,7 +121,7 @@ jobs:
           assert hashlib.sha256(blob).hexdigest() == out["source_blob_sha256"]
           vendor = Path("third_party/linux/arch/x86/entry/syscalls/syscall_64.tbl").read_bytes()
           assert out["vendor_status"] == "VENDORED_EXTRA_TRAILING_LF"
-          assert not blob.endswith(b"\n") and vendor == blob + b"\n"
+          assert blob.endswith(b"\n") and vendor == blob + b"\n"
           assert hashlib.sha256(vendor).hexdigest() == out["vendor_sha256"]
           assert out["source_blob_oid"] == oid
           assert out["linux_commit"] == subprocess.check_output(
