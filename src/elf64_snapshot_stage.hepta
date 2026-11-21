@@ -1,0 +1,42 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn elf64_snapshot_stage(source:readbuf,staging:mutbuf,receipt:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(source:readbuf,staging:mutbuf,receipt:mutbuf)
+  length:usize = buffer.len(source)
+  min_size:usize = const() {"value":64}
+  max_size:usize = const() {"value":1048576}
+  min_ok:bool = compare.ge(length,min_size)
+  max_ok:bool = compare.le(length,max_size)
+  length_ok:bool = bool.and(min_ok,max_ok)
+  branch length_ok stage_shape(source,staging,receipt,length) invalid_source()
+block invalid_source()
+  e_source:u32 = const() {"value":1}
+  ret(e_source)
+block stage_shape(src1:readbuf,dst1:mutbuf,out1:mutbuf,size1:usize)
+  dst_size:usize = buffer.len(dst1)
+  same_size:bool = compare.eq(size1,dst_size)
+  branch same_size receipt_shape(src1,dst1,out1,size1) invalid_staging()
+block invalid_staging()
+  e_staging:u32 = const() {"value":2}
+  ret(e_staging)
+block receipt_shape(src2:readbuf,dst2:mutbuf,out2:mutbuf,size2:usize)
+  receipt_size:usize = buffer.len(out2)
+  expected:usize = const() {"value":16}
+  receipt_ok:bool = compare.eq(receipt_size,expected)
+  branch receipt_ok copy_into_stage(src2,dst2,out2,size2) invalid_receipt()
+block invalid_receipt()
+  e_receipt:u32 = const() {"value":3}
+  ret(e_receipt)
+block copy_into_stage(src3:readbuf,dst3:mutbuf,out3:mutbuf,size3:usize)
+  offset:usize = const() {"value":0}
+  _ = buffer.copy_range(dst3,src3,offset,offset,size3)
+  receipt_bytes:usize = const() {"value":16}
+  zero:u8 = const() {"value":0}
+  _ = buffer.fill_range(out3,offset,receipt_bytes,zero)
+  second:usize = const() {"value":1}
+  marker_a:u8 = const() {"value":165}
+  marker_b:u8 = const() {"value":90}
+  _ = buffer.store(out3,offset,marker_a)
+  _ = buffer.store(out3,second,marker_b)
+  ok:u32 = const() {"value":0}
+  ret(ok)
+end

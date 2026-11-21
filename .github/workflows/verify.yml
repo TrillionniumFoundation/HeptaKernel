@@ -88,6 +88,11 @@ jobs:
         run: |
           make test-cow-split HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Verify native HIA bounded ELF snapshot staging and dishonest copy control
+        shell: bash
+        run: |
+          make test-elf64-stage HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify HIA ELF exact snapshot readback and adversarial native oracle
         shell: bash
         run: |
@@ -371,6 +376,11 @@ jobs:
             build/native-report.json
             build/elf-plan-hardware-report.json
             build/elf-plan-native-inputs.sha256
+            build/elf64-stage-report.json
+            build/elf64-stage.o
+            build/elf64-stage.so
+            build/elf64-stage-unsafe.o
+            build/elf64-stage-unsafe.so
             build/elf64-snapshot-report.json
             build/elf64-snapshot.o
             build/elf64-snapshot.so

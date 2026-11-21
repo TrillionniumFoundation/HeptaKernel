@@ -1,0 +1,19 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn elf64_snapshot_stage(source:readbuf,staging:mutbuf,receipt:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(source:readbuf,staging:mutbuf,receipt:mutbuf)
+  zero:usize = const() {"value":0}
+  one:usize = const() {"value":1}
+  size:usize = buffer.len(receipt)
+  two:usize = const() {"value":2}
+  enough:bool = compare.ge(size,two)
+  branch enough forge(receipt,zero,one) accept()
+block forge(out:mutbuf,first:usize,second:usize)
+  a:u8 = const() {"value":165}
+  b:u8 = const() {"value":90}
+  _ = buffer.store(out,first,a)
+  _ = buffer.store(out,second,b)
+  jump accept()
+block accept()
+  ok:u32 = const() {"value":0}
+  ret(ok)
+end

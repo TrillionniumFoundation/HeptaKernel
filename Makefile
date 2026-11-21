@@ -1947,3 +1947,34 @@ test-elf64-page-plan-hw: test-elf64-snapshot test-elf64-load-segments build/elf-
 	  sha256sum --check build/elf-plan-native-inputs.sha256
 	timeout 160 $(PYTHON) tests/test_elf64_page_plan_qemu.py --qemu "$(QEMU)"
 
+
+# Native HIA copies a bounded ELF byte stream to a caller-owned staging buffer.
+# The caller still owes stable input, nonaliasing and exclusive staging ownership.
+.PHONY: test-elf64-stage
+build/elf64-stage.o: src/elf64_snapshot_stage.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.elf-stage.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	compiler=$$(command -v "$(HEPTA_COMPILER)"); \
+	env -i PATH='' "$$compiler" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/elf64-stage.so: build/elf64-stage.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/elf64-stage-unsafe.o: tests/negative/elf64_snapshot_stage_noop.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.elf-stage-unsafe.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/elf64-stage-unsafe.so: build/elf64-stage-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+test-elf64-stage: build/elf64-stage.so build/elf64-stage-unsafe.so
+	timeout 90 $(PYTHON) tests/test_elf64_snapshot_stage.py build/elf64-stage.so --object build/elf64-stage.o
+	$(PYTHON) tests/test_elf64_snapshot_stage.py build/elf64-stage-unsafe.so --expect-unsafe
+	@set -eu; a=$$(mktemp build/.stage-repro-a.XXXXXX); b=$$(mktemp build/.stage-repro-b.XXXXXX); \
+	trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH='' "$(HEPTA_COMPILER)" < src/elf64_snapshot_stage.hepta > "$$a"; \
+	env -i PATH='' "$(HEPTA_COMPILER)" < src/elf64_snapshot_stage.hepta > "$$b"; \
+	cmp build/elf64-stage.o "$$a"; cmp "$$a" "$$b"
+
+test: test-elf64-stage
