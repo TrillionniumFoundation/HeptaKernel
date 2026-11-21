@@ -2311,7 +2311,7 @@ build/boot-syscall-roundtrip.o: arch/x86_64/boot.S build/boot-cases.bin
 build/boot-syscall-msr-stale.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_SYSCALL_MSR_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
-SYSCALL_HW_SUPPORT := $(SYSRET_RING3_BOOT_SUPPORT) build/syscall-msr-boot.o
+SYSCALL_HW_SUPPORT := $(SYSRET_RING3_BOOT_SUPPORT) build/syscall-msr-boot.o build/syscall-stack-boot.o
 
 build/syscall-roundtrip-multiboot.elf: build/boot-syscall-roundtrip.o $(SYSCALL_HW_SUPPORT) arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-roundtrip.elf "$<" $(SYSCALL_HW_SUPPORT)
@@ -2323,3 +2323,39 @@ build/syscall-msr-stale-multiboot.elf: build/boot-syscall-msr-stale.o $(SYSCALL_
 
 test-boot: build/syscall-roundtrip-multiboot.elf build/syscall-msr-stale-multiboot.elf
 test-x86-syscall-hw: build/syscall-roundtrip-multiboot.elf build/syscall-msr-stale-multiboot.elf
+
+# Restrained HIA-native admission of a single-CPU syscall supervisor stack.
+# This is NOT a privileged instruction or Linux syscall implementation.
+.PHONY: test-x86-syscall-stack
+build/x86-syscall-stack-admit.o: src/x86_syscall_stack_admit.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.syscall-stack.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/x86-syscall-stack-admit.so: build/x86-syscall-stack-admit.o
+	ld -shared -z noexecstack -o "$@" "$<"
+build/x86-syscall-stack-liar.o: tests/negative/x86_syscall_stack_allow_all.hepta | build check-compiler
+	"$(HEPTA_COMPILER)" < "$<" > "$@"
+build/x86-syscall-stack-liar.so: build/x86-syscall-stack-liar.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-x86-syscall-stack: build/x86-syscall-stack-admit.so build/x86-syscall-stack-liar.so
+	@set -eu; a=$$(mktemp build/.syscall-stack-a.XXXXXX); b=$$(mktemp build/.syscall-stack-b.XXXXXX); trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_syscall_stack_admit.hepta > "$$a"; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_syscall_stack_admit.hepta > "$$b"; \
+	cmp "$$a" "$$b"; cmp "$$a" build/x86-syscall-stack-admit.o
+	timeout 90 $(PYTHON) tests/test_x86_syscall_stack_admit.py build/x86-syscall-stack-admit.so --object build/x86-syscall-stack-admit.o
+	$(PYTHON) tests/test_x86_syscall_stack_admit.py build/x86-syscall-stack-liar.so --expect-unsafe
+test: test-x86-syscall-stack
+
+build/syscall-stack-boot.o: build/x86-syscall-stack-admit.o
+	objcopy --redefine-sym syscall_stack_admit=syscall_stack_admit_f0 "$<" "$@"
+build/boot-syscall-stack-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -DHEPTAKERNEL_TEST_SYSCALL_STACK_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-syscall-stack-bypass.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -DHEPTAKERNEL_TEST_SYSCALL_STACK_BYPASS=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/syscall-stack-stale-multiboot.elf: build/boot-syscall-stack-stale.o $(SYSCALL_HW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-stack-stale.elf "$<" $(SYSCALL_HW_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-stack-stale.elf "$@"
+build/syscall-stack-bypass-multiboot.elf: build/boot-syscall-stack-bypass.o $(SYSCALL_HW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-stack-bypass.elf "$<" $(SYSCALL_HW_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-stack-bypass.elf "$@"
+test-boot: build/syscall-stack-stale-multiboot.elf build/syscall-stack-bypass-multiboot.elf
+test-x86-syscall-hw: build/syscall-stack-stale-multiboot.elf build/syscall-stack-bypass-multiboot.elf
