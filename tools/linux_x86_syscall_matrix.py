@@ -149,7 +149,7 @@ def run(repo: Path, inventory: Path, lock_file: Path, vendor_file: Path) -> dict
         (number, raw) for number, raw in enumerate(blob.split(b"\n"), 1)
         if raw.partition(b"#")[0].strip()
     ]
-    if len(original) != len(original_lines) != 0:
+    if len(original) != len(original_lines) or not original:
         raise ValueError("truncated x86 syscall source rows")
     for rec, (line, raw) in zip(original, original_lines):
         if (rec["blob_oid"] != target["oid"] or rec["line"] != line
