@@ -371,3 +371,29 @@ generated build-tree includes, Kconfig expressions, architecture
 configurations, driver enablement, ABI implementations or HIA backend
 features are inferred. All 17 Linux full-target gates and all 422
 x86-64 syscall obligations remain HOLD.
+
+## Architecture-directory Kconfig root profile matrix
+
+The pinned inventory now separately evaluates the existing conservative root
+closure under **all 21 exact `arch/` directory labels** from
+`compatibility/linux-source-lock.json`. For each profile it substitutes
+`SRCARCH=HEADER_ARCH=<directory name>`; this is explicitly **not** a
+Kbuild-derived or validated build configuration (for example, x86 personality
+aliases and generated environment can differ). No live Kconfig evaluation is
+claimed. The same immutable source path and include-line SHA-256 ledgers must
+match across all profiles, and the existing independently checked x86 result
+must match the x86 matrix member byte-for-byte.
+
+`kconfig-arch-matrix-memberships.jsonl` binds each potentially reachable
+regular Git blob, its source path and shortest traversal witness to its profile.
+`kconfig-arch-matrix-union.jsonl` reports per-file profile membership without
+losing repeated include paths. `kconfig-arch-matrix-report.json` contains
+per-profile edge/file digests, route counts, union/intersection totals, and
+explicit unresolved semantics. The independent CI step reconstructs set
+memberships from raw rows, compares every OID to the pinned source ledger,
+recalculates all counts and hashes, and retains the artifacts. A path not reached
+by these *lexical directory profiles* is not declared inactive in real Linux.
+
+This extends architecture-wide source auditing, not implemented HIA kernel
+functionality: all 17 full acceptance gates and 422 x86 syscall obligations
+remain open, and `make full-acceptance` must still report HOLD.
