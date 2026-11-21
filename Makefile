@@ -589,7 +589,7 @@ test-linux-inventory:
 	$(PYTHON) tests/test_linux_kconfig_relations.py
 	$(PYTHON) tests/test_linux_kconfig_scoped.py
 
-test: test-elf64-page-plan-hw test-elf64-page-hw test-elf64-page-plan test-elf64-page-fill test-elf64-load-segments test-elf64-exec-admit test-pmm-bitmap-integrity test-cow-frame-binding test-cow-abort-pte-guarded test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
+test: test-elf64-snapshot test-elf64-page-plan-hw test-elf64-page-hw test-elf64-page-plan test-elf64-page-fill test-elf64-load-segments test-elf64-exec-admit test-pmm-bitmap-integrity test-cow-frame-binding test-cow-abort-pte-guarded test-cow-abort test-cow-pte-swap test-cow-split test-cow-refcount test-page-copy test-page-zero test-cr3-root-hw test-x86-cr3-root test-x86-tlb-plan test-pt-downgrade-single-byte test-x86-pt-user-revoke test-pt-report-isolation test-x86-pt-nx-protect test-x86-pt-write-protect test-x86-pt-revoke test-x86-access-gate test-x86-walk4-physical test-x86-walk4-auto test-x86-walk4-huge test-x86-walk4-indexed test-x86-walk4 test-x86-cr3-gate test-cr3-hw test-x86-upper-user test-x86-pde-2m test-x86-pdpt-1g test-x86-user-gdt test-x86-tss-state test-x86-tss-gdt test-native test-guard-pages test-memory-map test-arenas test-owner-binding test-reservations test-x86-pte test-x86-pt-commit test-x86-pf-gate test-x86-idt test-boot test-closure test-linux-inventory record-build
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
@@ -1841,6 +1841,34 @@ test-elf64-page-hw: build/elf-page-hw-multiboot.elf build/elf-page-truncated-mul
 	timeout 160 $(PYTHON) tests/test_elf64_page_fill_qemu.py --qemu "$(QEMU)"
 
 
+# Native HIA bounded exact-byte snapshot equality; reference provenance is external.
+.PHONY: test-elf64-snapshot
+build/elf64-snapshot.o: src/elf64_snapshot_equal.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.elf-snapshot.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	compiler=$$(command -v "$(HEPTA_COMPILER)"); \
+	env -i PATH='' "$$compiler" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/elf64-snapshot.so: build/elf64-snapshot.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+build/elf64-snapshot-unsafe.o: tests/negative/elf64_snapshot_always_equal.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.elf-snapshot-unsafe.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+
+build/elf64-snapshot-unsafe.so: build/elf64-snapshot-unsafe.o
+	ld -shared -z noexecstack -o "$@" "$<"
+
+test-elf64-snapshot: build/elf64-snapshot.so build/elf64-snapshot-unsafe.so
+	timeout 90 $(PYTHON) tests/test_elf64_snapshot_equal.py build/elf64-snapshot.so --object build/elf64-snapshot.o
+	$(PYTHON) tests/test_elf64_snapshot_equal.py build/elf64-snapshot-unsafe.so --expect-unsafe
+	@set -eu; a=$$(mktemp build/.snapshot-repro-a.XXXXXX); b=$$(mktemp build/.snapshot-repro-b.XXXXXX); \
+	trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH='' "$(HEPTA_COMPILER)" < src/elf64_snapshot_equal.hepta > "$$a"; \
+	env -i PATH='' "$(HEPTA_COMPILER)" < src/elf64_snapshot_equal.hepta > "$$b"; \
+	cmp build/elf64-snapshot.o "$$a"; cmp "$$a" "$$b"
+
 # The unchanged, genuine native HIA page-plan .text is linked into the
 # isolated E820/PMM QEMU observer and coupled to the genuine HIA page filler.
 # Non-HIA boot.S remains a test fixture, never a HIA privilege backend.
@@ -1855,6 +1883,10 @@ build/elf64-load-boot.o: build/elf64-load-segments.o
 	objcopy --redefine-sym f0=elf_layout_f0 "$<" "$@"
 build/elf64-load-dishonest-boot.o: build/elf64-load-unsafe.o
 	objcopy --redefine-sym f0=elf_layout_f0 "$<" "$@"
+build/elf64-snapshot-boot.o: build/elf64-snapshot.o
+	objcopy --redefine-sym f0=elf_snapshot_f0 "$<" "$@"
+build/elf64-snapshot-dishonest-boot.o: build/elf64-snapshot-unsafe.o
+	objcopy --redefine-sym f0=elf_snapshot_f0 "$<" "$@"
 
 build/boot-elf-plan-hw.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
@@ -1868,8 +1900,13 @@ build/boot-elf-plan-overlap.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -DHEPTAKERNEL_TEST_ELF_LAYOUT_OVERLAP=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 build/boot-elf-plan-layout-liar.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -DHEPTAKERNEL_TEST_ELF_LAYOUT_LIAR=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-elf-plan-snapshot-mutated.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -DHEPTAKERNEL_TEST_ELF_SNAPSHOT_MUTATED=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-elf-plan-snapshot-liar.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_PLAN_HW=1 -DHEPTAKERNEL_TEST_ELF_SNAPSHOT_LIAR=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
-ELF_PLAN_HW_SUPPORT := $(ELF_PAGE_HW_SUPPORT) build/elf64-page-fill-boot.o
+ELF_PLAN_HW_SUPPORT := $(ELF_PAGE_HW_SUPPORT) build/elf64-page-fill-boot.o build/elf64-snapshot-boot.o
+ELF_PLAN_HW_LIAR_SUPPORT := $(ELF_PAGE_HW_SUPPORT) build/elf64-page-fill-boot.o build/elf64-snapshot-dishonest-boot.o
 build/elf-plan-hw.elf: build/boot-elf-plan-hw.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-hw.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o
 build/elf-plan-invalid.elf: build/boot-elf-plan-invalid.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o arch/x86_64/linker.ld
@@ -1882,14 +1919,19 @@ build/elf-plan-overlap.elf: build/boot-elf-plan-overlap.o $(ELF_PLAN_HW_SUPPORT)
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-overlap.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o
 build/elf-plan-layout-liar.elf: build/boot-elf-plan-layout-liar.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-dishonest-boot.o build/elf64-page-plan-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-layout-liar.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-dishonest-boot.o build/elf64-page-plan-boot.o
+build/elf-plan-snapshot-mutated.elf: build/boot-elf-plan-snapshot-mutated.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-snapshot-mutated.o $(ELF_PLAN_HW_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o
+build/elf-plan-snapshot-liar.elf: build/boot-elf-plan-snapshot-liar.o $(ELF_PLAN_HW_LIAR_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-elf-plan-snapshot-liar.o $(ELF_PLAN_HW_LIAR_SUPPORT) build/elf64-load-boot.o build/elf64-page-plan-boot.o
 build/elf-plan-%-multiboot.elf: build/elf-plan-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-elf64-page-plan-hw: test-elf64-load-segments build/elf-plan-hw-multiboot.elf build/elf-plan-invalid-multiboot.elf build/elf-plan-noop-multiboot.elf build/elf-plan-decoy-multiboot.elf build/elf-plan-overlap-multiboot.elf build/elf-plan-layout-liar-multiboot.elf
+test-elf64-page-plan-hw: test-elf64-snapshot test-elf64-load-segments build/elf-plan-snapshot-mutated-multiboot.elf build/elf-plan-snapshot-liar-multiboot.elf build/elf-plan-hw-multiboot.elf build/elf-plan-invalid-multiboot.elf build/elf-plan-noop-multiboot.elf build/elf-plan-decoy-multiboot.elf build/elf-plan-overlap-multiboot.elf build/elf-plan-layout-liar-multiboot.elf
 	@set -eu; a=$$(mktemp build/.elf-plan-text-a.XXXXXX); b=$$(mktemp build/.elf-plan-text-b.XXXXXX); \
 	  trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
 	  sha256sum build/elf64-page-plan.o build/elf64-page-plan-unsafe.o \
-	    build/elf64-load-segments.o build/elf64-load-unsafe.o > build/elf-plan-native-inputs.sha256; \
+	    build/elf64-load-segments.o build/elf64-load-unsafe.o \
+	    build/elf64-snapshot.o build/elf64-snapshot-unsafe.o > build/elf-plan-native-inputs.sha256; \
 	  objcopy -O binary --only-section=.text build/elf64-page-plan.o "$$a"; \
 	  objcopy -O binary --only-section=.text build/elf64-page-plan-boot.o "$$b"; cmp "$$a" "$$b"; \
 	  objcopy -O binary --only-section=.text build/elf64-page-plan-unsafe.o "$$a"; \
@@ -1898,6 +1940,10 @@ test-elf64-page-plan-hw: test-elf64-load-segments build/elf-plan-hw-multiboot.el
 	  objcopy -O binary --only-section=.text build/elf64-load-boot.o "$$b"; cmp "$$a" "$$b"; \
 	  objcopy -O binary --only-section=.text build/elf64-load-unsafe.o "$$a"; \
 	  objcopy -O binary --only-section=.text build/elf64-load-dishonest-boot.o "$$b"; cmp "$$a" "$$b"; \
+	  objcopy -O binary --only-section=.text build/elf64-snapshot.o "$$a"; \
+	  objcopy -O binary --only-section=.text build/elf64-snapshot-boot.o "$$b"; cmp "$$a" "$$b"; \
+	  objcopy -O binary --only-section=.text build/elf64-snapshot-unsafe.o "$$a"; \
+	  objcopy -O binary --only-section=.text build/elf64-snapshot-dishonest-boot.o "$$b"; cmp "$$a" "$$b"; \
 	  sha256sum --check build/elf-plan-native-inputs.sha256
 	timeout 160 $(PYTHON) tests/test_elf64_page_plan_qemu.py --qemu "$(QEMU)"
 
