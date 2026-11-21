@@ -300,24 +300,23 @@ jobs:
               assert kind.decode() == row["kind"]
               assert operand == base64.b64decode(row["operand_b64"])
               context = row["source_context"]
-          assert context in allowed_context
-          original_lines = blobs[oid]
-          if context == "UNRESOLVED_PHYSICAL_CONTINUATION":
-              assert row["line"] > 1
-              assert original_lines[row["line"] - 2].rstrip(b"\r").endswith(b"\\")
-          if context == "HELP_TEXT_LEXICAL_ONLY":
-              # Independent necessary condition using immutable blob bytes:
-              # a preceding, less-indented 'help' directive exists.
-              import re
-              line = original_lines[row["line"] - 1]
-              margin = line[:len(line) - len(line.lstrip(b" \t"))]
-              width = len(margin.expandtabs(8))
-              assert any(
-                  re.fullmatch(rb"[ \t]*(?:help|---help---)[ \t]*\r?", candidate)
-                  and len(candidate[:len(candidate) - len(candidate.lstrip(b" \t"))].expandtabs(8)) < width
-                  for candidate in original_lines[:row["line"] - 1]
-              )
-          dest = row["target_path_b64"]
+              assert context in allowed_context
+              original_lines = blobs[oid]
+              if context == "UNRESOLVED_PHYSICAL_CONTINUATION":
+                  assert row["line"] > 1
+                  assert original_lines[row["line"] - 2].rstrip(b"\r").endswith(b"\\")
+              if context == "HELP_TEXT_LEXICAL_ONLY":
+                  # Independent necessary condition using immutable blob bytes.
+                  import re
+                  line = original_lines[row["line"] - 1]
+                  margin = line[:len(line) - len(line.lstrip(b" \t"))]
+                  width = len(margin.expandtabs(8))
+                  assert any(
+                      re.fullmatch(rb"[ \t]*(?:help|---help---)[ \t]*\r?", candidate)
+                      and len(candidate[:len(candidate) - len(candidate.lstrip(b" \t"))].expandtabs(8)) < width
+                      for candidate in original_lines[:row["line"] - 1]
+                  )
+              dest = row["target_path_b64"]
               if dest is not None:
                   name = base64.b64decode(dest)
                   ref = paths.get(name)
