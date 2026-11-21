@@ -1,0 +1,7 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(syscall_msr_admit)
+fn syscall_msr_admit(lstar:u64,star:u64,fmask:u64,efer:u64) -> (u32) effects(trap) entry(start)
+block start(lstar:u64,star:u64,fmask:u64,efer:u64)
+  zero:u32 = const() {"value":0}
+  ret(zero)
+end

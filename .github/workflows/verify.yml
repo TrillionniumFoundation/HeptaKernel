@@ -316,6 +316,7 @@ jobs:
         run: |
           make test-x86-cr3-gate HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
           make test-x86-sysret-admit HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+          make test-x86-syscall-msr-admit HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
       - name: Verify native HIA upper-level U/S gate and dishonest control
         shell: bash
