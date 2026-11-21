@@ -61,3 +61,18 @@ copied image and both calls. The experiment is not a race-safe immutable file
 snapshot, an authenticated capability, a complete ELF mapper, a trusted PTE
 publisher, a third-page materialization, a Linux process or an `execve`
 implementation. HIA CRx/TLB/IRETQ/atomic/SMP backend limitations remain.
+
+### Byte-preserving evidence extraction
+
+The first integration attempt exposed a real build-hygiene regression: GNU
+`objcopy --dump-section` invoked with **no explicit output object path**
+rewrote the input ELF object in place, so subsequent locked-compiler byte
+reproduction failed at ELF byte 63 despite the functional/native oracle
+passing. The evidence recipe now extracts `.text` using
+`objcopy -O binary --only-section=.text INPUT OUTPUT`, always specifying
+a distinct output, and checks SHA-256 of the **complete original HIA input
+objects** before and after extraction. The stored
+`build/elf-plan-native-inputs.sha256` is part of the Foundation artifact.
+The native full-layout oracle and two independent empty-PATH raw-object
+rebuilds run before QEMU integration and again in the original CI stage.
+No failing prior candidate was treated as passing.
