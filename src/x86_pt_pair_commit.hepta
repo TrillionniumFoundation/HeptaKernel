@@ -112,7 +112,7 @@ block commit(t8:mutbuf,o8:mutbuf,oa8:usize,na8:u64,ob8:usize,nb8:u64)
   done8:u32 = const() {"value":0}
   ret(done8)
 end
-fn leaf_valid(entry: u64,cap:u64,width:u64) -> (u32) effects() entry(start)
+fn leaf_valid(entry:u64,cap:u64,width:u64) -> (u32) effects(trap) entry(start)
 block start(entry:u64,cap:u64,width:u64)
   onev:u64 = const() {"value":1}
   zerov:u64 = const() {"value":0}
