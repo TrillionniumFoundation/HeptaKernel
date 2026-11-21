@@ -33,3 +33,33 @@ The HIA compiler does not expose CR3, privileged INVLPG, IPIs, PTE CAS,
 DMA exclusion, live page ownership authority or exception-safe recovery.
 No real user PTE publication, `execve`, Linux ABI, or full gate is closed.
 The existing 17 gates and 422 syscall rows remain HOLD.
+
+## Isolated live-MMU experiment
+
+The QEMU PC 32 MiB and Q35 64 MiB experiment now links the unchanged
+Core v8 native HIA two-PTE writer (ELF symbol rename only) and executes it
+on the real 4 KiB leaf table for 4–6 MiB. The real HIA E820 admission must
+accept both physical frames before the fixture writes two different
+64-bit patterns via the original 2 MiB identity map. The native HIA
+writer validates and installs both leaves **with the physical frames
+swapped** (RW/NX). An explicitly non-HIA privileged bridge publishes
+the parent PDE and reloads CR3, then checks the **CPU-observed**
+swapped values, the unchanged 510 other PTEs and both exact receipts.
+
+A separate stale-second request must return status 7 with the
+**entire 4096-byte table and 16-byte receipt untouched**, the
+live parent PDE still huge, and both physical values unchanged. An
+independently HIA-compiled malicious always-success no-op must
+be detected by unchanged table/receipt readback, rather than by its
+claimed success. All six machine/mode outcomes are recorded with
+the exact object, linked image and boot-source hashes, independent
+serial markers, return codes, stderr and timeouts. The test checks
+the genuine original native machine code against the renamed object and
+linked image instead of accepting an opaque replacement implementation.
+
+This closes only the single-CPU hardware execution of the
+**prevalidated but sequential two-leaf stores**. It does not
+make the pair atomic, provide fault rollback, authenticate exclusive
+PMM ownership, exclude DMA/SMP races, implement INVLPG/CRx in
+HIA, or establish a real Linux user address space. The full 17-gate
+Linux acceptance remains HOLD.

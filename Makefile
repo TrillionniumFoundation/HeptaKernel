@@ -2022,3 +2022,32 @@ test-x86-pt-pair: build/x86-pt-pair.so build/x86-pt-pair-unsafe.so
 	env -i PATH='' "$(HEPTA_COMPILER)" < src/x86_pt_pair_commit.hepta > "$$a"; \
 	env -i PATH='' "$(HEPTA_COMPILER)" < src/x86_pt_pair_commit.hepta > "$$b"; \
 	cmp build/x86-pt-pair.o "$$a"; cmp "$$a" "$$b"
+
+
+# Real isolated x86-64 hardware experiment: native HIA PTE pair commits
+# two different physical pages. Only the observer supplies CR3/PDE effects.
+.PHONY: test-pt-pair-hw
+build/pt-pair-boot.o: build/x86-pt-pair.o
+	objcopy --redefine-sym f0=pt_pair_f0 "$<" "$@"
+build/pt-pair-unsafe-boot.o: build/x86-pt-pair-unsafe.o
+	objcopy --redefine-sym f0=pt_pair_f0 "$<" "$@"
+build/boot-pt-pair-hw.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PT_PAIR_HW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-pt-pair-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PT_PAIR_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-pt-pair-liar.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PT_PAIR_LIAR=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+PT_PAIR_HW_SUPPORT := build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o
+build/pt-pair-hw.elf: build/boot-pt-pair-hw.o $(PT_PAIR_HW_SUPPORT) build/pt-pair-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(PT_PAIR_HW_SUPPORT) build/pt-pair-boot.o
+build/pt-pair-stale.elf: build/boot-pt-pair-stale.o $(PT_PAIR_HW_SUPPORT) build/pt-pair-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(PT_PAIR_HW_SUPPORT) build/pt-pair-boot.o
+build/pt-pair-liar.elf: build/boot-pt-pair-liar.o $(PT_PAIR_HW_SUPPORT) build/pt-pair-unsafe-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" $< $(PT_PAIR_HW_SUPPORT) build/pt-pair-unsafe-boot.o
+build/pt-pair-%-multiboot.elf: build/pt-pair-%.elf
+	objcopy -O elf32-i386 "$<" "$@"
+test-pt-pair-hw: build/pt-pair-hw-multiboot.elf build/pt-pair-stale-multiboot.elf build/pt-pair-liar-multiboot.elf
+	$(PYTHON) tests/test_x86_pt_pair_qemu.py --qemu "$(QEMU)"
+
+test: test-pt-pair-hw
+test-boot: test-pt-pair-hw

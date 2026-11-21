@@ -666,6 +666,11 @@ hia_idt_next64:
     call reservation_admit64
     leaq message_reservation_pass(%rip), %rsi
     call puts64
+#if defined(HEPTAKERNEL_TEST_PT_PAIR_HW) || defined(HEPTAKERNEL_TEST_PT_PAIR_STALE) || defined(HEPTAKERNEL_TEST_PT_PAIR_LIAR)
+    /* Terminal CPU-MMU experiment: actual HIA two-PTE writer. */
+    call pt_pair_hardware_exercise64
+    jmp fail64
+#endif
 #if defined(HEPTAKERNEL_TEST_PDPT_1G_HW) || defined(HEPTAKERNEL_TEST_PDPT_1G_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_DECOY) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_FAULT) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_STALE) || defined(HEPTAKERNEL_TEST_PDPT_1G_UNMAP_BYPASS)
     /* Terminal single-owner HIA 1GiB PDPTE hardware experiment. */
     call pdpt_1g_exercise64
@@ -2898,6 +2903,160 @@ cow_pte_oracle_next:
     jmp debug_exit64
 #endif
 
+
+/* Test-only fixture: real Core v8 HIA writes actual 4KiB PTE leaves.
+ * E820 admission is HIA; caller owns both frames and table exclusively.
+ * Parent PDE, CR3 reload and CPU observations are explicitly NON-HIA. */
+#if defined(HEPTAKERNEL_TEST_PT_PAIR_HW) || defined(HEPTAKERNEL_TEST_PT_PAIR_STALE) || defined(HEPTAKERNEL_TEST_PT_PAIR_LIAR)
+pt_pair_hardware_exercise64:
+    movq $ARENA_MIN, %rdi
+    movq $2, %rsi
+    call owner_admit64
+    leaq page_table_4m(%rip), %rdi
+    xorq %rax, %rax
+    movl $512, %ecx
+pt_pair_zero_before:
+    cmpq %rax, (%rdi)
+    jne fail64
+    addq $8, %rdi
+    loop pt_pair_zero_before
+    /* Identity-mapped physical data before changing the page table. */
+    movq $ARENA_MIN, %rdi
+    movabsq $0x123456789abcdef0, %rax
+    movq %rax, (%rdi)
+    movabsq $0x0fedcba987654321, %rax
+    movq %rax, PAGE_BYTES(%rdi)
+    movq $0, pt_pair_hw_request(%rip)
+    movq $0, pt_pair_hw_request+8(%rip)
+    movabsq $0x8000000000401003, %rax
+    movq %rax, pt_pair_hw_request+16(%rip)
+    movq $1, pt_pair_hw_request+24(%rip)
+    movq $0, pt_pair_hw_request+32(%rip)
+    movabsq $0x8000000000400003, %rax
+    movq %rax, pt_pair_hw_request+40(%rip)
+    movl pte_caps(%rip), %eax
+    movq %rax, pt_pair_hw_request+48(%rip)
+    movq $0, pt_pair_hw_request+56(%rip)
+#ifdef HEPTAKERNEL_TEST_PT_PAIR_STALE
+    /* Intentional second-slot stale-old error; first must remain zero. */
+    movq $1, pt_pair_hw_request+32(%rip)
+#endif
+    movabsq $0xcafebabecafebabe, %rax
+    movq %rax, pt_pair_hw_receipt(%rip)
+    movq %rax, pt_pair_hw_receipt+8(%rip)
+    leaq pt_pair_hw_request(%rip), %rdi
+    movl $64, %esi
+    leaq page_table_4m(%rip), %rdx
+    movl $4096, %ecx
+    leaq pt_pair_hw_receipt(%rip), %r8
+    movl $16, %r9d
+    call pt_pair_f0
+#ifdef HEPTAKERNEL_TEST_PT_PAIR_STALE
+    cmpl $7, %eax
+    jne fail64
+    movabsq $0xcafebabecafebabe, %rax
+    cmpq %rax, pt_pair_hw_receipt(%rip)
+    jne fail64
+    cmpq %rax, pt_pair_hw_receipt+8(%rip)
+    jne fail64
+    leaq page_table_4m(%rip), %rdi
+    xorq %rax, %rax
+    movl $512, %ecx
+pt_pair_refused_scan:
+    cmpq %rax, (%rdi)
+    jne fail64
+    addq $8, %rdi
+    loop pt_pair_refused_scan
+    /* Accessed/Dirty may change on the original 2MiB hardware PDE. */
+    movq page_directory+16(%rip), %rax
+    andq $-97, %rax
+    cmpq $0x400083, %rax
+    jne fail64
+    movq $ARENA_MIN, %rdi
+    movabsq $0x123456789abcdef0, %rax
+    cmpq %rax, (%rdi)
+    jne fail64
+    movabsq $0x0fedcba987654321, %rax
+    cmpq %rax, PAGE_BYTES(%rdi)
+    jne fail64
+    leaq message_pt_pair_stale(%rip), %rsi
+    call puts64
+    movl $0x11, %eax
+    jmp debug_exit64
+#elif defined(HEPTAKERNEL_TEST_PT_PAIR_LIAR)
+    /* A real HIA-compiled always-success no-op is detected by readback. */
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, page_table_4m(%rip)
+    jne fail64
+    cmpq $0, page_table_4m+8(%rip)
+    jne fail64
+    movabsq $0xcafebabecafebabe, %rax
+    cmpq %rax, pt_pair_hw_receipt(%rip)
+    jne fail64
+    cmpq %rax, pt_pair_hw_receipt+8(%rip)
+    jne fail64
+    movq page_directory+16(%rip), %rax
+    andq $-97, %rax
+    cmpq $0x400083, %rax
+    jne fail64
+    leaq message_pt_pair_liar(%rip), %rsi
+    call puts64
+    movl $0x11, %eax
+    jmp debug_exit64
+#else
+    testl %eax, %eax
+    jne fail64
+    movabsq $0x8000000000401003, %rax
+    cmpq %rax, page_table_4m(%rip)
+    jne fail64
+    cmpq %rax, pt_pair_hw_receipt(%rip)
+    jne fail64
+    movabsq $0x8000000000400003, %rax
+    cmpq %rax, page_table_4m+8(%rip)
+    jne fail64
+    cmpq %rax, pt_pair_hw_receipt+8(%rip)
+    jne fail64
+    leaq page_table_4m+16(%rip), %rdi
+    xorq %rax, %rax
+    movl $510, %ecx
+pt_pair_tail_scan:
+    cmpq %rax, (%rdi)
+    jne fail64
+    addq $8, %rdi
+    loop pt_pair_tail_scan
+    /* Publication and invalidation remain non-HIA privileged test code. */
+    leaq page_table_4m(%rip), %rax
+    orq $3, %rax
+    movq %rax, page_directory+16(%rip)
+    movq %cr3, %rax
+    movq %rax, %cr3
+    /* Hardware must now read the opposite frame from each virtual page. */
+    movq $ARENA_MIN, %rdi
+    movabsq $0x0fedcba987654321, %rax
+    cmpq %rax, (%rdi)
+    jne fail64
+    movabsq $0x123456789abcdef0, %rax
+    cmpq %rax, PAGE_BYTES(%rdi)
+    jne fail64
+    /* A may change on CPU read; verify preserved PA and permission bits. */
+    movq page_table_4m(%rip), %rax
+    andq $-33, %rax
+    movabsq $0x8000000000401003, %rdx
+    cmpq %rdx, %rax
+    jne fail64
+    movq page_table_4m+8(%rip), %rax
+    andq $-33, %rax
+    movabsq $0x8000000000400003, %rdx
+    cmpq %rdx, %rax
+    jne fail64
+    leaq message_pt_pair_live(%rip), %rsi
+    call puts64
+    movl $0x10, %eax
+    jmp debug_exit64
+#endif
+#endif
+
 /* One active 4KiB PTE is native HIA generated. The parent PDE and other
  * leaves remain in the explicitly non-HIA test bridge. */
 pte_live_exercise64:
@@ -5066,6 +5225,12 @@ message_map_pass:
     .asciz "HEPTAKERNEL HIA E820 VERIFIED\r\n"
 message_reservation_pass:
     .asciz "HEPTAKERNEL HIA RESERVATIONS VERIFIED\r\n"
+message_pt_pair_live:
+    .asciz "HEPTAKERNEL HIA TWO PTE HARDWARE SWAPPED MAPPINGS VERIFIED\r\n"
+message_pt_pair_stale:
+    .asciz "HEPTAKERNEL HIA TWO PTE STALE SECOND REFUSED UNCHANGED\r\n"
+message_pt_pair_liar:
+    .asciz "HEPTAKERNEL HIA TWO PTE DISHONEST NOOP DETECTED\r\n"
 message_pt_commit_pass:
     .asciz "HEPTAKERNEL HIA PT COMMIT VERIFIED\r\n"
 message_pt_nx_pass:
@@ -5418,6 +5583,8 @@ reservation_guard_before: .skip 8
 reservation_reply:        .skip 16
 reservation_guard_after:  .skip 8
 reservation_unused:       .skip 16
+pt_pair_hw_request: .skip 64
+pt_pair_hw_receipt: .skip 16
 pt_commit_request: .skip 32
 pt_commit_reply:   .skip 16
 pt_nx_request:       .skip 32

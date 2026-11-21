@@ -211,6 +211,11 @@ jobs:
         run: |
           make test-x86-pt-pair HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Verify genuine two-leaf HIA writes on live QEMU MMU with stale and liar controls
+        shell: bash
+        run: |
+          make test-pt-pair-hw HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify native HIA PTE commit with guarded oracle and dishonesty negative control
         shell: bash
         run: |
