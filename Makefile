@@ -2311,7 +2311,7 @@ build/boot-syscall-roundtrip.o: arch/x86_64/boot.S build/boot-cases.bin
 build/boot-syscall-msr-stale.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_SYSCALL_MSR_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
-SYSCALL_HW_SUPPORT := $(SYSRET_RING3_BOOT_SUPPORT) build/syscall-msr-boot.o
+SYSCALL_HW_SUPPORT := $(SYSRET_RING3_BOOT_SUPPORT) build/syscall-msr-boot.o build/syscall-stack-boot.o
 
 build/syscall-roundtrip-multiboot.elf: build/boot-syscall-roundtrip.o $(SYSCALL_HW_SUPPORT) arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-roundtrip.elf "$<" $(SYSCALL_HW_SUPPORT)
@@ -2344,3 +2344,18 @@ test-x86-syscall-stack: build/x86-syscall-stack-admit.so build/x86-syscall-stack
 	timeout 90 $(PYTHON) tests/test_x86_syscall_stack_admit.py build/x86-syscall-stack-admit.so --object build/x86-syscall-stack-admit.o
 	$(PYTHON) tests/test_x86_syscall_stack_admit.py build/x86-syscall-stack-liar.so --expect-unsafe
 test: test-x86-syscall-stack
+
+build/syscall-stack-boot.o: build/x86-syscall-stack-admit.o
+	objcopy --redefine-sym syscall_stack_admit=syscall_stack_admit_f0 "$<" "$@"
+build/boot-syscall-stack-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -DHEPTAKERNEL_TEST_SYSCALL_STACK_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-syscall-stack-bypass.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -DHEPTAKERNEL_TEST_SYSCALL_STACK_BYPASS=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/syscall-stack-stale-multiboot.elf: build/boot-syscall-stack-stale.o $(SYSCALL_HW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-stack-stale.elf "$<" $(SYSCALL_HW_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-stack-stale.elf "$@"
+build/syscall-stack-bypass-multiboot.elf: build/boot-syscall-stack-bypass.o $(SYSCALL_HW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-stack-bypass.elf "$<" $(SYSCALL_HW_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-stack-bypass.elf "$@"
+test-boot: build/syscall-stack-stale-multiboot.elf build/syscall-stack-bypass-multiboot.elf
+test-x86-syscall-hw: build/syscall-stack-stale-multiboot.elf build/syscall-stack-bypass-multiboot.elf

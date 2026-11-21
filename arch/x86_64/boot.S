@@ -2558,6 +2558,11 @@ rsp0_ring3_exercise64:
     call puts64
 #endif
 #endif
+#ifdef HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP
+    /* Detect any CPL0 push to the user stack before the switch. */
+    movabsq $0x735441434b475541, %rax
+    movq %rax, 0x601ff8
+#endif
     movq $0x602000, %rsp        /* fixture user stack, never a kernel stack */
     movq $ARENA_MIN, %rcx       /* HIA-admitted RIP */
     movq $0x202, %r11           /* HIA-admitted RFLAGS */
@@ -2592,6 +2597,9 @@ rsp0_ring3_fault64:
     jne fail64
 #ifdef HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP
     cmpq $(ARENA_MIN+2), 0(%rsp)
+    movabsq $0x735441434b475541, %rax
+    cmpq %rax, 0x601ff8
+    jne fail64
 #else
     cmpq $ARENA_MIN, 0(%rsp)
 #endif
@@ -2630,9 +2638,17 @@ rsp0_ring3_fault64:
 #endif
 
 #if defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP) || defined(HEPTAKERNEL_TEST_SYSCALL_MSR_STALE)
-/* NON-HIA CPL0 entry. SYSCALL preserves user RSP and saves RCX/R11;
- * this is not kernel-stack isolation nor a Linux dispatcher. */
+/* NON-HIA isolated CPL0 entry: capture user RSP without touching it, then
+ * switch to a supervisor stack before any push, call or memory-return. */
 syscall_kernel_entry64:
+    movq %rsp, syscall_user_rsp(%rip)
+#ifdef HEPTAKERNEL_TEST_SYSCALL_STACK_BYPASS
+    pushfq                  /* deliberately corrupt the user stack */
+    popq %rax
+#endif
+    movabsq $stack_top, %rsp
+    movq %rcx, syscall_saved_rcx(%rip)
+    movq %r11, syscall_saved_r11(%rip)
     movw %cs, %ax
     cmpw $0x08, %ax
     jne fail64
@@ -2641,7 +2657,7 @@ syscall_kernel_entry64:
     jne fail64
     cmpq $(ARENA_MIN+2), %rcx
     jne fail64
-    cmpq $0x602000, %rsp
+    cmpq $0x602000, syscall_user_rsp(%rip)
     jne fail64
     movq %r11, %rax
     andq $0x202, %rax
@@ -2654,7 +2670,41 @@ syscall_kernel_entry64:
     leaq syscall_kernel_entry64(%rip), %rax
     cmpq syscall_expected_lstar(%rip), %rax
     jne fail64                     /* running high alias, not low */
-    sysretq                        /* privileged NON-HIA return */
+    /* Genuine native HIA preflight. RSP saved before first stack access;
+     * live TSS was populated by original HIA TSS installer. */
+    movq syscall_user_rsp(%rip), %rdi
+    movabsq $stack_top, %rsi
+    movq tss64+4(%rip), %rdx
+#ifdef HEPTAKERNEL_TEST_SYSCALL_STACK_STALE
+    xorq $16, %rdx          /* falsely supplied but aligned TSS snapshot */
+#endif
+    call syscall_stack_admit_f0
+#ifdef HEPTAKERNEL_TEST_SYSCALL_STACK_STALE
+    cmpl $3, %eax
+    jne fail64
+    leaq message_syscall_stack_stale(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %eax, %eax
+    jne fail64
+    movabsq $stack_top, %rax
+    cmpq %rax, %rsp
+    jne fail64
+    movabsq $0x735441434b475541, %rax
+    cmpq %rax, 0x601ff8
+    jne syscall_stack_corrupt64
+    leaq message_syscall_stack_pass(%rip), %rsi
+    call puts64
+    movq syscall_saved_rcx(%rip), %rcx
+    movq syscall_saved_r11(%rip), %r11
+    movq syscall_user_rsp(%rip), %rsp
+    sysretq                  /* actual NON-HIA privileged return */
+    jmp fail64
+#endif
+syscall_stack_corrupt64:
+    leaq message_syscall_stack_corrupt(%rip), %rsi
+    call puts64
     jmp fail64
 #endif
 
@@ -6045,6 +6095,12 @@ message_syscall_msr_stale:
     .asciz "HEPTAKERNEL HIA SYSCALL MSR STALE SNAPSHOT REJECTED\r\n"
 message_syscall_roundtrip:
     .asciz "HEPTAKERNEL NON-HIA SYSCALL SYSRETQ HARDWARE ROUNDTRIP VERIFIED\r\n"
+message_syscall_stack_pass:
+    .asciz "HEPTAKERNEL HIA SYSCALL KERNEL STACK ADMITTED\r\n"
+message_syscall_stack_stale:
+    .asciz "HEPTAKERNEL HIA SYSCALL KERNEL STACK STALE REJECTED\r\n"
+message_syscall_stack_corrupt:
+    .asciz "HEPTAKERNEL SYSCALL USER STACK CORRUPTION DETECTED\r\n"
 message_us_initial:
     .asciz "HEPTAKERNEL HIA CPL3 USER FETCH BEFORE REVOKE VERIFIED\r\n"
 message_us_live:
@@ -6466,6 +6522,9 @@ user_gdt_reply:   .skip 16
 sysret_gdt_request: .skip 16
 sysret_gdt_reply:   .skip 16
 syscall_expected_lstar: .skip 8
+syscall_user_rsp: .skip 8
+syscall_saved_rcx: .skip 8
+syscall_saved_r11: .skip 8
 tss_gdt_request:  .skip 32
 tss_gdt_reply:    .skip 16
 idt_gate_request: .skip 40

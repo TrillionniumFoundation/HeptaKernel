@@ -265,3 +265,11 @@ preserves RCX/R11, validates physical readback, and rejects a forged live
 TSS snapshot and user-stack corruption. The HIA function alone does not
 authenticate hardware state, emit privilege instructions, or provide Linux
 syscalls. 17 gates and 422 syscall rows remain HOLD.
+
+The isolated PC/Q35 QEMU SYSCALL hardware fixture now uses this native HIA
+supervisor-stack admission against hardware-captured user RSP and live
+TSS.RSP0. The explicitly **NON-HIA** entry bridge changes RSP before any
+push/call, saves RCX/R11, and restores user RSP at SYSRETQ. A user-stack
+canary, dishonest pre-switch push control, and independently forged aligned
+TSS snapshot control must reject without claiming a Linux syscall handler,
+native HIA privilege instruction lowering, interrupt/NMI safety or SMP.
