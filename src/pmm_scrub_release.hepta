@@ -1,121 +1,121 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
 fn pmm_scrub_release(request:readbuf,state:mutbuf,page:mutbuf) -> (u32) effects(read,write,trap) entry(start)
-block start(request:readbuf,state:mutbuf,page:mutbuf)
-  a_length:usize = buffer.len(request)
+block start(b0_request:readbuf,b0_state:mutbuf,b0_page:mutbuf)
+  a_length:usize = buffer.len(b0_request)
   a_eight:usize = const() {"value":8}
   a_valid:bool = compare.eq(a_length,a_eight)
-  branch a_valid state_shape(request,state,page) malformed_request()
+  branch a_valid state_shape(b0_request,b0_state,b0_page) malformed_request()
 block malformed_request()
   e1:u32 = const() {"value":1}
   ret(e1)
-block state_shape(request:readbuf,state:mutbuf,page:mutbuf)
-  b_length:usize = buffer.len(state)
+block state_shape(b2_request:readbuf,b2_state:mutbuf,b2_page:mutbuf)
+  b_length:usize = buffer.len(b2_state)
   b_required:usize = const() {"value":130}
   b_valid:bool = compare.eq(b_length,b_required)
-  branch b_valid page_shape(request,state,page) malformed_state_shape()
+  branch b_valid page_shape(b2_request,b2_state,b2_page) malformed_state_shape()
 block malformed_state_shape()
   e2:u32 = const() {"value":2}
   ret(e2)
-block page_shape(request:readbuf,state:mutbuf,page:mutbuf)
-  c_length:usize = buffer.len(page)
+block page_shape(b4_request:readbuf,b4_state:mutbuf,b4_page:mutbuf)
+  c_length:usize = buffer.len(b4_page)
   c_required:usize = const() {"value":4096}
   c_valid:bool = compare.eq(c_length,c_required)
-  branch c_valid inspect(request,state,page) malformed_page()
+  branch c_valid inspect(b4_request,b4_state,b4_page) malformed_page()
 block malformed_page()
   e3:u32 = const() {"value":3}
   ret(e3)
-block inspect(request:readbuf,state:mutbuf,page:mutbuf)
+block inspect(b6_request:readbuf,b6_state:mutbuf,b6_page:mutbuf)
   i_zero:u64 = const() {"value":0}
   i_second:u64 = const() {"value":65}
-  i_a:u64 = call(state,i_zero) {"function":"check_zone"}
-  i_b:u64 = call(state,i_second) {"function":"check_zone"}
+  i_a:u64 = call(b6_state,i_zero) {"function":"check_zone"}
+  i_b:u64 = call(b6_state,i_second) {"function":"check_zone"}
   i_bad:u64 = const() {"value":9}
   i_bad_a:bool = compare.eq(i_a,i_bad)
   i_bad_b:bool = compare.eq(i_b,i_bad)
   i_invalid:bool = bool.or(i_bad_a,i_bad_b)
-  branch i_invalid invalid_state() disjoint(request,state,page)
+  branch i_invalid invalid_state() disjoint(b6_request,b6_state,b6_page)
 block invalid_state()
   e4:u32 = const() {"value":4}
   ret(e4)
-block disjoint(request:readbuf,state:mutbuf,page:mutbuf)
+block disjoint(b8_request:readbuf,b8_state:mutbuf,b8_page:mutbuf)
   g_base_a:u64 = const() {"value":16}
   g_base_b:u64 = const() {"value":81}
-  g_a:u64 = call(state,g_base_a) {"function":"read_word"}
-  g_b:u64 = call(state,g_base_b) {"function":"read_word"}
+  g_a:u64 = call(b8_state,g_base_a) {"function":"read_word"}
+  g_b:u64 = call(b8_state,g_base_b) {"function":"read_word"}
   g_extent:u64 = const() {"value":32768}
   g_a_end:u64 = int.add.wrap(g_a,g_extent)
   g_b_end:u64 = int.add.wrap(g_b,g_extent)
   g_a_below:bool = compare.lt(g_a,g_b_end)
   g_b_below:bool = compare.lt(g_b,g_a_end)
   g_overlap:bool = bool.and(g_a_below,g_b_below)
-  branch g_overlap invalid_state() address(request,state,page,g_a,g_b,g_a_end,g_b_end)
-block address(request:readbuf,state:mutbuf,page:mutbuf,base_a:u64,base_b:u64,end_a:u64,end_b:u64)
-  d_address:u64 = call(request) {"function":"read_request_word"}
+  branch g_overlap invalid_state() address(b8_request,b8_state,b8_page,g_a,g_b,g_a_end,g_b_end)
+block address(b9_request:readbuf,b9_state:mutbuf,b9_page:mutbuf,b9_base_a:u64,b9_base_b:u64,b9_end_a:u64,b9_end_b:u64)
+  d_address:u64 = call(b9_request) {"function":"read_request_word"}
   d_mask:u64 = const() {"value":4095}
   d_low:u64 = bit.and(d_address,d_mask)
   d_zero:u64 = const() {"value":0}
   d_aligned:bool = compare.eq(d_low,d_zero)
-  branch d_aligned in_first(state,page,d_address,base_a,base_b,end_a,end_b) invalid_release()
-block in_first(state:mutbuf,page:mutbuf,address:u64,base_a:u64,base_b:u64,end_a:u64,end_b:u64)
-  f_low:bool = compare.ge(address,base_a)
-  f_high:bool = compare.lt(address,end_a)
+  branch d_aligned in_first(b9_state,b9_page,d_address,b9_base_a,b9_base_b,b9_end_a,b9_end_b) invalid_release()
+block in_first(b10_state:mutbuf,b10_page:mutbuf,b10_address:u64,b10_base_a:u64,b10_base_b:u64,b10_end_a:u64,b10_end_b:u64)
+  f_low:bool = compare.ge(b10_address,b10_base_a)
+  f_high:bool = compare.lt(b10_address,b10_end_a)
   f_hit:bool = bool.and(f_low,f_high)
-  branch f_hit calculate_first(state,page,address,base_a) in_second(state,page,address,base_b,end_b)
-block in_second(state:mutbuf,page:mutbuf,address:u64,base_b:u64,end_b:u64)
-  h_low:bool = compare.ge(address,base_b)
-  h_high:bool = compare.lt(address,end_b)
+  branch f_hit calculate_first(b10_state,b10_page,b10_address,b10_base_a) in_second(b10_state,b10_page,b10_address,b10_base_b,b10_end_b)
+block in_second(b11_state:mutbuf,b11_page:mutbuf,b11_address:u64,b11_base_b:u64,b11_end_b:u64)
+  h_low:bool = compare.ge(b11_address,b11_base_b)
+  h_high:bool = compare.lt(b11_address,b11_end_b)
   h_hit:bool = bool.and(h_low,h_high)
-  branch h_hit calculate_second(state,page,address,base_b) invalid_release()
-block calculate_first(state:mutbuf,page:mutbuf,address:u64,base:u64)
+  branch h_hit calculate_second(b11_state,b11_page,b11_address,b11_base_b) invalid_release()
+block calculate_first(b12_state:mutbuf,b12_page:mutbuf,b12_address:u64,b12_base:u64)
   l_offset:u64 = const() {"value":0}
-  jump calculate(state,page,address,base,l_offset)
-block calculate_second(state:mutbuf,page:mutbuf,address:u64,base:u64)
+  jump calculate(b12_state,b12_page,b12_address,b12_base,l_offset)
+block calculate_second(b13_state:mutbuf,b13_page:mutbuf,b13_address:u64,b13_base:u64)
   k_offset:u64 = const() {"value":65}
-  k_delta:u64 = int.sub.wrap(address,base)
+  k_delta:u64 = int.sub.wrap(b13_address,b13_base)
   k_shift:u64 = const() {"value":12}
   k_idx:u64 = int.shr.checked(k_delta,k_shift)
-  jump check_occupied(state,page,k_offset,k_idx)
-block calculate(state:mutbuf,page:mutbuf,address:u64,base:u64,offset:u64)
-  j_delta:u64 = int.sub.wrap(address,base)
+  jump check_occupied(b13_state,b13_page,k_offset,k_idx)
+block calculate(b14_state:mutbuf,b14_page:mutbuf,b14_address:u64,b14_base:u64,b14_offset:u64)
+  j_delta:u64 = int.sub.wrap(b14_address,b14_base)
   j_shift:u64 = const() {"value":12}
   j_idx:u64 = int.shr.checked(j_delta,j_shift)
-  jump check_occupied(state,page,offset,j_idx)
+  jump check_occupied(b14_state,b14_page,b14_offset,j_idx)
 block invalid_release()
   e6:u32 = const() {"value":6}
   ret(e6)
-block check_occupied(state:mutbuf,page:mutbuf,offset:u64,index:u64)
+block check_occupied(b16_state:mutbuf,b16_page:mutbuf,b16_offset:u64,b16_index:u64)
   p_resoff:u64 = const() {"value":24}
-  p_resat:u64 = int.add.wrap(offset,p_resoff)
-  p_reserved:u64 = call(state,p_resat) {"function":"read_word"}
-  p_protected:bool = compare.lt(index,p_reserved)
-  branch p_protected invalid_release() occupied(state,page,offset,index)
-block occupied(state:mutbuf,page:mutbuf,offset:u64,index:u64)
+  p_resat:u64 = int.add.wrap(b16_offset,p_resoff)
+  p_reserved:u64 = call(b16_state,p_resat) {"function":"read_word"}
+  p_protected:bool = compare.lt(b16_index,p_reserved)
+  branch p_protected invalid_release() occupied(b16_state,b16_page,b16_offset,b16_index)
+block occupied(b17_state:mutbuf,b17_page:mutbuf,b17_offset:u64,b17_index:u64)
   q_bitoffset:u64 = const() {"value":64}
-  q_at64:u64 = int.add.wrap(offset,q_bitoffset)
+  q_at64:u64 = int.add.wrap(b17_offset,q_bitoffset)
   q_at:usize = int.cast(q_at64) {"mode":"wrap"}
-  q_byte:u8 = buffer.load(state,q_at)
+  q_byte:u8 = buffer.load(b17_state,q_at)
   q_bitmap:u64 = int.cast(q_byte) {"mode":"wrap"}
   q_one:u64 = const() {"value":1}
-  q_bit:u64 = int.shl.checked(q_one,index)
+  q_bit:u64 = int.shl.checked(q_one,b17_index)
   q_present:u64 = bit.and(q_bitmap,q_bit)
   q_zero:u64 = const() {"value":0}
   q_free:bool = compare.eq(q_present,q_zero)
-  branch q_free invalid_release() scrub(state,page,offset,q_at,q_bitmap,q_bit)
-block scrub(state:mutbuf,page:mutbuf,offset:u64,bitmap_at:usize,bitmap:u64,bit:u64)
+  branch q_free invalid_release() scrub(b17_state,b17_page,b17_offset,q_at,q_bitmap,q_bit)
+block scrub(b18_state:mutbuf,b18_page:mutbuf,b18_offset:u64,b18_bitmap_at:usize,b18_bitmap:u64,b18_bit:u64)
   s_start:usize = const() {"value":0}
   s_length:usize = const() {"value":4096}
   s_zero:u8 = const() {"value":0}
-  _ = buffer.fill_range(page,s_start,s_length,s_zero)
-  s_inverse:u64 = bit.not(bit)
-  s_new:u64 = bit.and(bitmap,s_inverse)
+  _ = buffer.fill_range(b18_page,s_start,s_length,s_zero)
+  s_inverse:u64 = b18_bit.not(b18_bit)
+  s_new:u64 = b18_bit.and(b18_bitmap,s_inverse)
   s_new_byte:u8 = int.cast(s_new) {"mode":"wrap"}
   s_freeoff:u64 = const() {"value":32}
-  s_count_at:u64 = int.add.wrap(offset,s_freeoff)
-  s_previous:u64 = call(state,s_count_at) {"function":"read_word"}
+  s_count_at:u64 = int.add.wrap(b18_offset,s_freeoff)
+  s_previous:u64 = call(b18_state,s_count_at) {"function":"read_word"}
   s_one:u64 = const() {"value":1}
   s_remaining:u64 = int.add.wrap(s_previous,s_one)
-  _ = buffer.store(state,bitmap_at,s_new_byte)
-  s_written:u32 = call(state,s_count_at,s_remaining) {"function":"write_word"}
+  _ = buffer.store(b18_state,b18_bitmap_at,s_new_byte)
+  s_written:u32 = call(b18_state,s_count_at,s_remaining) {"function":"write_word"}
   s_ok:u32 = const() {"value":0}
   ret(s_ok)
 end
