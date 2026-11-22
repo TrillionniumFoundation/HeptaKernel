@@ -273,3 +273,21 @@ push/call, saves RCX/R11, and restores user RSP at SYSRETQ. A user-stack
 canary, dishonest pre-switch push control, and independently forged aligned
 TSS snapshot control must reject without claiming a Linux syscall handler,
 native HIA privilege instruction lowering, interrupt/NMI safety or SMP.
+
+## Isolated native HIA SYSCALL saved-return-frame comparison
+
+The fixed Core v8 `src/x86_syscall_return_frame.hepta` computes a bounded
+six-word comparison of expected user RIP/RSP/RFLAGS against the RCX/R11/RSP
+saved by the actual CPU SYSCALL entry. Independent native differential tests
+cover every refusal class and a dishonest HIA all-accept control. The PC/Q35
+QEMU fixture passes its captured values through this original HIA machine
+code after the supervisor-stack preflight and before the test-only SYSRETQ.
+Separate RCX, R11, and user-RSP snapshot corruption images must fail with
+distinct HIA status codes, rather than merely observing a generic CPU fault.
+Two empty-PATH compiles must reproduce the same native object bytes and the
+shared-library text must match the object. Actual privileged entry/return,
+memory snapshot custody, per-CPU state, interrupt/NMI-safe stacking and any
+Linux syscall dispatcher remain **NON-HIA or NOT_IMPLEMENTED**. This is
+a fixed 48-bit/four-level paging and restricted RFLAGS test profile, not an
+admission policy for all Linux userspace states. The 17 acceptance gates
+and the complete 422-row x86-64 syscall obligation remain HOLD.

@@ -1,0 +1,7 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(syscall_return_frame_admit)
+fn syscall_return_frame_admit(expected_rip:u64,saved_rcx:u64,expected_flags:u64,saved_r11:u64,expected_rsp:u64,saved_rsp:u64) -> (u32) effects(trap) entry(start)
+block start(expected_rip:u64,saved_rcx:u64,expected_flags:u64,saved_r11:u64,expected_rsp:u64,saved_rsp:u64)
+  ok:u32 = const() {"value":0}
+  ret(ok)
+end
