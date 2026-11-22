@@ -20,6 +20,8 @@ SYSRET_RING3_MARKER = "HEPTAKERNEL HIA SYSRETQ CPL3 HARDWARE SWITCH VERIFIED"
 SYSCALL_MSR_PASS_MARKER = "HEPTAKERNEL HIA LIVE SYSCALL MSR SNAPSHOT ADMITTED"
 SYSCALL_MSR_STALE_MARKER = "HEPTAKERNEL HIA SYSCALL MSR STALE SNAPSHOT REJECTED"
 SYSCALL_HW_MARKER = "HEPTAKERNEL NON-HIA SYSCALL SYSRETQ HARDWARE ROUNDTRIP VERIFIED"
+SYSCALL_GETPID_MARKER = "HEPTAKERNEL HIA ONE-TASK GETPID HARDWARE RESULT VERIFIED"
+SYSCALL_ENOSYS_MARKER = "HEPTAKERNEL HIA ONE-TASK ENOSYS HARDWARE RESULT VERIFIED"
 SYSCALL_STACK_PASS_MARKER = "HEPTAKERNEL HIA SYSCALL KERNEL STACK ADMITTED"
 SYSCALL_STACK_STALE_MARKER = "HEPTAKERNEL HIA SYSCALL KERNEL STACK STALE REJECTED"
 SYSCALL_STACK_CORRUPT_MARKER = "HEPTAKERNEL SYSCALL USER STACK CORRUPTION DETECTED"
@@ -103,6 +105,10 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         syscall_admit_observed = p.stdout.count(SYSCALL_MSR_PASS_MARKER) == 1
         syscall_stale_observed = p.stdout.count(SYSCALL_MSR_STALE_MARKER) == 1
         syscall_hardware_observed = p.stdout.count(SYSCALL_HW_MARKER) == 1
+        syscall_getpid_observed = p.stdout.count(SYSCALL_GETPID_MARKER) == 1
+        syscall_enosys_observed = p.stdout.count(SYSCALL_ENOSYS_MARKER) == 1
+        record["hia_one_task_getpid_observed"] = syscall_getpid_observed
+        record["hia_one_task_enosys_observed"] = syscall_enosys_observed
         stack_pass = p.stdout.count(SYSCALL_STACK_PASS_MARKER) == 1
         stack_stale = p.stdout.count(SYSCALL_STACK_STALE_MARKER) == 1
         stack_corrupt = p.stdout.count(SYSCALL_STACK_CORRUPT_MARKER) == 1
@@ -342,11 +348,15 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         not us_stale and not ist_fault_verified and not ring3_observed and
                         not pte_verified and p.returncode == 69 and
                         PASS_MARKER not in p.stdout and FAIL_MARKER not in p.stdout)
-        elif mode == "syscall_roundtrip_hardware":
+        elif mode in ("syscall_roundtrip_hardware",
+                       "syscall_one_task_getpid_hardware", "syscall_one_task_enosys_hardware"):
             accepted = (state_verified and user_gdt_verified and tss_verified
                         and idt_verified and map_verified and reservation_verified
                         and sysret_gdt_observed and syscall_admit_observed
-                        and syscall_hardware_observed and stack_pass and frame_pass
+                        and syscall_hardware_observed == (mode == "syscall_roundtrip_hardware")
+                        and syscall_getpid_observed == (mode == "syscall_one_task_getpid_hardware")
+                        and syscall_enosys_observed == (mode == "syscall_one_task_enosys_hardware")
+                        and stack_pass and frame_pass
                         and not frame_rcx_stale and not frame_r11_stale and not frame_rsp_stale
                         and not stack_stale and not stack_corrupt and not syscall_stale_observed
                         and not sysret_ring3_observed and not ring3_observed
@@ -569,20 +579,26 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         frame_bad_modes = {"syscall_frame_rcx_stale_rejected",
                            "syscall_frame_r11_stale_rejected",
                            "syscall_frame_rsp_stale_rejected"}
-        frame_modes = frame_bad_modes | {"syscall_roundtrip_hardware"}
+        roundtrip_modes = {"syscall_roundtrip_hardware", "syscall_one_task_getpid_hardware",
+                           "syscall_one_task_enosys_hardware"}
+        frame_modes = frame_bad_modes | roundtrip_modes
         accepted = accepted and (sysret_gdt_observed == (mode in {
             "sysret_ring3_hardware", "syscall_roundtrip_hardware",
+            "syscall_one_task_getpid_hardware", "syscall_one_task_enosys_hardware",
             "syscall_msr_stale_rejected", "syscall_stack_stale_rejected",
             "syscall_stack_corrupt_rejected"} | frame_bad_modes))
         accepted = accepted and (syscall_admit_observed == (mode in {
-            "syscall_roundtrip_hardware", "syscall_stack_stale_rejected",
+            "syscall_roundtrip_hardware", "syscall_one_task_getpid_hardware",
+            "syscall_one_task_enosys_hardware", "syscall_stack_stale_rejected",
             "syscall_stack_corrupt_rejected"} | frame_bad_modes))
         accepted = accepted and (syscall_stale_observed == (mode == "syscall_msr_stale_rejected"))
         accepted = accepted and (syscall_hardware_observed == (mode == "syscall_roundtrip_hardware"))
         accepted = accepted and (stack_pass == (mode in frame_modes))
         accepted = accepted and (stack_stale == (mode == "syscall_stack_stale_rejected"))
         accepted = accepted and (stack_corrupt == (mode == "syscall_stack_corrupt_rejected"))
-        accepted = accepted and (frame_pass == (mode == "syscall_roundtrip_hardware"))
+        accepted = accepted and (frame_pass == (mode in roundtrip_modes))
+        accepted = accepted and (syscall_getpid_observed == (mode == "syscall_one_task_getpid_hardware"))
+        accepted = accepted and (syscall_enosys_observed == (mode == "syscall_one_task_enosys_hardware"))
         accepted = accepted and (frame_rcx_stale == (mode == "syscall_frame_rcx_stale_rejected"))
         accepted = accepted and (frame_r11_stale == (mode == "syscall_frame_r11_stale_rejected"))
         accepted = accepted and (frame_rsp_stale == (mode == "syscall_frame_rsp_stale_rejected"))
@@ -632,10 +648,10 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                      "pdpt_1g_hardware", "pdpt_1g_stale", "pdpt_1g_decoy",
                      "pdpt_1g_unmap_hardware_fault", "pdpt_1g_unmap_stale", "pdpt_1g_unmap_bypass",
                      "pde_2m_unmap_hardware_fault", "pde_2m_unmap_stale", "pde_2m_unmap_bypass"}
-        accepted = accepted and (pt_commit_verified == (mode not in precommit | {"user_gdt_conflict_rejected", "idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected", "rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "sysret_gdt_stale_rejected", "syscall_roundtrip_hardware", "syscall_msr_stale_rejected", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected", "pde_2m_stale_rejected", "upper_user_stale_rejected"} | frame_bad_modes))
-        accepted = accepted and (upper_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "syscall_roundtrip_hardware", "syscall_msr_stale_rejected", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected", "pde_2m_stale_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"} | frame_bad_modes))
+        accepted = accepted and (pt_commit_verified == (mode not in precommit | {"user_gdt_conflict_rejected", "idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected", "rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "sysret_gdt_stale_rejected", "syscall_roundtrip_hardware", "syscall_one_task_getpid_hardware", "syscall_one_task_enosys_hardware", "syscall_msr_stale_rejected", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected", "pde_2m_stale_rejected", "upper_user_stale_rejected"} | frame_bad_modes))
+        accepted = accepted and (upper_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "syscall_roundtrip_hardware", "syscall_one_task_getpid_hardware", "syscall_one_task_enosys_hardware", "syscall_msr_stale_rejected", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected", "pde_2m_stale_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"} | frame_bad_modes))
         accepted = accepted and (upper_stale == (mode == "upper_user_stale_rejected"))
-        accepted = accepted and (pde_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "syscall_roundtrip_hardware", "syscall_msr_stale_rejected", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"} | frame_bad_modes))
+        accepted = accepted and (pde_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "syscall_roundtrip_hardware", "syscall_one_task_getpid_hardware", "syscall_one_task_enosys_hardware", "syscall_msr_stale_rejected", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"} | frame_bad_modes))
         accepted = accepted and (pde_stale == (mode == "pde_2m_stale_rejected"))
         accepted = accepted and (state_verified == (mode not in {"tss_state_conflict_rejected", "tss_rsp0_conflict_rejected"}))
         accepted = accepted and (state_stale == (mode == "tss_state_conflict_rejected"))
@@ -786,6 +802,10 @@ def main():
                                       machine, memory, mode="sysret_gdt_stale_rejected"))
             report["runs"].append(run(args.qemu, Path("build/syscall-roundtrip-multiboot.elf"),
                                       machine, memory, mode="syscall_roundtrip_hardware"))
+            report["runs"].append(run(args.qemu, Path("build/syscall-one-task-getpid-multiboot.elf"),
+                                      machine, memory, mode="syscall_one_task_getpid_hardware"))
+            report["runs"].append(run(args.qemu, Path("build/syscall-one-task-enosys-multiboot.elf"),
+                                      machine, memory, mode="syscall_one_task_enosys_hardware"))
             report["runs"].append(run(args.qemu, Path("build/syscall-msr-stale-multiboot.elf"),
                                       machine, memory, mode="syscall_msr_stale_rejected"))
             report["runs"].append(run(args.qemu, Path("build/syscall-stack-stale-multiboot.elf"),

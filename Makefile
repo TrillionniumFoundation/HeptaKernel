@@ -2403,3 +2403,42 @@ build/syscall-frame-rsp-stale-multiboot.elf: build/boot-syscall-frame-rsp-stale.
 	objcopy -O elf32-i386 build/syscall-frame-rsp-stale.elf "$@"
 test-boot: build/syscall-frame-rcx-stale-multiboot.elf build/syscall-frame-r11-stale-multiboot.elf build/syscall-frame-rsp-stale-multiboot.elf
 test-x86-syscall-hw: build/syscall-frame-rcx-stale-multiboot.elf build/syscall-frame-r11-stale-multiboot.elf build/syscall-frame-rsp-stale-multiboot.elf
+
+# One genuine Core v8 HIA x86-64 getpid (39) return-value implementation
+# for an isolated single-task CPL3 SYSCALL fixture. Task identity is supplied.
+# Unknown numbers produce -ENOSYS and receive zero Linux ABI closure credit.
+.PHONY: test-x86-syscall-one-task
+build/x86-syscall-one-task.o: src/x86_syscall_one_task.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.syscall-one-task.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/x86-syscall-one-task.so: build/x86-syscall-one-task.o
+	ld -shared -z noexecstack -o "$@" "$<"
+build/x86-syscall-one-task-liar.o: tests/negative/x86_syscall_one_task_always_pid.hepta | build check-compiler
+	"$(HEPTA_COMPILER)" < "$<" > "$@"
+build/x86-syscall-one-task-liar.so: build/x86-syscall-one-task-liar.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-x86-syscall-one-task: build/x86-syscall-one-task.so build/x86-syscall-one-task-liar.so
+	@set -eu; a=$$(mktemp build/.one-task-a.XXXXXX); b=$$(mktemp build/.one-task-b.XXXXXX); trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_syscall_one_task.hepta > "$$a"; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_syscall_one_task.hepta > "$$b"; \
+	cmp "$$a" "$$b"; cmp "$$a" build/x86-syscall-one-task.o
+	timeout 90 $(PYTHON) tests/test_x86_syscall_one_task.py build/x86-syscall-one-task.so --object build/x86-syscall-one-task.o
+	$(PYTHON) tests/test_x86_syscall_one_task.py build/x86-syscall-one-task-liar.so --expect-unsafe
+
+build/syscall-one-task-boot.o: build/x86-syscall-one-task.o
+	objcopy --redefine-sym syscall_one_task=syscall_one_task_f0 "$<" "$@"
+SYSCALL_ONE_TASK_SUPPORT := $(SYSCALL_HW_SUPPORT) build/syscall-one-task-boot.o
+build/boot-syscall-one-task-getpid.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -DHEPTAKERNEL_TEST_SYSCALL_ONE_TASK=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-syscall-one-task-enosys.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -DHEPTAKERNEL_TEST_SYSCALL_ONE_TASK=1 -DHEPTAKERNEL_TEST_SYSCALL_NR_UNKNOWN=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/syscall-one-task-getpid-multiboot.elf: build/boot-syscall-one-task-getpid.o $(SYSCALL_ONE_TASK_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-one-task-getpid.elf "$<" $(SYSCALL_ONE_TASK_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-one-task-getpid.elf "$@"
+build/syscall-one-task-enosys-multiboot.elf: build/boot-syscall-one-task-enosys.o $(SYSCALL_ONE_TASK_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-one-task-enosys.elf "$<" $(SYSCALL_ONE_TASK_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-one-task-enosys.elf "$@"
+test: test-x86-syscall-one-task
+test-boot: build/syscall-one-task-getpid-multiboot.elf build/syscall-one-task-enosys-multiboot.elf
+test-x86-syscall-hw: build/syscall-one-task-getpid-multiboot.elf build/syscall-one-task-enosys-multiboot.elf

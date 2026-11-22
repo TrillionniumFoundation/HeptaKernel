@@ -75,7 +75,12 @@ dependency order, preserving the exact baseline and every unmet obligation in
    reservation discovery or concurrent ownership.
 4. Implement interrupt controllers, clocks, task/context switching, user-mode
    entry, ELF loading and Linux syscall dispatch, with independent success and
-   error-path tests before treating any syscall as implemented.
+   error-path tests before treating any syscall as implemented. A pinned HIA
+   one-task syscall number 39 (getpid) result routine now has host differential
+   tests and real CPL3 SYSCALL/SYSRETQ RAX hardware readback; its TGID 4242
+   is supplied by the non-HIA test bridge, not a real Linux task. Unknown
+   numbers return -ENOSYS, and no complete ABI row or full acceptance gate
+   is credited. See docs/x86-syscall-one-task.md.
 5. Build SMP/preemption, signals, process lifecycle, credentials and isolation;
    add VFS, persistent storage, filesystem and networking behavior. Use upstream
    tests and unmodified userspace as independent oracles.

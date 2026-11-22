@@ -2566,6 +2566,13 @@ rsp0_ring3_exercise64:
     movq $0x602000, %rsp        /* fixture user stack, never a kernel stack */
     movq $ARENA_MIN, %rcx       /* HIA-admitted RIP */
     movq $0x202, %r11           /* HIA-admitted RFLAGS */
+#ifdef HEPTAKERNEL_TEST_SYSCALL_ONE_TASK
+#ifdef HEPTAKERNEL_TEST_SYSCALL_NR_UNKNOWN
+    movl $1024, %eax           /* unsupported syscall -> -ENOSYS */
+#else
+    movl $39, %eax             /* x86-64 getpid syscall, NOT fixture magic */
+#endif
+#endif
     sysretq                     /* NON-HIA, actual hardware CPL0 -> CPL3 */
     jmp fail64
 #else
@@ -2581,6 +2588,19 @@ rsp0_ring3_exercise64:
 
 rsp0_ring3_fault64:
     cli
+#ifdef HEPTAKERNEL_TEST_SYSCALL_ONE_TASK
+    /* CPU preserved user RAX across SYSRETQ and UD2; verify BEFORE %ax
+     * segment read destroys its low half. No stored-only check can pass. */
+#ifdef HEPTAKERNEL_TEST_SYSCALL_NR_UNKNOWN
+    movq $-38, %rdx
+#else
+    movq $4242, %rdx
+#endif
+    cmpq %rdx, %rax
+    jne fail64
+    cmpq %rdx, syscall_result(%rip)
+    jne fail64
+#endif
     /* Hardware CPL3->CPL0 #UD must save 5 qwords on TSS.RSP0, no IST. */
     movw %cs, %ax
     cmpw $0x08, %ax
@@ -2627,6 +2647,12 @@ rsp0_ring3_fault64:
 #else
 #ifdef HEPTAKERNEL_TEST_SYSRET_RING3
     leaq message_sysret_ring3(%rip), %rsi
+#elif defined(HEPTAKERNEL_TEST_SYSCALL_ONE_TASK)
+#ifdef HEPTAKERNEL_TEST_SYSCALL_NR_UNKNOWN
+    leaq message_syscall_one_task_enosys(%rip), %rsi
+#else
+    leaq message_syscall_one_task_getpid(%rip), %rsi
+#endif
 #elif defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP)
     leaq message_syscall_roundtrip(%rip), %rsi
 #else
@@ -2647,6 +2673,10 @@ syscall_kernel_entry64:
     popq %rax
 #endif
     movabsq $stack_top, %rsp
+#ifdef HEPTAKERNEL_TEST_SYSCALL_ONE_TASK
+    /* Actual ring3 RAX survives SYSCALL; retain before other HIA calls. */
+    movq %rax, syscall_number(%rip)
+#endif
     movq %rcx, syscall_saved_rcx(%rip)
     movq %r11, syscall_saved_r11(%rip)
     movw %cs, %ax
@@ -2739,9 +2769,20 @@ syscall_kernel_entry64:
     jne fail64
     leaq message_syscall_frame_pass(%rip), %rsi
     call puts64
+#ifdef HEPTAKERNEL_TEST_SYSCALL_ONE_TASK
+    /* Genuine HIA native one-task dispatcher; ONLY fixture TGID 4242.
+     * Nothing here authenticates task identity or handles other syscalls. */
+    movq syscall_number(%rip), %rdi
+    movl $4242, %esi
+    call syscall_one_task_f0
+    movq %rax, syscall_result(%rip)
+#endif
     movq syscall_saved_rcx(%rip), %rcx
     movq syscall_saved_r11(%rip), %r11
     movq syscall_user_rsp(%rip), %rsp
+#ifdef HEPTAKERNEL_TEST_SYSCALL_ONE_TASK
+    movq syscall_result(%rip), %rax  /* actual Linux ABI return in RAX */
+#endif
     sysretq                  /* actual NON-HIA privileged return */
 #endif
     jmp fail64
@@ -6139,6 +6180,10 @@ message_syscall_msr_stale:
     .asciz "HEPTAKERNEL HIA SYSCALL MSR STALE SNAPSHOT REJECTED\r\n"
 message_syscall_roundtrip:
     .asciz "HEPTAKERNEL NON-HIA SYSCALL SYSRETQ HARDWARE ROUNDTRIP VERIFIED\r\n"
+message_syscall_one_task_getpid:
+    .asciz "HEPTAKERNEL HIA ONE-TASK GETPID HARDWARE RESULT VERIFIED\r\n"
+message_syscall_one_task_enosys:
+    .asciz "HEPTAKERNEL HIA ONE-TASK ENOSYS HARDWARE RESULT VERIFIED\r\n"
 message_syscall_stack_pass:
     .asciz "HEPTAKERNEL HIA SYSCALL KERNEL STACK ADMITTED\r\n"
 message_syscall_stack_stale:
@@ -6577,6 +6622,8 @@ syscall_expected_lstar: .skip 8
 syscall_user_rsp: .skip 8
 syscall_saved_rcx: .skip 8
 syscall_saved_r11: .skip 8
+syscall_number: .skip 8
+syscall_result: .skip 8
 tss_gdt_request:  .skip 32
 tss_gdt_reply:    .skip 16
 idt_gate_request: .skip 40

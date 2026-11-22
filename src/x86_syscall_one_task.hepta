@@ -1,0 +1,23 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(syscall_one_task)
+fn syscall_one_task(nr:u64,current_tgid:u64) -> (u64) effects(trap) entry(start)
+block start(nr:u64,current_tgid:u64)
+  getpid_nr:u64 = const() {"value":39}
+  selected:bool = compare.eq(nr,getpid_nr)
+  branch selected task(current_tgid) not_implemented()
+block not_implemented()
+  enosys:u64 = const() {"value":18446744073709551578}
+  ret(enosys)
+block task(pid:u64)
+  one:u64 = const() {"value":1}
+  largest:u64 = const() {"value":2147483647}
+  low:bool = compare.ge(pid,one)
+  high:bool = compare.le(pid,largest)
+  plausible:bool = bool.and(low,high)
+  branch plausible valid(pid) no_task()
+block no_task()
+  esrch:u64 = const() {"value":18446744073709551613}
+  ret(esrch)
+block valid(pid1:u64)
+  ret(pid1)
+end
