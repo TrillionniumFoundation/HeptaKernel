@@ -4983,7 +4983,7 @@ dual_claim_release_exercise64:
 #ifndef HEPTAKERNEL_TEST_PMM_DUAL_SCRUB_BYPASS
     call page_zero_f0         /* native HIA, not the assembly bridge */
 #else
-    xorq %eax, %eax          /* adversarial forged successful return */
+    xorl %eax, %eax          /* adversarial forged successful return */
 #endif
     testl %eax, %eax
     jne fail64
