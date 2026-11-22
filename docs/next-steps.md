@@ -313,3 +313,15 @@ This removes the previous hardware-composition test gap for the bounded
 two-record fixture, not task-identity provenance, concurrency/atomicity,
 privileged HIA instructions, or Linux clone/exit semantics. See
 `docs/x86-task-lifecycle.md`. Full Linux acceptance remains HOLD.
+
+
+## Original HIA ELF64 initial-stack bytes on physical QEMU RAM (isolated)
+
+The original HIA `src/elf64_start_stack.hepta` output is now checked
+against E820-admitted HIA-PMM physical RAM and an adjacent canary on PC
+and Q35, with bad PHENT, malicious native-HIA no-op and post-write
+decoy refusal. The native object and observer are different artifacts:
+the former builds the bytes; non-HIA `boot.S` supplies the fixture and
+readback. See `docs/elf64-stack-physical-qemu.md`; no actual `execve`
+or user virtual stack mapping is claimed. All 17 gates and 422 syscall
+rows continue HOLD.
