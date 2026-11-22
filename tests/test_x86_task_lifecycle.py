@@ -95,7 +95,6 @@ def invoke(fun, req, before, reply_length=8):
     updated = bytes(guarded_state)[32:32+len(before)]
     if rc:
         assert bytes(guarded_out) == old_out, "failure changed reply"
-    else:
     result = int.from_bytes(bytes(guarded_out)[32:40], "little") if rc == 0 and reply_length == 8 else None
     return rc, updated, result
 
