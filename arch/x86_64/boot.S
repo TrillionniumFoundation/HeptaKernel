@@ -694,9 +694,11 @@ hia_idt_next64:
     jmp fail64
 #endif
 #if defined(HEPTAKERNEL_TEST_RSP0_RING3) || defined(HEPTAKERNEL_TEST_RSP0_DECOY) || defined(HEPTAKERNEL_TEST_RING3_PDE_STALE) || defined(HEPTAKERNEL_TEST_RING3_UPPER_STALE) || defined(HEPTAKERNEL_TEST_US_FAULT) || defined(HEPTAKERNEL_TEST_US_STALE) || defined(HEPTAKERNEL_TEST_US_BYPASS) || defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSRET_GDT_STALE) || defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP) || defined(HEPTAKERNEL_TEST_SYSCALL_MSR_STALE)
-    /* After native E820/reservation admission: terminal ring3 observer. */
+    /* ELF-stack CPL3 test must first materialize a native HIA PMM page. */
+#ifndef HEPTAKERNEL_TEST_ELF_STACK_RING3
     call rsp0_ring3_exercise64
     jmp fail64
+#endif
 #endif
     call pte_live_exercise64
     leaq message_pte_pass(%rip), %rsi
@@ -2234,6 +2236,17 @@ pdpt_1g_unmap_fault_load64:
  * E820/reservation already admitted both physical test regions. The 4MiB
  * huge page is user RX; 6MiB is user RW/NX. Kernel pages remain U/S=0.
  * Nothing here is a purported HIA privilege/backend implementation. */
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_RING3
+/* Clearly non-HIA, position-independent fixture code copied to actual
+ * native HIA AT_ENTRY. The CPU reads HIA-populated CPL3 stack memory. */
+elf_stack_ring3_user_bytes:
+    movq 0(%rsp), %rax
+    movq 32(%rsp), %rdx
+    movq 96(%rsp), %r8
+elf_stack_ring3_user_trap:
+    ud2
+elf_stack_ring3_user_end:
+#endif
 rsp0_ring3_exercise64:
 #if defined(HEPTAKERNEL_TEST_SYSRET_RING3) || defined(HEPTAKERNEL_TEST_SYSRET_GDT_STALE) || defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP) || defined(HEPTAKERNEL_TEST_SYSCALL_MSR_STALE)
     /* Only genuine native HIA installs 0x40 user code. The previously
@@ -2289,11 +2302,18 @@ rsp0_ring3_exercise64:
     call puts64
 #endif
 #endif
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_RING3
+    leaq elf_stack_ring3_user_bytes(%rip), %rsi
+    movq $0x401000, %rdi
+    movl $(elf_stack_ring3_user_end-elf_stack_ring3_user_bytes), %ecx
+    rep movsb
+#else
     movq $ARENA_MIN, %rax
 #if defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP) || defined(HEPTAKERNEL_TEST_SYSCALL_MSR_STALE)
     movl $0x0b0f050f, (%rax)         /* real SYSCALL then deliberate UD2 */
 #else
     movw $0x0b0f, (%rax)             /* fixture: UD2 at 0x400000 */
+#endif
 #endif
     /* Native HIA owns parent U/S and 2 MiB leaf PDE updates.
      * CR3, hardware exception entry and IRETQ remain NON-HIA.
@@ -2579,11 +2599,19 @@ rsp0_ring3_exercise64:
     sysretq                     /* NON-HIA, actual hardware CPL0 -> CPL3 */
     jmp fail64
 #else
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_RING3
+    pushq $0x3b
+    pushq $0x601f80                 /* native HIA stack receipt -> user RSP */
+    pushq $0x2
+    pushq $0x33
+    pushq $0x401000                 /* equals actual HIA AT_ENTRY */
+#else
     pushq $0x3b                     /* CPL3 SS */
     pushq $0x602000                 /* CPL3 NX stack */
     pushq $0x2                      /* IF masked */
     pushq $0x33                     /* CPL3 64-bit CS */
     pushq $ARENA_MIN                /* user-mode #UD */
+#endif
     iretq                           /* test-only NON-HIA transition */
     jmp fail64
 #endif
@@ -2591,6 +2619,19 @@ rsp0_ring3_exercise64:
 
 rsp0_ring3_fault64:
     cli
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_RING3
+    /* Compare actual ring3 GPR results before the observer clobbers them. */
+    cmpq $0, %rax
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_RING3_DECOY
+    cmpq $0x400041, %rdx      /* post-HIA mutation must reach CPL3 CPU */
+#else
+    cmpq $0x400040, %rdx
+#endif
+    jne fail64
+    cmpq $0x401000, %r8
+    jne fail64
+#endif
 #ifdef HEPTAKERNEL_TEST_SYSCALL_ONE_TASK
     /* CPU preserved user RAX across SYSRETQ and UD2; verify BEFORE %ax
      * segment read destroys its low half. No stored-only check can pass. */
@@ -2629,7 +2670,9 @@ rsp0_ring3_fault64:
     leaq -40(%rdx), %rax
     cmpq %rax, %rsp
     jne fail64
-#ifdef HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_RING3
+    cmpq $(0x401000+elf_stack_ring3_user_trap-elf_stack_ring3_user_bytes), 0(%rsp)
+#elif defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP)
     cmpq $(ARENA_MIN+2), 0(%rsp)
     movabsq $0x735441434b475541, %rax
     cmpq %rax, 0x601ff8
@@ -2649,7 +2692,11 @@ rsp0_ring3_fault64:
     cmpq $0x33, 8(%rsp)
     jne fail64
 #endif
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_RING3
+    cmpq $0x601f80, 24(%rsp)
+#else
     cmpq $0x602000, 24(%rsp)
+#endif
     jne fail64
     cmpq $0x3b, 32(%rsp)
     jne fail64
@@ -2659,7 +2706,15 @@ rsp0_ring3_fault64:
     call puts64
     jmp fail64
 #else
-#ifdef HEPTAKERNEL_TEST_SYSRET_RING3
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_RING3
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_RING3_DECOY
+    leaq message_elf_stack_ring3_decoy(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    leaq message_elf_stack_ring3(%rip), %rsi
+#endif
+#elif defined(HEPTAKERNEL_TEST_SYSRET_RING3)
     leaq message_sysret_ring3(%rip), %rsi
 #elif defined(HEPTAKERNEL_TEST_SYSCALL_ONE_TASK)
 #ifdef HEPTAKERNEL_TEST_SYSCALL_NR_UNKNOWN
@@ -4779,6 +4834,14 @@ owner_exercise64:
 #elif defined(HEPTAKERNEL_TEST_ELF_STACK_HW)
     /* HIA writes an ELF initial-stack suffix to an E820/HIA-PMM RAM page. */
     call elf_stack_hw_exercise64
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_RING3
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_RING3_DECOY
+    /* Hostile fixture overwrites only AT_PHDR after genuine HIA success. */
+    xorq $1, 0x601fa0
+#endif
+    call rsp0_ring3_exercise64
+    jmp fail64
+#endif
 #endif
 
 #if defined(HEPTAKERNEL_TEST_COW_REFCOUNT_HW)
@@ -6493,6 +6556,10 @@ message_us_bypass:
     .asciz "HEPTAKERNEL HIA PT USER REVOKE BYPASS EXECUTED\r\n"
 message_rsp0_decoy:
     .asciz "HEPTAKERNEL HIA TSS RSP0 DECOY STACK DETECTED\r\n"
+message_elf_stack_ring3:
+    .asciz "HEPTAKERNEL HIA ELF64 STACK CPL3 AUXV READ VERIFIED\r\n"
+message_elf_stack_ring3_decoy:
+    .asciz "HEPTAKERNEL HIA ELF64 STACK CPL3 POSTWRITE DECOY OBSERVED\r\n"
 message_upper_pass:
     .asciz "HEPTAKERNEL HIA LIVE UPPER USER TABLE VERIFIED\r\n"
 message_upper_stale:
