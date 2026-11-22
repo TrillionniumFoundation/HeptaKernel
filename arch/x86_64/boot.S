@@ -2605,8 +2605,8 @@ rsp0_ring3_fault64:
     jne fail64
 #endif
 #ifdef HEPTAKERNEL_TEST_SYSCALL_TASK_VIEW
-#ifdef HEPTAKERNEL_TEST_SYSCALL_TASK_BAD_LEADER
-    movq $-3, %rdx            /* missing live leader -> -ESRCH */
+#if defined(HEPTAKERNEL_TEST_SYSCALL_TASK_BAD_LEADER) || defined(HEPTAKERNEL_TEST_SYSCALL_LIFE_RETIRE)
+    movq $-3, %rdx            /* missing task -> -ESRCH */
 #else
     movq $4243, %rdx          /* worker TID differs from thread-group ID */
 #endif
@@ -2668,7 +2668,15 @@ rsp0_ring3_fault64:
     leaq message_syscall_one_task_getpid(%rip), %rsi
 #endif
 #elif defined(HEPTAKERNEL_TEST_SYSCALL_TASK_VIEW)
-#ifdef HEPTAKERNEL_TEST_SYSCALL_TASK_BAD_LEADER
+#ifdef HEPTAKERNEL_TEST_SYSCALL_TASK_LIFECYCLE
+#ifdef HEPTAKERNEL_TEST_SYSCALL_LIFE_RETIRE
+    leaq message_syscall_life_retired(%rip), %rsi
+#elif defined(HEPTAKERNEL_TEST_SYSCALL_LIFE_STALE)
+    leaq message_syscall_life_stale(%rip), %rsi
+#else
+    leaq message_syscall_life_spawned(%rip), %rsi
+#endif
+#elif defined(HEPTAKERNEL_TEST_SYSCALL_TASK_BAD_LEADER)
     leaq message_syscall_task_leader_stale(%rip), %rsi
 #else
     leaq message_syscall_task_tid(%rip), %rsi
@@ -2812,6 +2820,82 @@ syscall_kernel_entry64:
 #ifdef HEPTAKERNEL_TEST_SYSCALL_TASK_BAD_LEADER
     movq $9000, 8(%r8)         /* adversarial incorrect leader group */
 #endif
+#ifdef HEPTAKERNEL_TEST_SYSCALL_TASK_LIFECYCLE
+    /* The two records are still NON-HIA fixture identities. The worker
+     * begins empty and genuine Core v8 HIA activates it before the real
+     * SYSCALL return. No Linux clone/exit or SMP task ownership is implied. */
+    movq $0, syscall_task_snapshot+32(%rip)
+    movq $0, syscall_task_snapshot+40(%rip)
+    movq $0, syscall_task_snapshot+48(%rip)
+    movq $0, syscall_task_snapshot+56(%rip)
+    movq $0, syscall_task_life_request(%rip)       /* activate */
+    movq $4242, syscall_task_life_request+8(%rip)
+    movq $0, syscall_task_life_request+16(%rip)
+    movq $4243, syscall_task_life_request+24(%rip)
+    leaq syscall_task_life_request(%rip), %rdi
+    movl $32, %esi
+    leaq syscall_task_life_reply(%rip), %rdx
+    movl $8, %ecx
+    leaq syscall_task_snapshot(%rip), %r8
+    movl $64, %r9d
+    call syscall_task_lifecycle_f0
+    testl %eax, %eax
+    jne fail64
+    cmpq $4243, syscall_task_life_reply(%rip)
+    jne fail64
+    cmpq $4243, syscall_task_snapshot+32(%rip)
+    jne fail64
+    cmpq $4242, syscall_task_snapshot+40(%rip)
+    jne fail64
+    cmpq $1, syscall_task_snapshot+48(%rip)
+    jne fail64
+    cmpq $1, syscall_task_snapshot+56(%rip)
+    jne fail64
+#if defined(HEPTAKERNEL_TEST_SYSCALL_LIFE_RETIRE) || defined(HEPTAKERNEL_TEST_SYSCALL_LIFE_STALE)
+    movq $1, syscall_task_life_request(%rip)       /* retire */
+    movq $0, syscall_task_life_request+24(%rip)
+#ifdef HEPTAKERNEL_TEST_SYSCALL_LIFE_STALE
+    movq $4244, syscall_task_life_request+16(%rip) /* stale expected worker */
+    movq $-17, syscall_task_life_reply(%rip)       /* rejection must not write */
+#else
+    movq $4243, syscall_task_life_request+16(%rip)
+#endif
+    leaq syscall_task_life_request(%rip), %rdi
+    movl $32, %esi
+    leaq syscall_task_life_reply(%rip), %rdx
+    movl $8, %ecx
+    leaq syscall_task_snapshot(%rip), %r8
+    movl $64, %r9d
+    call syscall_task_lifecycle_f0
+#ifdef HEPTAKERNEL_TEST_SYSCALL_LIFE_STALE
+    cmpl $6, %eax
+    jne fail64
+    cmpq $-17, syscall_task_life_reply(%rip)
+    jne fail64
+    cmpq $4243, syscall_task_snapshot+32(%rip)
+    jne fail64
+    cmpq $4242, syscall_task_snapshot+40(%rip)
+    jne fail64
+    cmpq $1, syscall_task_snapshot+48(%rip)
+    jne fail64
+    cmpq $1, syscall_task_snapshot+56(%rip)
+    jne fail64
+#else
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, syscall_task_life_reply(%rip)
+    jne fail64
+    cmpq $0, syscall_task_snapshot+32(%rip)
+    jne fail64
+    cmpq $0, syscall_task_snapshot+40(%rip)
+    jne fail64
+    cmpq $0, syscall_task_snapshot+48(%rip)
+    jne fail64
+    cmpq $0, syscall_task_snapshot+56(%rip)
+    jne fail64
+#endif
+#endif
+#endif /* HIA task lifecycle */
     movq syscall_number(%rip), %rax
     movq %rax, syscall_task_request(%rip)
     movq $1, syscall_task_request+8(%rip)  /* slot 1: worker */
@@ -6238,6 +6322,12 @@ message_syscall_task_tid:
     .asciz "HEPTAKERNEL HIA TASK VIEW WORKER TID HARDWARE RESULT VERIFIED\r\n"
 message_syscall_task_leader_stale:
     .asciz "HEPTAKERNEL HIA TASK VIEW MISSING LEADER REJECTED IN USER RAX\r\n"
+message_syscall_life_spawned:
+    .asciz "HEPTAKERNEL HIA TASK LIFECYCLE SPAWN USER GETTID VERIFIED\r\n"
+message_syscall_life_retired:
+    .asciz "HEPTAKERNEL HIA TASK LIFECYCLE RETIRE USER ESRCH VERIFIED\r\n"
+message_syscall_life_stale:
+    .asciz "HEPTAKERNEL HIA TASK LIFECYCLE STALE RETIRE PRESERVED USER TID\r\n"
 message_syscall_stack_pass:
     .asciz "HEPTAKERNEL HIA SYSCALL KERNEL STACK ADMITTED\r\n"
 message_syscall_stack_stale:
@@ -6681,6 +6771,8 @@ syscall_result: .skip 8
 syscall_task_request: .skip 16
 syscall_task_reply: .skip 8
 syscall_task_snapshot: .skip 64  /* two fixture records, not real tasks */
+syscall_task_life_request: .skip 32
+syscall_task_life_reply: .skip 8
 tss_gdt_request:  .skip 32
 tss_gdt_reply:    .skip 16
 idt_gate_request: .skip 40

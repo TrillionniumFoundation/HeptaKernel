@@ -56,3 +56,26 @@ remain HOLD, including all 422 pinned x86-64 syscall source rows.
 Hardware integration and SMP/interrupt safety require independent
 qualification before this bounded lifecycle state can be promoted to
 real Linux process semantics.
+
+## PC/Q35 CPL3 hardware composition
+
+The original native HIA lifecycle object is now linked into three isolated
+PC 32 MiB / Q35 64 MiB hardware images alongside the independent, original
+HIA read-only task view. The non-HIA fixture initially supplies a valid leader
+and an empty worker slot, then calls HIA to activate worker TID 4243. Exact
+64-byte state and eight-byte reply checks precede the read-only HIA gettid.
+The CPU then performs real SYSRETQ, user-mode UD2 and TSS.RSP0 exception
+return; the observer checks the actual user RAX, not only a cached reply.
+
+The retire image performs native HIA activation followed by retirement and
+requires the read-only HIA gettid to return -ESRCH in actual CPL3 RAX.
+The stale image submits an incorrect expected worker TID (4244), requires
+native status 6, preservation of both the worker record and a sentinel
+reply, and still observes worker TID 4243 in CPL3 RAX. Independent serial
+markers, PC/Q35 readback and the global negative-marker matrix are mandatory.
+
+The non-HIA test bridge still supplies state identities, MSR/CRx, supervisor
+stack, privileged SYSRETQ and exception entry. This composition is not
+Linux thread creation, scheduler execution, atomic lifecycle, or complete
+system call behavior. All 17 acceptance gates and 422 syscall obligations
+remain HOLD.

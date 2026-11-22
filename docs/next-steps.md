@@ -303,3 +303,13 @@ for getpid/gettid/getppid values and group-leader membership; the records
 remain caller-supplied test fixtures, **not** authenticated Linux tasks,
 namespace-aware PID routing, atomic snapshots, or syscall ABI closure. See
 `docs/x86-syscall-task-view.md`. All full acceptance gates remain HOLD.
+
+A composed PC/Q35 hardware fixture now passes an initially empty worker
+record through genuine HIA native task lifecycle activation, then through
+the independent native HIA task-view gettid routine and real NON-HIA
+SYSCALL/SYSRETQ. Additional native retirement and stale expected-worker
+refusal paths verify returned user RAX (-ESRCH or retained worker TID).
+This removes the previous hardware-composition test gap for the bounded
+two-record fixture, not task-identity provenance, concurrency/atomicity,
+privileged HIA instructions, or Linux clone/exit semantics. See
+`docs/x86-task-lifecycle.md`. Full Linux acceptance remains HOLD.
