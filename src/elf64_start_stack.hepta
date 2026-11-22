@@ -62,7 +62,21 @@ block admission(p3:mutbuf,m3:mutbuf,base:u64,entry:u64,phdr:u64,phent:u64,phnum:
   g7:bool = bool.and(g6,ent_ok)
   g8:bool = bool.and(g7,count_min)
   g9:bool = bool.and(g8,count_max)
-  branch g9 store_stack(p3,m3,base,entry,phdr,phnum) bad_values()
+  branch g9 separate_stack(p3,m3,base,entry,phdr,phnum) bad_values()
+block separate_stack(stack_page:mutbuf,stack_receipt:mutbuf,stack_base:u64,stack_entry:u64,stack_phdr:u64,stack_phnum:u64)
+  sep_pagebytes:u64 = const() {"value":4096}
+  sep_entrybytes:u64 = const() {"value":56}
+  sep_stackend:u64 = int.add.wrap(stack_base,sep_pagebytes)
+  sep_phbytes:u64 = int.mul.wrap(stack_phnum,sep_entrybytes)
+  sep_phend:u64 = int.add.wrap(stack_phdr,sep_phbytes)
+  sep_entry_before:bool = compare.lt(stack_entry,stack_base)
+  sep_entry_after:bool = compare.ge(stack_entry,sep_stackend)
+  sep_entry_disjoint:bool = bool.or(sep_entry_before,sep_entry_after)
+  sep_ph_before:bool = compare.le(sep_phend,stack_base)
+  sep_ph_after:bool = compare.ge(stack_phdr,sep_stackend)
+  sep_ph_disjoint:bool = bool.or(sep_ph_before,sep_ph_after)
+  sep_safe:bool = bool.and(sep_entry_disjoint,sep_ph_disjoint)
+  branch sep_safe store_stack(stack_page,stack_receipt,stack_base,stack_entry,stack_phdr,stack_phnum) bad_values()
 block bad_values()
   error_values:u32 = const() {"value":3}
   ret(error_values)
