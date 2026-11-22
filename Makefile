@@ -2488,6 +2488,9 @@ test-x86-syscall-hw: build/syscall-task-view-tid-multiboot.elf build/syscall-tas
 # No Linux clone/exit or SMP atomicity; this mutates a bounded test snapshot.
 .PHONY: test-x86-task-lifecycle
 build/x86-task-lifecycle.o: src/x86_task_lifecycle.hepta | build check-compiler
+	@# The pinned independent HIA source verifier diagnoses native backend refusals;
+	@# the actual object is still generated only by the pinned native HIA compiler.
+	@if test -d .toolchain/hepta; then $(PYTHON) -c 'import sys;sys.path.insert(0,".toolchain/hepta");from hepta.hia_agent_assembly import assemble_program;assemble_program(open("src/x86_task_lifecycle.hepta","rb").read());print("HIA Core source preflight: PASS")'; fi
 	@set -eu; tmp=$$(mktemp build/.task-life.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
 	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
 	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
