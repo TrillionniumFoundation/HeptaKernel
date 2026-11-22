@@ -45,8 +45,9 @@ nonaliasing, CR3/TLB/IOMMU state, interrupts, or DMA quiescence. Traps during
 the scrub or the subsequent metadata update can leave partial state. The
 precondition is a single, quiescent owner; there is **no hardware-atomic
 publication, SMP linearizability, TLB shootdown or Linux page allocator**.
-This component has native host differential tests, **not** new QEMU hardware
-execution evidence. Linux's entire pinned baseline and all 17 closure gates
+The initial HIA component was qualified with host-native differential tests;
+a later, isolated physical QEMU integration is detailed below. This does not
+close the missing privileged HIA backend. Linux's pinned baseline and all 17 closure gates
 remain HOLD; the original 422 syscall obligations are unchanged.
 
 The HIA language/verifier/native backend still lacks verified CRx/MSR,

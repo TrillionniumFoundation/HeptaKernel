@@ -11,6 +11,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import tempfile
 
 MARKERS = {
     "hw": "HEPTAKERNEL HIA DUAL PMM PHYSICAL PAGES AND TWO-ZONE EXHAUSTION VERIFIED",
@@ -35,6 +36,15 @@ FAIL = "HEPTAKERNEL BOOT FAIL"
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def text_sha(path):
+    """Extract actual ELF .text bytes, excluding the renamed symbol table."""
+    with tempfile.TemporaryDirectory(prefix="hepta-native-text-") as temp:
+        raw = Path(temp) / "text.bin"
+        subprocess.run(["objcopy", "-O", "binary", "--only-section=.text",
+                        str(path), str(raw)], check=True, capture_output=True)
+        return hashlib.sha256(raw.read_bytes()).hexdigest()
 
 
 def run(qemu, machine, mib, mode):
@@ -82,6 +92,10 @@ def main():
         "native_scrub_claim_boot_object_sha256": sha("build/pmm-scrub-claim-boot.o"),
         "native_scrub_claim_noop_boot_object_sha256": sha("build/pmm-scrub-claim-noop-boot.o"),
         "native_scrub_claim_qemu": True,
+        "native_scrub_claim_text_sha256": text_sha("build/pmm-scrub-claim.o"),
+        "native_scrub_claim_boot_text_sha256": text_sha("build/pmm-scrub-claim-boot.o"),
+        "native_scrub_claim_noop_text_sha256": text_sha("build/pmm-scrub-claim-noop.o"),
+        "native_scrub_claim_noop_boot_text_sha256": text_sha("build/pmm-scrub-claim-noop-boot.o"),
         "native_scrub_release_source_sha256": sha("src/pmm_scrub_release.hepta"),
         "native_scrub_release_object_sha256": sha("build/pmm-scrub-release.o"),
         "native_scrub_release_noop_source_sha256": sha("tests/negative/pmm_scrub_release_noop.hepta"),
@@ -113,7 +127,14 @@ def main():
                 report["runs"].append(row)
                 print("HIA_DUAL_PMM_QEMU", platform, mode, row["status"],
                       row.get("returncode"), flush=True)
+        original_text_ok = (report["native_scrub_claim_text_sha256"]
+                            == report["native_scrub_claim_boot_text_sha256"])
+        dishonest_text_ok = (report["native_scrub_claim_noop_text_sha256"]
+                             == report["native_scrub_claim_noop_boot_text_sha256"])
+        report["native_scrub_claim_link_text_identity"] = original_text_ok
+        report["native_scrub_claim_noop_link_text_identity"] = dishonest_text_ok
         report["status"] = ("PASS" if len(report["runs"]) == 24
+                            and original_text_ok and dishonest_text_ok
                             and all(x["status"] == "PASS" for x in report["runs"])
                             else "FAIL")
     except BaseException as exc:
