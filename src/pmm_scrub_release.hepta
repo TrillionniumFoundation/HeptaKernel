@@ -106,8 +106,8 @@ block scrub(b18_state:mutbuf,b18_page:mutbuf,b18_offset:u64,b18_bitmap_at:usize,
   s_length:usize = const() {"value":4096}
   s_zero:u8 = const() {"value":0}
   _ = buffer.fill_range(b18_page,s_start,s_length,s_zero)
-  s_inverse:u64 = b18_bit.not(b18_bit)
-  s_new:u64 = b18_bit.and(b18_bitmap,s_inverse)
+  s_inverse:u64 = bit.not(b18_bit)
+  s_new:u64 = bit.and(b18_bitmap,s_inverse)
   s_new_byte:u8 = int.cast(s_new) {"mode":"wrap"}
   s_freeoff:u64 = const() {"value":32}
   s_count_at:u64 = int.add.wrap(b18_offset,s_freeoff)
