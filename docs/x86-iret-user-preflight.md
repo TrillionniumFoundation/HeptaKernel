@@ -9,7 +9,10 @@ The restricted 64-bit x86-64 initial user frame has five scalar inputs:
 RIP, RSP, RFLAGS, CS and SS. The admitted selectors are 0x33/0x3b, with
 canonical low-half RIP, 16-byte-aligned low-half RSP and a nonempty stack
 page below RSP. Fixed bit 1 in RFLAGS is required, with only the deliberately
-restricted 0xAD7 flags mask allowed (IF may be zero or one). The initial RIP
+restricted 0xAD6 flags mask allowed (IF may be zero or one). The
+reserved RFLAGS bit 0 must be zero: admitting 0xAD7 was a verifier
+preflight defect, since bit 0 is architecturally reserved. The oracle
+now sweeps all 64 bit positions from three independently admitted bases. The initial RIP
 may not point into the writable page ending at RSP. Return codes are
 0 admitted, 1 RIP, 2 RSP, 3 selectors, 4 flags and 5 executable-stack alias.
 No write or privilege effect is claimed.
