@@ -49,7 +49,7 @@ byte/bitmap oracle. The oracle verifies statuses, exact state transitions,
 every unchanged byte and redzones, malformed headers, reserved bits,
 free-count mismatch, overlapping regions, exhausted zones, boundary
 physical addresses, and repeated claims. A deliberately dishonest HIA
-native library (`build/e820-allow-all.so`) must disagree with the oracle
+native library (`build/pmm-dual-claim-liar.so`, compiled from `tests/negative/pmm_dual_claim_allow_all.hepta`) must disagree with the oracle
 on a corrupted header. The native test report binds source/object/library
 SHA-256 and states explicitly that QEMU/Linux behavior is not tested by
 this component.
