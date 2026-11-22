@@ -2600,6 +2600,28 @@ rsp0_ring3_exercise64:
     jmp fail64
 #else
 #ifdef HEPTAKERNEL_TEST_ELF_STACK_RING3
+    /* Genuine HIA scalar policy, not an IRETQ instruction backend.
+     * A rejected writable-stack RIP must never reach privileged IRETQ. */
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_IRET_STALE
+    movq $0x601000, %rdi
+#else
+    movq $0x401000, %rdi
+#endif
+    movq $0x601f80, %rsi
+    movq $0x2, %rdx
+    movq $0x33, %rcx
+    movq $0x3b, %r8
+    call iret_user_admit
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_IRET_STALE
+    cmpl $5, %eax
+    jne fail64
+    leaq message_elf_stack_iret_stale(%rip), %rsi
+    call puts64
+    jmp fail64                 /* explicit negative, no hardware IRETQ */
+#else
+    testl %eax, %eax
+    jne fail64
+#endif
     pushq $0x3b
     pushq $0x601f80                 /* native HIA stack receipt -> user RSP */
     pushq $0x2
@@ -6560,6 +6582,8 @@ message_elf_stack_ring3:
     .asciz "HEPTAKERNEL HIA ELF64 STACK CPL3 AUXV READ VERIFIED\r\n"
 message_elf_stack_ring3_decoy:
     .asciz "HEPTAKERNEL HIA ELF64 STACK CPL3 POSTWRITE DECOY OBSERVED\r\n"
+message_elf_stack_iret_stale:
+    .asciz "HEPTAKERNEL HIA IRET USER STACK RIP REFUSED BEFORE IRETQ\r\n"
 message_upper_pass:
     .asciz "HEPTAKERNEL HIA LIVE UPPER USER TABLE VERIFIED\r\n"
 message_upper_stale:

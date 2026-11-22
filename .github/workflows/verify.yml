@@ -432,6 +432,11 @@ jobs:
             build/elf64-start-stack-report.json
             build/elf64-stack-physical-qemu-report.json
             build/elf64-stack-cpl3-qemu-report.json
+            build/x86-iret-user-admit-report.json
+            build/x86-iret-user-admit.o
+            build/x86-iret-user-admit.so
+            build/x86-iret-user-admit-liar.o
+            build/x86-iret-user-admit-liar.so
             build/elf64-start-stack-boot.o
             build/elf64-start-stack-liar-boot.o
             build/elf-stack-*-multiboot.elf
