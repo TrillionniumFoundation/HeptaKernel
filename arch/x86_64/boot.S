@@ -2501,16 +2501,16 @@ rsp0_ring3_exercise64:
      * This is not a Linux syscall handler or an HIA privileged backend. */
     movq $ARENA_MIN, %rdi
     movq $0x602000, %rsi
-#ifdef HEPTAKERNEL_TEST_SYSRET_RFLAGS_BIT0
-    movq $0x203, %rdx      /* reserved RFLAGS bit 0 */
+#ifdef HEPTAKERNEL_TEST_SYSRET_RFLAGS_BIT3
+    movq $0x20a, %rdx      /* genuine reserved RFLAGS bit 3 */
 #else
     movq $0x202, %rdx
 #endif
     call sysret_admit_f0
-#ifdef HEPTAKERNEL_TEST_SYSRET_RFLAGS_BIT0
+#ifdef HEPTAKERNEL_TEST_SYSRET_RFLAGS_BIT3
     cmpl $3, %eax
     jne fail64
-    leaq message_sysret_rflags_bit0(%rip), %rsi
+    leaq message_sysret_rflags_bit3(%rip), %rsi
     call puts64
     jmp fail64             /* refuse before WRMSR or SYSRETQ */
 #else
@@ -2620,8 +2620,8 @@ rsp0_ring3_exercise64:
     movq $0x401000, %rdi
 #endif
     movq $0x601f80, %rsi
-#ifdef HEPTAKERNEL_TEST_ELF_STACK_IRET_RFLAGS_BIT0
-    movq $0x3, %rdx          /* RFLAGS reserved bit 0 intentionally set */
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_IRET_RFLAGS_BIT3
+    movq $0xa, %rdx          /* genuine reserved RFLAGS bit 3 set */
 #else
     movq $0x2, %rdx
 #endif
@@ -2634,10 +2634,10 @@ rsp0_ring3_exercise64:
     leaq message_elf_stack_iret_stale(%rip), %rsi
     call puts64
     jmp fail64                 /* explicit negative, no hardware IRETQ */
-#elif defined(HEPTAKERNEL_TEST_ELF_STACK_IRET_RFLAGS_BIT0)
+#elif defined(HEPTAKERNEL_TEST_ELF_STACK_IRET_RFLAGS_BIT3)
     cmpl $4, %eax
     jne fail64
-    leaq message_elf_stack_iret_reserved_bit0(%rip), %rsi
+    leaq message_elf_stack_iret_reserved_bit3(%rip), %rsi
     call puts64
     jmp fail64                 /* reserved flag refused before NON-HIA IRETQ */
 #else
@@ -6554,8 +6554,8 @@ message_sysret_gdt_stale:
     .asciz "HEPTAKERNEL HIA SYSRETQ GDT STALE WORD REJECTED\r\n"
 message_sysret_ring3:
     .asciz "HEPTAKERNEL HIA SYSRETQ CPL3 HARDWARE SWITCH VERIFIED\r\n"
-message_sysret_rflags_bit0:
-    .asciz "HEPTAKERNEL HIA SYSRETQ RESERVED RFLAGS BIT0 REJECTED\r\n"
+message_sysret_rflags_bit3:
+    .asciz "HEPTAKERNEL HIA SYSRETQ RESERVED RFLAGS BIT3 REJECTED\r\n"
 message_syscall_msr_pass:
     .asciz "HEPTAKERNEL HIA LIVE SYSCALL MSR SNAPSHOT ADMITTED\r\n"
 message_syscall_msr_stale:
@@ -6608,8 +6608,8 @@ message_elf_stack_ring3_decoy:
     .asciz "HEPTAKERNEL HIA ELF64 STACK CPL3 POSTWRITE DECOY OBSERVED\r\n"
 message_elf_stack_iret_stale:
     .asciz "HEPTAKERNEL HIA IRET USER STACK RIP REFUSED BEFORE IRETQ\r\n"
-message_elf_stack_iret_reserved_bit0:
-    .asciz "HEPTAKERNEL HIA IRET RFLAGS RESERVED BIT0 REFUSED BEFORE IRETQ\r\n"
+message_elf_stack_iret_reserved_bit3:
+    .asciz "HEPTAKERNEL HIA IRET RFLAGS RESERVED BIT3 REFUSED BEFORE IRETQ\r\n"
 message_upper_pass:
     .asciz "HEPTAKERNEL HIA LIVE UPPER USER TABLE VERIFIED\r\n"
 message_upper_stale:

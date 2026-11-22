@@ -9,8 +9,9 @@ caller-supplied u64 arguments and returns a u32 status without memory writes.
 The intentionally restricted four-level (48-bit) user-half admission
 requires user RIP and RSP within [4096, 2^47). It requires RFLAGS fixed
 bit 1 and IF bit 9, and admits only CF, fixed bit 1, PF, AF, ZF, SF, IF,
-and OF (allowed mask 0xAD6; required mask 0x202). RFLAGS bit 0 is
-architecturally reserved: 0x203 and 0xAD7 must be rejected. It refuses TF, DF,
+and OF (allowed mask 0xAD7; required mask 0x202). The fixed Linux x86
+UAPI defines bit 0 as CF (carry), so 0x203 and 0xAD7 must be admitted.
+Bit 3 is reserved: 0x20A and 0xADF must be refused. It refuses TF, DF,
 IOPL, NT, RF, VM, AC, VIF/VIP, ID, high/reserved flags and kernel or
 noncanonical addresses. Several **legal Linux user states**, including
 single stepping with TF and user code with DF, are rejected. This
@@ -34,8 +35,12 @@ or general user-space ABI. A caller-supplied successful result is NOT
 authorization to switch privilege. The temporary non-HIA boot.S bridge
 remains and the pinned toolchain is unchanged.
 
+Per fixed Linux 7.3.4 source `arch/x86/include/uapi/asm/processor-flags.h`
+at commit `7595a62d45ee1a2297eafa5f2ef5d0a45142d84d`,
+`X86_EFLAGS_CF_BIT=0` and `X86_EFLAGS_FIXED_BIT=1`.
+
 On PC 32 MiB and Q35 64 MiB a separate negative image presents RFLAGS
-0x203 to the HIA native preflight after installation of the native HIA
+0x20A to the HIA native preflight after installation of the native HIA
 user GDT slot. It requires status 3 and a distinct refusal marker before
 any privileged WRMSR or SYSRETQ. This is not a new HIA privilege backend.
 
