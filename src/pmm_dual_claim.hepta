@@ -1,0 +1,258 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn pmm_dual_claim(request:readbuf,reply:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,state:mutbuf)
+  s_rlen:usize = buffer.len(reply)
+  s_min:usize = const() {"value":16}
+  s_short:bool = compare.lt(s_rlen,s_min)
+  branch s_short short_reply() check_input(request,reply,state)
+block short_reply()
+  sr_code:u32 = const() {"value":1}
+  ret(sr_code)
+block check_input(ci_req:readbuf,ci_reply:mutbuf,ci_state:mutbuf)
+  ci_size:usize = buffer.len(ci_req)
+  ci_zero:usize = const() {"value":0}
+  ci_ok:bool = compare.eq(ci_size,ci_zero)
+  branch ci_ok check_state(ci_reply,ci_state) bad_request(ci_reply)
+block bad_request(br_reply:mutbuf)
+  br_code:u32 = const() {"value":2}
+  br_zero:u64 = const() {"value":0}
+  br_out:u32 = call(br_reply,br_code,br_zero) {"function":"write_reply"}
+  ret(br_out)
+block check_state(cs_reply:mutbuf,cs_state:mutbuf)
+  cs_len:usize = buffer.len(cs_state)
+  cs_need:usize = const() {"value":130}
+  cs_ok:bool = compare.eq(cs_len,cs_need)
+  branch cs_ok inspect(cs_reply,cs_state) bad_state(cs_reply)
+block bad_state(bs_reply:mutbuf)
+  bs_code:u32 = const() {"value":4}
+  bs_zero:u64 = const() {"value":0}
+  bs_out:u32 = call(bs_reply,bs_code,bs_zero) {"function":"write_reply"}
+  ret(bs_out)
+block inspect(in_reply:mutbuf,in_state:mutbuf)
+  in_off0:u64 = const() {"value":0}
+  in_off1:u64 = const() {"value":65}
+  in_ix0:u64 = call(in_state,in_off0) {"function":"check_zone"}
+  in_ix1:u64 = call(in_state,in_off1) {"function":"check_zone"}
+  in_bad:u64 = const() {"value":9}
+  in_bad0:bool = compare.eq(in_ix0,in_bad)
+  in_bad1:bool = compare.eq(in_ix1,in_bad)
+  in_invalid:bool = bool.or(in_bad0,in_bad1)
+  branch in_invalid bad_state(in_reply) geometry(in_reply,in_state,in_ix0,in_ix1)
+block geometry(ge_reply:mutbuf,ge_state:mutbuf,ge_ix0:u64,ge_ix1:u64)
+  ge_base0_off:u64 = const() {"value":16}
+  ge_base1_off:u64 = const() {"value":81}
+  ge_base0:u64 = call(ge_state,ge_base0_off) {"function":"read_word"}
+  ge_base1:u64 = call(ge_state,ge_base1_off) {"function":"read_word"}
+  ge_extent:u64 = const() {"value":32768}
+  ge_end0:u64 = int.add.wrap(ge_base0,ge_extent)
+  ge_end1:u64 = int.add.wrap(ge_base1,ge_extent)
+  ge_left:bool = compare.lt(ge_base0,ge_end1)
+  ge_right:bool = compare.lt(ge_base1,ge_end0)
+  ge_overlap:bool = bool.and(ge_left,ge_right)
+  branch ge_overlap bad_state(ge_reply) choose(ge_reply,ge_state,ge_ix0,ge_ix1)
+block choose(ch_reply:mutbuf,ch_state:mutbuf,ch_ix0:u64,ch_ix1:u64)
+  ch_eight:u64 = const() {"value":8}
+  ch_first:bool = compare.lt(ch_ix0,ch_eight)
+  branch ch_first claim_first(ch_reply,ch_state,ch_ix0) select_second(ch_reply,ch_state,ch_ix1)
+block select_second(ss_reply:mutbuf,ss_state:mutbuf,ss_ix:u64)
+  ss_eight:u64 = const() {"value":8}
+  ss_found:bool = compare.lt(ss_ix,ss_eight)
+  branch ss_found claim_second(ss_reply,ss_state,ss_ix) no_memory(ss_reply)
+block no_memory(nm_reply:mutbuf)
+  nm_code:u32 = const() {"value":5}
+  nm_zero:u64 = const() {"value":0}
+  nm_out:u32 = call(nm_reply,nm_code,nm_zero) {"function":"write_reply"}
+  ret(nm_out)
+block claim_first(cf_reply:mutbuf,cf_state:mutbuf,cf_index:u64)
+  cf_off:u64 = const() {"value":0}
+  cf_address:u64 = call(cf_reply,cf_state,cf_off,cf_index) {"function":"commit_zone"}
+  cf_ok:u32 = const() {"value":0}
+  cf_result:u32 = call(cf_reply,cf_ok,cf_address) {"function":"write_reply"}
+  ret(cf_result)
+block claim_second(ct_reply:mutbuf,ct_state:mutbuf,ct_index:u64)
+  ct_off:u64 = const() {"value":65}
+  ct_address:u64 = call(ct_reply,ct_state,ct_off,ct_index) {"function":"commit_zone"}
+  ct_ok:u32 = const() {"value":0}
+  ct_result:u32 = call(ct_reply,ct_ok,ct_address) {"function":"write_reply"}
+  ret(ct_result)
+end
+fn check_zone(state:mutbuf,offset:u64) -> (u64) effects(read,trap) entry(start)
+block start(state:mutbuf,offset:u64)
+  z_off_magic:u64 = const() {"value":0}
+  z_off_count:u64 = const() {"value":8}
+  z_off_base:u64 = const() {"value":16}
+  z_off_reserved:u64 = const() {"value":24}
+  z_off_free:u64 = const() {"value":32}
+  z_magic_o:u64 = int.add.wrap(offset,z_off_magic)
+  z_count_o:u64 = int.add.wrap(offset,z_off_count)
+  z_base_o:u64 = int.add.wrap(offset,z_off_base)
+  z_res_o:u64 = int.add.wrap(offset,z_off_reserved)
+  z_free_o:u64 = int.add.wrap(offset,z_off_free)
+  z_magic:u64 = call(state,z_magic_o) {"function":"read_word"}
+  z_count:u64 = call(state,z_count_o) {"function":"read_word"}
+  z_base:u64 = call(state,z_base_o) {"function":"read_word"}
+  z_reserved:u64 = call(state,z_res_o) {"function":"read_word"}
+  z_free:u64 = call(state,z_free_o) {"function":"read_word"}
+  z_expected:u64 = const() {"value":3552580688320940353}
+  z_eight:u64 = const() {"value":8}
+  z_limit:u64 = const() {"value":4503599627370496}
+  z_mask:u64 = const() {"value":4095}
+  z_extent:u64 = const() {"value":32768}
+  z_magic_ok:bool = compare.eq(z_magic,z_expected)
+  z_count_ok:bool = compare.eq(z_count,z_eight)
+  z_reserved_ok:bool = compare.le(z_reserved,z_eight)
+  z_free_ok:bool = compare.le(z_free,z_eight)
+  z_low:u64 = bit.and(z_base,z_mask)
+  z_zero:u64 = const() {"value":0}
+  z_aligned:bool = compare.eq(z_low,z_zero)
+  z_start_ok:bool = compare.lt(z_base,z_limit)
+  z_room:u64 = int.sub.wrap(z_limit,z_base)
+  z_room_ok:bool = compare.ge(z_room,z_extent)
+  z_a:bool = bool.and(z_magic_ok,z_count_ok)
+  z_b:bool = bool.and(z_reserved_ok,z_free_ok)
+  z_c:bool = bool.and(z_aligned,z_start_ok)
+  z_d:bool = bool.and(z_c,z_room_ok)
+  z_e:bool = bool.and(z_a,z_b)
+  z_good:bool = bool.and(z_e,z_d)
+  branch z_good prefix(state,offset,z_reserved,z_free) invalid()
+block prefix(pr_state:mutbuf,pr_off:u64,pr_reserved:u64,pr_free:u64)
+  pr_bit_off:u64 = const() {"value":64}
+  pr_bit_abs:u64 = int.add.wrap(pr_off,pr_bit_off)
+  pr_bit_at:usize = int.cast(pr_bit_abs) {"mode":"wrap"}
+  pr_oct:u8 = buffer.load(pr_state,pr_bit_at)
+  pr_word:u64 = int.cast(pr_oct) {"mode":"wrap"}
+  pr_one:u64 = const() {"value":1}
+  pr_top:u64 = int.shl.checked(pr_one,pr_reserved)
+  pr_mask:u64 = int.sub.wrap(pr_top,pr_one)
+  pr_protected:u64 = bit.and(pr_word,pr_mask)
+  pr_ok:bool = compare.eq(pr_protected,pr_mask)
+  branch pr_ok pad_start(pr_state,pr_off,pr_free,pr_word) invalid()
+block pad_start(ps_state:mutbuf,ps_off:u64,ps_free:u64,ps_bitmap:u64)
+  ps_40:u64 = const() {"value":40}
+  jump pad_scan(ps_state,ps_off,ps_free,ps_bitmap,ps_40)
+block pad_scan(pa_state:mutbuf,pa_off:u64,pa_free:u64,pa_bitmap:u64,pa_i:u64)
+  pa_64:u64 = const() {"value":64}
+  pa_more:bool = compare.lt(pa_i,pa_64)
+  branch pa_more pad_byte(pa_state,pa_off,pa_free,pa_bitmap,pa_i) bit_start(pa_free,pa_bitmap)
+block pad_byte(pb_state:mutbuf,pb_off:u64,pb_free:u64,pb_bitmap:u64,pb_i:u64)
+  pb_abs:u64 = int.add.wrap(pb_off,pb_i)
+  pb_at:usize = int.cast(pb_abs) {"mode":"wrap"}
+  pb_oct:u8 = buffer.load(pb_state,pb_at)
+  pb_zero:u8 = const() {"value":0}
+  pb_clean:bool = compare.eq(pb_oct,pb_zero)
+  branch pb_clean pad_next(pb_state,pb_off,pb_free,pb_bitmap,pb_i) invalid()
+block pad_next(pn_state:mutbuf,pn_off:u64,pn_free:u64,pn_bitmap:u64,pn_i:u64)
+  pn_one:u64 = const() {"value":1}
+  pn_next:u64 = int.add.wrap(pn_i,pn_one)
+  jump pad_scan(pn_state,pn_off,pn_free,pn_bitmap,pn_next)
+block bit_start(bt_free:u64,bt_bitmap:u64)
+  bt_zero:u64 = const() {"value":0}
+  bt_eight:u64 = const() {"value":8}
+  jump bit_scan(bt_free,bt_bitmap,bt_zero,bt_zero,bt_eight)
+block bit_scan(sc_free:u64,sc_bitmap:u64,sc_i:u64,sc_seen:u64,sc_first:u64)
+  sc_eight:u64 = const() {"value":8}
+  sc_more:bool = compare.lt(sc_i,sc_eight)
+  branch sc_more bit_test(sc_free,sc_bitmap,sc_i,sc_seen,sc_first) done(sc_free,sc_seen,sc_first)
+block bit_test(te_free:u64,te_bitmap:u64,te_i:u64,te_seen:u64,te_first:u64)
+  te_one:u64 = const() {"value":1}
+  te_bit:u64 = int.shl.checked(te_one,te_i)
+  te_selected:u64 = bit.and(te_bitmap,te_bit)
+  te_zero:u64 = const() {"value":0}
+  te_empty:bool = compare.eq(te_selected,te_zero)
+  te_eight:u64 = const() {"value":8}
+  te_unset:bool = compare.eq(te_first,te_eight)
+  te_pick:bool = bool.and(te_empty,te_unset)
+  te_next_first:u64 = select(te_pick,te_i,te_first)
+  te_increment:u64 = select(te_empty,te_one,te_zero)
+  te_next_seen:u64 = int.add.wrap(te_seen,te_increment)
+  te_next_i:u64 = int.add.wrap(te_i,te_one)
+  jump bit_scan(te_free,te_bitmap,te_next_i,te_next_seen,te_next_first)
+block done(do_free:u64,do_seen:u64,do_first:u64)
+  do_agree:bool = compare.eq(do_free,do_seen)
+  branch do_agree accepted(do_first) invalid()
+block accepted(ac_first:u64)
+  ret(ac_first)
+block invalid()
+  iv_code:u64 = const() {"value":9}
+  ret(iv_code)
+end
+fn commit_zone(reply:mutbuf,state:mutbuf,offset:u64,index:u64) -> (u64) effects(read,write,trap) entry(start)
+block start(reply:mutbuf,state:mutbuf,offset:u64,index:u64)
+  cm_64:u64 = const() {"value":64}
+  cm_32:u64 = const() {"value":32}
+  cm_16:u64 = const() {"value":16}
+  cm_bit_off:u64 = int.add.wrap(offset,cm_64)
+  cm_bit_at:usize = int.cast(cm_bit_off) {"mode":"wrap"}
+  cm_current:u8 = buffer.load(state,cm_bit_at)
+  cm_one:u64 = const() {"value":1}
+  cm_bit:u64 = int.shl.checked(cm_one,index)
+  cm_byte:u64 = int.cast(cm_current) {"mode":"wrap"}
+  cm_changed:u64 = bit.or(cm_byte,cm_bit)
+  cm_new:u8 = int.cast(cm_changed) {"mode":"wrap"}
+  cm_free_off:u64 = int.add.wrap(offset,cm_32)
+  cm_free:u64 = call(state,cm_free_off) {"function":"read_word"}
+  cm_remaining:u64 = int.sub.wrap(cm_free,cm_one)
+  cm_base_off:u64 = int.add.wrap(offset,cm_16)
+  cm_base:u64 = call(state,cm_base_off) {"function":"read_word"}
+  cm_page_bytes:u64 = const() {"value":4096}
+  cm_delta:u64 = int.mul.wrap(index,cm_page_bytes)
+  cm_address:u64 = int.add.wrap(cm_base,cm_delta)
+  _ = buffer.store(state,cm_bit_at,cm_new)
+  cm_count_write:u32 = call(state,cm_free_off,cm_remaining) {"function":"write_word"}
+  ret(cm_address)
+end
+fn read_word(bytes:mutbuf,offset:u64) -> (u64) effects(read,trap) entry(start)
+block start(bytes:mutbuf,offset:u64)
+  rw_zero:u64 = const() {"value":0}
+  jump loop(bytes,offset,rw_zero,rw_zero)
+block loop(rl_bytes:mutbuf,rl_off:u64,rl_i:u64,rl_value:u64)
+  rl_eight:u64 = const() {"value":8}
+  rl_more:bool = compare.lt(rl_i,rl_eight)
+  branch rl_more one_byte(rl_bytes,rl_off,rl_i,rl_value) finish(rl_value)
+block one_byte(rb_bytes:mutbuf,rb_off:u64,rb_i:u64,rb_value:u64)
+  rb_abs:u64 = int.add.wrap(rb_off,rb_i)
+  rb_at:usize = int.cast(rb_abs) {"mode":"wrap"}
+  rb_byte:u8 = buffer.load(rb_bytes,rb_at)
+  rb_word:u64 = int.cast(rb_byte) {"mode":"wrap"}
+  rb_eight:u64 = const() {"value":8}
+  rb_shift:u64 = int.mul.wrap(rb_i,rb_eight)
+  rb_part:u64 = int.shl.checked(rb_word,rb_shift)
+  rb_new:u64 = bit.or(rb_value,rb_part)
+  rb_one:u64 = const() {"value":1}
+  rb_next:u64 = int.add.wrap(rb_i,rb_one)
+  jump loop(rb_bytes,rb_off,rb_next,rb_new)
+block finish(rf_value:u64)
+  ret(rf_value)
+end
+fn write_word(bytes:mutbuf,offset:u64,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(bytes:mutbuf,offset:u64,value:u64)
+  ww_zero:u64 = const() {"value":0}
+  jump loop(bytes,offset,value,ww_zero)
+block loop(wl_bytes:mutbuf,wl_off:u64,wl_value:u64,wl_i:u64)
+  wl_eight:u64 = const() {"value":8}
+  wl_more:bool = compare.lt(wl_i,wl_eight)
+  branch wl_more one_byte(wl_bytes,wl_off,wl_value,wl_i) finish()
+block one_byte(wb_bytes:mutbuf,wb_off:u64,wb_value:u64,wb_i:u64)
+  wb_abs:u64 = int.add.wrap(wb_off,wb_i)
+  wb_at:usize = int.cast(wb_abs) {"mode":"wrap"}
+  wb_eight:u64 = const() {"value":8}
+  wb_shift:u64 = int.mul.wrap(wb_i,wb_eight)
+  wb_chunk:u64 = int.shr.checked(wb_value,wb_shift)
+  wb_oct:u8 = int.cast(wb_chunk) {"mode":"wrap"}
+  _ = buffer.store(wb_bytes,wb_at,wb_oct)
+  wb_one:u64 = const() {"value":1}
+  wb_next:u64 = int.add.wrap(wb_i,wb_one)
+  jump loop(wb_bytes,wb_off,wb_value,wb_next)
+block finish()
+  wf_ok:u32 = const() {"value":0}
+  ret(wf_ok)
+end
+fn write_reply(reply:mutbuf,status:u32,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(reply:mutbuf,status:u32,value:u64)
+  wr_zero:u64 = const() {"value":0}
+  wr_eight:u64 = const() {"value":8}
+  wr_status:u64 = int.cast(status) {"mode":"wrap"}
+  wr_a:u32 = call(reply,wr_zero,wr_status) {"function":"write_word"}
+  wr_b:u32 = call(reply,wr_eight,value) {"function":"write_word"}
+  ret(status)
+end
