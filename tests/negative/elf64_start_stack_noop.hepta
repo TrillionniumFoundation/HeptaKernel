@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn f0(request:readbuf,page:mutbuf,receipt:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,page:mutbuf,receipt:mutbuf)
+  ok:u32 = const() {"value":0}
+  ret(ok)
+end

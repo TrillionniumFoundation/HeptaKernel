@@ -1,0 +1,165 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn f0(request:readbuf,page:mutbuf,receipt:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,page:mutbuf,receipt:mutbuf)
+  a:usize = buffer.len(request)
+  b:usize = const() {"value":40}
+  ok:bool = compare.eq(a,b)
+  branch ok sizecheck(request,page,receipt) bad_request()
+block bad_request()
+  error_request:u32 = const() {"value":1}
+  ret(error_request)
+block sizecheck(r:readbuf,p:mutbuf,m:mutbuf)
+  p_size:usize = buffer.len(p)
+  exact_page:usize = const() {"value":4096}
+  page_ok:bool = compare.eq(p_size,exact_page)
+  m_size:usize = buffer.len(m)
+  exact_receipt:usize = const() {"value":16}
+  receipt_ok:bool = compare.eq(m_size,exact_receipt)
+  sizes_ok:bool = bool.and(page_ok,receipt_ok)
+  branch sizes_ok decode(r,p,m) bad_size()
+block bad_size()
+  error_size:u32 = const() {"value":2}
+  ret(error_size)
+block decode(r2:readbuf,p2:mutbuf,m2:mutbuf)
+  off0:usize = const() {"value":0}
+  value0:u64 = call(r2,off0) {"function":"read_word"}
+  off1:usize = const() {"value":8}
+  value1:u64 = call(r2,off1) {"function":"read_word"}
+  off2:usize = const() {"value":16}
+  value2:u64 = call(r2,off2) {"function":"read_word"}
+  off3:usize = const() {"value":24}
+  value3:u64 = call(r2,off3) {"function":"read_word"}
+  off4:usize = const() {"value":32}
+  value4:u64 = call(r2,off4) {"function":"read_word"}
+  jump admission(p2,m2,value0,value1,value2,value3,value4)
+block admission(p3:mutbuf,m3:mutbuf,base:u64,entry:u64,phdr:u64,phent:u64,phnum:u64)
+  k_zero:u64 = const() {"value":0}
+  k_one:u64 = const() {"value":1}
+  k_max_num:u64 = const() {"value":128}
+  k_minimum:u64 = const() {"value":4096}
+  k_max_base:u64 = const() {"value":140737488351232}
+  k_max_address:u64 = const() {"value":140737488355327}
+  k_max_phdr:u64 = const() {"value":140737488347136}
+  k_mask:u64 = const() {"value":4095}
+  k_phentsize:u64 = const() {"value":56}
+  base_present:bool = compare.gt(base,k_zero)
+  base_bounded:bool = compare.le(base,k_max_base)
+  misaligned:u64 = bit.and(base,k_mask)
+  aligned:bool = compare.eq(misaligned,k_zero)
+  entry_min:bool = compare.ge(entry,k_minimum)
+  entry_max:bool = compare.le(entry,k_max_address)
+  phdr_min:bool = compare.ge(phdr,k_minimum)
+  phdr_max:bool = compare.le(phdr,k_max_phdr)
+  ent_ok:bool = compare.eq(phent,k_phentsize)
+  count_min:bool = compare.ge(phnum,k_one)
+  count_max:bool = compare.le(phnum,k_max_num)
+  g1:bool = bool.and(base_present,base_bounded)
+  g2:bool = bool.and(g1,aligned)
+  g3:bool = bool.and(g2,entry_min)
+  g4:bool = bool.and(g3,entry_max)
+  g5:bool = bool.and(g4,phdr_min)
+  g6:bool = bool.and(g5,phdr_max)
+  g7:bool = bool.and(g6,ent_ok)
+  g8:bool = bool.and(g7,count_min)
+  g9:bool = bool.and(g8,count_max)
+  branch g9 store_stack(p3,m3,base,entry,phdr,phnum) bad_values()
+block bad_values()
+  error_values:u32 = const() {"value":3}
+  ret(error_values)
+block store_stack(p4:mutbuf,m4:mutbuf,base4:u64,entry4:u64,phdr4:u64,phnum4:u64)
+  w_zero:u64 = const() {"value":0}
+  w_three:u64 = const() {"value":3}
+  w_four:u64 = const() {"value":4}
+  w_five:u64 = const() {"value":5}
+  w_six:u64 = const() {"value":6}
+  w_nine:u64 = const() {"value":9}
+  w_fiftysix:u64 = const() {"value":56}
+  w_pagesize:u64 = const() {"value":4096}
+  w_tail:u64 = const() {"value":3968}
+  w_written:u64 = const() {"value":128}
+  slot0:usize = const() {"value":3968}
+  stored0:u32 = call(p4,slot0,w_zero) {"function":"write_word"}
+  slot1:usize = const() {"value":3976}
+  stored1:u32 = call(p4,slot1,w_zero) {"function":"write_word"}
+  slot2:usize = const() {"value":3984}
+  stored2:u32 = call(p4,slot2,w_zero) {"function":"write_word"}
+  slot3:usize = const() {"value":3992}
+  stored3:u32 = call(p4,slot3,w_three) {"function":"write_word"}
+  slot4:usize = const() {"value":4000}
+  stored4:u32 = call(p4,slot4,phdr4) {"function":"write_word"}
+  slot5:usize = const() {"value":4008}
+  stored5:u32 = call(p4,slot5,w_four) {"function":"write_word"}
+  slot6:usize = const() {"value":4016}
+  stored6:u32 = call(p4,slot6,w_fiftysix) {"function":"write_word"}
+  slot7:usize = const() {"value":4024}
+  stored7:u32 = call(p4,slot7,w_five) {"function":"write_word"}
+  slot8:usize = const() {"value":4032}
+  stored8:u32 = call(p4,slot8,phnum4) {"function":"write_word"}
+  slot9:usize = const() {"value":4040}
+  stored9:u32 = call(p4,slot9,w_six) {"function":"write_word"}
+  slot10:usize = const() {"value":4048}
+  stored10:u32 = call(p4,slot10,w_pagesize) {"function":"write_word"}
+  slot11:usize = const() {"value":4056}
+  stored11:u32 = call(p4,slot11,w_nine) {"function":"write_word"}
+  slot12:usize = const() {"value":4064}
+  stored12:u32 = call(p4,slot12,entry4) {"function":"write_word"}
+  slot13:usize = const() {"value":4072}
+  stored13:u32 = call(p4,slot13,w_zero) {"function":"write_word"}
+  slot14:usize = const() {"value":4080}
+  stored14:u32 = call(p4,slot14,w_zero) {"function":"write_word"}
+  slot15:usize = const() {"value":4088}
+  stored15:u32 = call(p4,slot15,w_zero) {"function":"write_word"}
+  user_sp:u64 = int.add.wrap(base4,w_tail)
+  receiptoff0:usize = const() {"value":0}
+  receiptoff8:usize = const() {"value":8}
+  receipta:u32 = call(m4,receiptoff0,user_sp) {"function":"write_word"}
+  receiptb:u32 = call(m4,receiptoff8,w_written) {"function":"write_word"}
+  success:u32 = const() {"value":0}
+  ret(success)
+end
+fn read_word(bytes:readbuf,at:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,at:usize)
+  zero:u64 = const() {"value":0}
+  jump loop(bytes,at,zero,zero)
+block loop(b:readbuf,at:usize,i:u64,acc:u64)
+  eight:u64 = const() {"value":8}
+  more:bool = compare.lt(i,eight)
+  branch more octet(b,at,i,acc) done(acc)
+block octet(b1:readbuf,at1:usize,i1:u64,acc1:u64)
+  index:usize = int.cast(i1) {"mode":"wrap"}
+  pos:usize = int.add.wrap(at1,index)
+  byte:u8 = buffer.load(b1,pos)
+  wide:u64 = int.cast(byte) {"mode":"wrap"}
+  by:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(i1,by)
+  piece:u64 = int.shl.checked(wide,shift)
+  all:u64 = bit.or(acc1,piece)
+  one:u64 = const() {"value":1}
+  next:u64 = int.add.wrap(i1,one)
+  jump loop(b1,at1,next,all)
+block done(value:u64)
+  ret(value)
+end
+fn write_word(bytes:mutbuf,at:usize,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(bytes:mutbuf,at:usize,value:u64)
+  zero:u64 = const() {"value":0}
+  jump loop(bytes,at,value,zero)
+block loop(b:mutbuf,at:usize,value:u64,i:u64)
+  eight:u64 = const() {"value":8}
+  more:bool = compare.lt(i,eight)
+  branch more octet(b,at,value,i) done()
+block octet(b1:mutbuf,at1:usize,value1:u64,i1:u64)
+  index:usize = int.cast(i1) {"mode":"wrap"}
+  pos:usize = int.add.wrap(at1,index)
+  eight:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(i1,eight)
+  shifted:u64 = int.shr.checked(value1,shift)
+  oct:u8 = int.cast(shifted) {"mode":"wrap"}
+  _ = buffer.store(b1,pos,oct)
+  one:u64 = const() {"value":1}
+  next:u64 = int.add.wrap(i1,one)
+  jump loop(b1,at1,value1,next)
+block done()
+  s:u32 = const() {"value":0}
+  ret(s)
+end

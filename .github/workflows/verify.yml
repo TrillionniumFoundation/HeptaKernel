@@ -408,6 +408,11 @@ jobs:
             echo 'Full Linux rewrite remains HOLD. This job validates the foundation only.'
           fi
 
+      - name: Verify genuine HIA ELF64 initial user stack and dishonest native control
+        shell: bash
+        run: |
+          make test-elf64-start-stack HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Retain bootstrap and execution evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -424,6 +429,11 @@ jobs:
             .toolchain/compiler/B3.receipt.json
             .toolchain/compiler/native-compiler.receipt.json
             build/native-report.json
+            build/elf64-start-stack-report.json
+            build/elf64-start-stack.o
+            build/elf64-start-stack.so
+            build/elf64-start-stack-liar.o
+            build/elf64-start-stack-liar.so
             build/elf-plan-hardware-report.json
             build/elf-plan-native-inputs.sha256
             build/elf64-stage-report.json
