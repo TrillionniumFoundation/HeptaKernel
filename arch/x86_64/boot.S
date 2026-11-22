@@ -5676,6 +5676,14 @@ elf_stack_hw_exercise64:
 #ifdef HEPTAKERNEL_TEST_ELF_STACK_BAD_PHENT
     movq $64, elf_stack_request+24(%rip)
 #endif
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_ENTRY_COLLISION
+    /* The entry RIP must not alias the writable initial stack page. */
+    movq $0x601000, elf_stack_request+8(%rip)
+#endif
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_PHDR_COLLISION
+    /* AT_PHDR begins before the stack, but 3*56 bytes overlap it. */
+    movq $0x600ff0, elf_stack_request+16(%rip)
+#endif
     leaq elf_stack_request(%rip), %rdi
     movl $40, %esi
     movq $0x601000, %rdx
@@ -5683,8 +5691,8 @@ elf_stack_hw_exercise64:
     leaq elf_stack_receipt(%rip), %r8
     movl $16, %r9d
     call elf_stack_f0              /* actual original selfhost_elf HIA .text */
-#ifdef HEPTAKERNEL_TEST_ELF_STACK_BAD_PHENT
-    cmpl $3, %eax                  /* metadata rejected before any store */
+#if defined(HEPTAKERNEL_TEST_ELF_STACK_BAD_PHENT) || defined(HEPTAKERNEL_TEST_ELF_STACK_ENTRY_COLLISION) || defined(HEPTAKERNEL_TEST_ELF_STACK_PHDR_COLLISION)
+    cmpl $3, %eax                  /* geometry rejected before any store */
     jne fail64
     movq $0x601000, %rdi
     movabsq $0x5a5a5a5a5a5a5a5a, %rax
@@ -5702,7 +5710,13 @@ elf_stack_hw_exercise64:
     movabsq $0x9dc743a160b2e58f, %rax
     cmpq %rax, (%rdi)
     jne fail64
+#if defined(HEPTAKERNEL_TEST_ELF_STACK_ENTRY_COLLISION)
+    leaq message_elf_stack_entry_collision(%rip), %rsi
+#elif defined(HEPTAKERNEL_TEST_ELF_STACK_PHDR_COLLISION)
+    leaq message_elf_stack_phdr_collision(%rip), %rsi
+#else
     leaq message_elf_stack_bad_phent(%rip), %rsi
+#endif
     call puts64
     jmp fail64
 #else
@@ -6661,6 +6675,10 @@ message_elf_stack_pass:
     .asciz "HEPTAKERNEL HIA ELF64 INITIAL STACK PHYSICAL SUFFIX VERIFIED\r\n"
 message_elf_stack_bad_phent:
     .asciz "HEPTAKERNEL HIA ELF64 STACK BAD PHENT REFUSED UNCHANGED\r\n"
+message_elf_stack_entry_collision:
+    .asciz "HEPTAKERNEL HIA ELF64 STACK ENTRY COLLISION REFUSED UNCHANGED\r\n"
+message_elf_stack_phdr_collision:
+    .asciz "HEPTAKERNEL HIA ELF64 STACK PHDR COLLISION REFUSED UNCHANGED\r\n"
 message_elf_stack_liar:
     .asciz "HEPTAKERNEL HIA ELF64 STACK DISHONEST NOOP DETECTED\r\n"
 message_elf_stack_decoy:

@@ -21,7 +21,9 @@ def oracle(req, page, receipt):
     base, entry, phdr, phent, phnum = struct.unpack("<5Q", req)
     if not (0 < base <= TOP-4096 and base % 4096 == 0
             and 4096 <= entry < TOP and 4096 <= phdr <= TOP-8192
-            and phent == 56 and 1 <= phnum <= 128):
+            and phent == 56 and 1 <= phnum <= 128
+            and not (base <= entry < base+4096)
+            and (phdr+phnum*56 <= base or phdr >= base+4096)):
         return 3, page, receipt
     words = (0, 0, 0, 3, phdr, 4, 56, 5, phnum, 6, 4096, 9, entry, 0, 0, 0)
     updated = bytearray(page)
@@ -71,6 +73,25 @@ def run(library, obj, dishonest):
                 rng.randrange(4096,TOP-8192+1),
                 56, rng.randrange(1,129))
         cases.append((struct.pack("<5Q",*case),4096,16))
+    # Interval edge cases: both entrypoint and entire AT_PHDR span must
+    # remain separate from the writable user stack page. Touching is allowed.
+    stack = good[0]
+    geometry = (
+        (stack, good[2], False),
+        (stack+4095, good[2], False),
+        (stack-1, good[2], True),
+        (stack+4096, good[2], True),
+        (good[1], stack-3*56+1, False),
+        (good[1], stack-3*56, True),
+        (good[1], stack, False),
+        (good[1], stack+4095, False),
+        (good[1], stack+4096, True),
+        (good[1], stack+8192, True),
+    )
+    for entry, phdr, expected_valid in geometry:
+        req = struct.pack("<5Q", stack, entry, phdr, 56, 3)
+        assert (oracle(req, bytes(4096), bytes(16))[0] == 0) == expected_valid
+        cases.append((req,4096,16))
     for i in range(4500):
         case = list(good)
         kind = i % 9

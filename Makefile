@@ -2566,6 +2566,10 @@ build/boot-elf-stack-hw.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 build/boot-elf-stack-bad-phent.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -DHEPTAKERNEL_TEST_ELF_STACK_BAD_PHENT=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-elf-stack-entry-collision.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -DHEPTAKERNEL_TEST_ELF_STACK_ENTRY_COLLISION=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-elf-stack-phdr-collision.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -DHEPTAKERNEL_TEST_ELF_STACK_PHDR_COLLISION=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 build/boot-elf-stack-liar.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -DHEPTAKERNEL_TEST_ELF_STACK_LIAR=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 build/boot-elf-stack-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
@@ -2574,6 +2578,10 @@ build/elf-stack-hw.elf: build/boot-elf-stack-hw.o $(ELF_STACK_HW_SUPPORT) arch/x
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(ELF_STACK_HW_SUPPORT)
 build/elf-stack-bad-phent.elf: build/boot-elf-stack-bad-phent.o $(ELF_STACK_HW_SUPPORT) arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(ELF_STACK_HW_SUPPORT)
+build/elf-stack-entry-collision.elf: build/boot-elf-stack-entry-collision.o $(ELF_STACK_HW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(ELF_STACK_HW_SUPPORT)
+build/elf-stack-phdr-collision.elf: build/boot-elf-stack-phdr-collision.o $(ELF_STACK_HW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(ELF_STACK_HW_SUPPORT)
 build/elf-stack-liar.elf: build/boot-elf-stack-liar.o $(PAGE_ZERO_HW_SUPPORT) build/elf64-start-stack-liar-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(PAGE_ZERO_HW_SUPPORT) build/elf64-start-stack-liar-boot.o
 build/elf-stack-decoy.elf: build/boot-elf-stack-decoy.o $(ELF_STACK_HW_SUPPORT) arch/x86_64/linker.ld
@@ -2581,7 +2589,7 @@ build/elf-stack-decoy.elf: build/boot-elf-stack-decoy.o $(ELF_STACK_HW_SUPPORT) 
 build/elf-stack-%-multiboot.elf: build/elf-stack-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 .PHONY: test-elf64-stack-hw
-test-elf64-stack-hw: test-elf64-start-stack build/elf-stack-hw-multiboot.elf build/elf-stack-bad-phent-multiboot.elf build/elf-stack-liar-multiboot.elf build/elf-stack-decoy-multiboot.elf
+test-elf64-stack-hw: test-elf64-start-stack build/elf-stack-hw-multiboot.elf build/elf-stack-bad-phent-multiboot.elf build/elf-stack-entry-collision-multiboot.elf build/elf-stack-phdr-collision-multiboot.elf build/elf-stack-liar-multiboot.elf build/elf-stack-decoy-multiboot.elf
 	$(PYTHON) tests/test_elf64_start_stack_qemu.py --qemu "$(QEMU)"
 test-boot: test-elf64-stack-hw
 test: test-elf64-stack-hw

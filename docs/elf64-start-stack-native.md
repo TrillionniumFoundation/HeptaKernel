@@ -11,7 +11,10 @@ The 16-byte receipt is (initial user RSP,128), emitted last.
 
 Status 1 rejects malformed request size, 2 rejects destination and receipt
 sizes, 3 rejects low-canonical/address alignment, PHDR bound or ELF-header
-geometry. All refusal paths leave both outputs byte-identical. User stack
+geometry. It also rejects a user entry RIP inside the 4 KiB writable stack
+page and any overlap between that stack page and the entire
+[AT_PHDR, AT_PHDR + AT_PHNUM * 56) virtual interval. Exact boundary
+touches remain valid; size/range checks occur before any output mutation. All refusal paths leave both outputs byte-identical. User stack
 bytes outside [3968,4096) remain untouched on success. Exact object/source
 binding, two independent empty-PATH native builds, an independent Python
 byte oracle, guard canaries, and a separately compiled dishonest HIA
@@ -23,3 +26,9 @@ PT_INTERP, dynamic loader, real user address spaces, credentials, TLS,
 ASLR, CPU execution or full auxiliary vector. `boot.S` remains non-HIA,
 all 17 acceptance gates are HOLD, and the fixed 422 syscall source rows
 are unchanged.
+
+The interval checks are narrowly scoped collision admission for supplied
+addresses; they do not establish that entry or AT_PHDR are actually backed
+by admitted, mapped ELF pages. The native and PC/Q35 independent tests
+include entry and PHDR collision rejection, complete 4096-byte refusal
+non-mutation, receipt preservation and adjacent physical canaries.

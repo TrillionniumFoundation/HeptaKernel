@@ -29,3 +29,10 @@ Linux `execve`, argv/envp, dynamic linking, credentials, stack guard pages,
 ASLR, AT_RANDOM, SMP, UEFI or privileged HIA effects. The non-HIA
 `boot.S` remains the only hardware bootstrap/observer and all 17 gates,
 422 x86-64 syscall source rows and `inventory_complete=false` remain HOLD.
+
+Additional independent QEMU negative images provide entry=stack_base and
+AT_PHDR=stack_base-16 with PHNUM=3 (a partially overlapping 168-byte span).
+Both must return status 3 before writing, preserve every physical stack
+word, both receipt words and the adjacent allocated-page canary. The
+original valid stack, malformed PHENT, dishonest native no-op and postwrite
+decoy cases remain mandatory on both PC and Q35.
