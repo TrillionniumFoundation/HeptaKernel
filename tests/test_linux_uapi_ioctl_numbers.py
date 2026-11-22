@@ -27,9 +27,10 @@ def fixture(root: Path):
         b"#define ARITY _IO('T')\n"
         b"#define NOEND _IO('T', 1\n"
         b"#define OCT _IO('T', 010)\n"
+        b"#define STRING \"_IO('T', 12)\"\n"
     )
     rows = scan_defines(body)
-    assert len(rows) == 11, len(rows)
+    assert len(rows) == 12, len(rows)
     records = [{
         "path_b64": base64.b64encode(b"include/uapi/linux/synthetic.h").decode(),
         "blob_oid": "a" * 40,
@@ -77,15 +78,17 @@ def main():
     assert project("_IO", [b"0x100", b"1"])[0] == "FIELD_RANGE_UNRESOLVED"
     assert project("_IOC", [b"4", b"1", b"2", b"0"])[0] == "FIELD_RANGE_UNRESOLVED"
     assert project("_IOC", [b"0", b"1", b"2", b"16384"])[0] == "FIELD_RANGE_UNRESOLVED"
-    assert mask_comments(b"'/*' /* _IO(1,1) */ _IO(2,2)") == (
-        b"'/*'                _IO(2,2)")
+    masked = mask_comments(b"'/*' /* _IO(1,1) */ _IO(2,2)")
+    assert masked.startswith(b"    ")
+    assert b"_IO(1,1)" not in masked
+    assert b"_IO(2,2)" in masked
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
         records, original = fixture(root)
         data, report = build(root)
         cases = [json.loads(line) for line in data.splitlines()]
-        assert len(cases) == report["invocations"] == 12
-        assert report["source_rows"] == 11
+        assert len(cases) == report["invocations"] == 13
+        assert report["source_rows"] == 12
         assert report["linux_commit"] == "1" * 40
         assert report["linux_root_tree"] == "2" * 40
         assert report["parent_source_sha256"] == hashlib.sha256(original).hexdigest()
@@ -96,7 +99,7 @@ def main():
             "SIZEOF_TYPE_UNRESOLVED",
             "X86_64_GENERIC_NUMERIC_CANDIDATE",
             "EXPRESSION_UNRESOLVED",
-            "COMMENT_LEXICAL_ONLY",
+            "NONCODE_LEXICAL_ONLY",
             "X86_64_GENERIC_NUMERIC_CANDIDATE",
             "X86_64_GENERIC_NUMERIC_CANDIDATE",
             "FIELD_RANGE_UNRESOLVED",
@@ -104,6 +107,7 @@ def main():
             "ARITY_UNRESOLVED",
             "UNBALANCED_INVOCATION",
             "X86_64_GENERIC_NUMERIC_CANDIDATE",
+            "NONCODE_LEXICAL_ONLY",
         ]
         assert [x["number"] for x in cases if x["number"] is not None] == [
             0x5401, 0x80027803, 0x7806, 0x5407, 0x5408]
