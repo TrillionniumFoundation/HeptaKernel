@@ -296,3 +296,10 @@ Linux syscall dispatcher remain **NON-HIA or NOT_IMPLEMENTED**. This is
 a fixed 48-bit/four-level paging and restricted RFLAGS test profile, not an
 admission policy for all Linux userspace states. The 17 acceptance gates
 and the complete 422-row x86-64 syscall obligation remain HOLD.
+
+A new bounded two-record task-snapshot identity view in
+`src/x86_syscall_task_view.hepta` has genuine native HIA host/oracle checks
+for getpid/gettid/getppid values and group-leader membership; the records
+remain caller-supplied test fixtures, **not** authenticated Linux tasks,
+namespace-aware PID routing, atomic snapshots, or syscall ABI closure. See
+`docs/x86-syscall-task-view.md`. All full acceptance gates remain HOLD.
