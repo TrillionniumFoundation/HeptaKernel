@@ -1,5 +1,5 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn f0(request:readbuf,reply:mutbuf,tasks:readbuf) -> (u32) effects(read,write,trap) entry(start)
+fn f0(request:readbuf,reply:mutbuf,tasks:mutbuf) -> (u32) effects(read,write,trap) entry(start)
 block start(request:readbuf,reply:mutbuf,tasks:readbuf)
   rlen:usize = buffer.len(request)
   need:usize = const() {"value":16}

@@ -1,6 +1,6 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn f0(request:readbuf,reply:mutbuf,tasks:readbuf) -> (u32) effects(read,write,trap) entry(start)
-block start(request:readbuf,reply:mutbuf,tasks:readbuf)
+fn f0(request:readbuf,reply:mutbuf,tasks:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,tasks:mutbuf)
   req_len:usize = buffer.len(request)
   required:usize = const() {"value":16}
   good_req:bool = compare.eq(req_len,required)
@@ -8,7 +8,7 @@ block start(request:readbuf,reply:mutbuf,tasks:readbuf)
 block bad_request()
   bad_req:u32 = const() {"value":1}
   ret(bad_req)
-block reply_check(r:readbuf,o:mutbuf,t:readbuf)
+block reply_check(r:readbuf,o:mutbuf,t:mutbuf)
   out_len:usize = buffer.len(o)
   minimum:usize = const() {"value":8}
   good_out:bool = compare.ge(out_len,minimum)
@@ -16,7 +16,7 @@ block reply_check(r:readbuf,o:mutbuf,t:readbuf)
 block bad_reply()
   bad_out:u32 = const() {"value":2}
   ret(bad_out)
-block execute(r1:readbuf,o1:mutbuf,t1:readbuf)
+block execute(r1:readbuf,o1:mutbuf,t1:mutbuf)
   pos0:usize = const() {"value":0}
   pos8:usize = const() {"value":8}
   nr:u64 = call(r1,pos0) {"function":"read_u64"}
@@ -25,8 +25,8 @@ block execute(r1:readbuf,o1:mutbuf,t1:readbuf)
   stored:u32 = call(o1,result) {"function":"write_result"}
   ret(stored)
 end
-fn syscall_task_view(nr:u64,slot:u64,tasks:readbuf) -> (u64) effects(read,trap) entry(start)
-block start(nr:u64,slot:u64,tasks:readbuf)
+fn syscall_task_view(nr:u64,slot:u64,tasks:mutbuf) -> (u64) effects(read,trap) entry(start)
+block start(nr:u64,slot:u64,tasks:mutbuf)
   getpid_nr:u64 = const() {"value":39}
   getppid_nr:u64 = const() {"value":110}
   gettid_nr:u64 = const() {"value":186}
@@ -39,7 +39,7 @@ block start(nr:u64,slot:u64,tasks:readbuf)
 block unsupported()
   enosys:u64 = const() {"value":18446744073709551578}
   ret(enosys)
-block length_check(nr1:u64,slot1:u64,tasks1:readbuf)
+block length_check(nr1:u64,slot1:u64,tasks1:mutbuf)
   bytes:usize = buffer.len(tasks1)
   exact:usize = const() {"value":64}
   len_ok:bool = compare.eq(bytes,exact)
@@ -47,14 +47,14 @@ block length_check(nr1:u64,slot1:u64,tasks1:readbuf)
 block malformed()
   einval:u64 = const() {"value":18446744073709551594}
   ret(einval)
-block slot_check(nr2:u64,slot2:u64,tasks2:readbuf)
+block slot_check(nr2:u64,slot2:u64,tasks2:mutbuf)
   one:u64 = const() {"value":1}
   slot_ok:bool = compare.le(slot2,one)
   branch slot_ok decode(nr2,slot2,tasks2) missing()
 block missing()
   esrch:u64 = const() {"value":18446744073709551613}
   ret(esrch)
-block decode(nr3:u64,slot3:u64,tasks3:readbuf)
+block decode(nr3:u64,slot3:u64,tasks3:mutbuf)
   stride:u64 = const() {"value":32}
   base64:u64 = int.mul.wrap(slot3,stride)
   base:usize = int.cast(base64) {"mode":"wrap"}
@@ -70,13 +70,13 @@ block decode(nr3:u64,slot3:u64,tasks3:readbuf)
   base24:usize = int.add.wrap(base,off24)
   peer8:usize = int.add.wrap(peerbase,off8)
   peer24:usize = int.add.wrap(peerbase,off24)
-  tid:u64 = call(tasks3,base) {"function":"read_u64"}
-  tgid:u64 = call(tasks3,base8) {"function":"read_u64"}
-  ppid:u64 = call(tasks3,base16) {"function":"read_u64"}
-  active:u64 = call(tasks3,base24) {"function":"read_u64"}
-  peer_tid:u64 = call(tasks3,peerbase) {"function":"read_u64"}
-  peer_tgid:u64 = call(tasks3,peer8) {"function":"read_u64"}
-  peer_active:u64 = call(tasks3,peer24) {"function":"read_u64"}
+  tid:u64 = call(tasks3,base) {"function":"read_mut_u64"}
+  tgid:u64 = call(tasks3,base8) {"function":"read_mut_u64"}
+  ppid:u64 = call(tasks3,base16) {"function":"read_mut_u64"}
+  active:u64 = call(tasks3,base24) {"function":"read_mut_u64"}
+  peer_tid:u64 = call(tasks3,peerbase) {"function":"read_mut_u64"}
+  peer_tgid:u64 = call(tasks3,peer8) {"function":"read_mut_u64"}
+  peer_active:u64 = call(tasks3,peer24) {"function":"read_mut_u64"}
   jump verify(nr3,tid,tgid,ppid,active,peer_tid,peer_tgid,peer_active)
 block verify(nr4:u64,tid4:u64,tgid4:u64,ppid4:u64,active4:u64,ptid:u64,ptgid:u64,pactive:u64)
   zero:u64 = const() {"value":0}
@@ -130,6 +130,29 @@ block loop(b:readbuf,at:usize,i:u64,acc:u64)
   more:bool = compare.lt(i,bound)
   branch more octet(b,at,i,acc) done(acc)
 block octet(b1:readbuf,at1:usize,i1:u64,acc1:u64)
+  idx:usize = int.cast(i1) {"mode":"wrap"}
+  ptr:usize = int.add.wrap(at1,idx)
+  oct:u8 = buffer.load(b1,ptr)
+  wide:u64 = int.cast(oct) {"mode":"wrap"}
+  eight:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(i1,eight)
+  shifted:u64 = int.shl.checked(wide,shift)
+  nextacc:u64 = bit.or(acc1,shifted)
+  unit:u64 = const() {"value":1}
+  nexti:u64 = int.add.wrap(i1,unit)
+  jump loop(b1,at1,nexti,nextacc)
+block done(value:u64)
+  ret(value)
+end
+fn read_mut_u64(bytes:mutbuf,base:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:mutbuf,base:usize)
+  start_zero:u64 = const() {"value":0}
+  jump loop(bytes,base,start_zero,start_zero)
+block loop(b:mutbuf,at:usize,i:u64,acc:u64)
+  bound:u64 = const() {"value":8}
+  more:bool = compare.lt(i,bound)
+  branch more octet(b,at,i,acc) done(acc)
+block octet(b1:mutbuf,at1:usize,i1:u64,acc1:u64)
   idx:usize = int.cast(i1) {"mode":"wrap"}
   ptr:usize = int.add.wrap(at1,idx)
   oct:u8 = buffer.load(b1,ptr)
