@@ -2662,11 +2662,15 @@ build/pmm-dual-claim.o: src/pmm_dual_claim.hepta | build check-compiler
 	  test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 build/pmm-dual-claim.so: build/pmm-dual-claim.o
 	ld -shared -z noexecstack -o "$@" "$<"
-test-pmm-dual-claim: build/pmm-dual-claim.so build/e820-allow-all.so
+build/pmm-dual-claim-liar.o: tests/negative/pmm_dual_claim_allow_all.hepta | build check-compiler
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$@"
+build/pmm-dual-claim-liar.so: build/pmm-dual-claim-liar.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-pmm-dual-claim: build/pmm-dual-claim.so build/pmm-dual-claim-liar.so
 	@set -eu; a=$$(mktemp build/.dual-a.XXXXXX); b=$$(mktemp build/.dual-b.XXXXXX); trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
 	  env -i PATH= "$(HEPTA_COMPILER)" < src/pmm_dual_claim.hepta > "$$a"; \
 	  env -i PATH= "$(HEPTA_COMPILER)" < src/pmm_dual_claim.hepta > "$$b"; \
 	  cmp "$$a" "$$b"; cmp "$$a" build/pmm-dual-claim.o
 	timeout 90 $(PYTHON) tests/test_pmm_dual_claim.py build/pmm-dual-claim.so --object build/pmm-dual-claim.o
-	$(PYTHON) tests/test_pmm_dual_claim.py build/e820-allow-all.so --dishonest
+	$(PYTHON) tests/test_pmm_dual_claim.py build/pmm-dual-claim-liar.so --dishonest
 test: test-pmm-dual-claim
