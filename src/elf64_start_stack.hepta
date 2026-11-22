@@ -121,10 +121,10 @@ fn read_word(bytes:readbuf,at:usize) -> (u64) effects(read,trap) entry(start)
 block start(bytes:readbuf,at:usize)
   zero:u64 = const() {"value":0}
   jump loop(bytes,at,zero,zero)
-block loop(b:readbuf,at:usize,i:u64,acc:u64)
+block loop(b:readbuf,at_loop:usize,i:u64,acc:u64)
   eight:u64 = const() {"value":8}
   more:bool = compare.lt(i,eight)
-  branch more octet(b,at,i,acc) done(acc)
+  branch more octet(b,at_loop,i,acc) done(acc)
 block octet(b1:readbuf,at1:usize,i1:u64,acc1:u64)
   index:usize = int.cast(i1) {"mode":"wrap"}
   pos:usize = int.add.wrap(at1,index)
@@ -144,15 +144,15 @@ fn write_word(bytes:mutbuf,at:usize,value:u64) -> (u32) effects(write,trap) entr
 block start(bytes:mutbuf,at:usize,value:u64)
   zero:u64 = const() {"value":0}
   jump loop(bytes,at,value,zero)
-block loop(b:mutbuf,at:usize,value:u64,i:u64)
+block loop(b:mutbuf,at_loop:usize,value_loop:u64,i:u64)
   eight:u64 = const() {"value":8}
   more:bool = compare.lt(i,eight)
-  branch more octet(b,at,value,i) done()
+  branch more octet(b,at_loop,value_loop,i) done()
 block octet(b1:mutbuf,at1:usize,value1:u64,i1:u64)
   index:usize = int.cast(i1) {"mode":"wrap"}
   pos:usize = int.add.wrap(at1,index)
-  eight:u64 = const() {"value":8}
-  shift:u64 = int.mul.wrap(i1,eight)
+  octet_eight:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(i1,octet_eight)
   shifted:u64 = int.shr.checked(value1,shift)
   oct:u8 = int.cast(shifted) {"mode":"wrap"}
   _ = buffer.store(b1,pos,oct)
