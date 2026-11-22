@@ -71,15 +71,17 @@ ownership tests before evolving this into a true kernel allocator.
 
 ## Native release verification scope
 
-The original PC/Q35 hardware observer below continues to exercise **claims
-only**. The added eight-byte release path is tested by the pinned native
-compiler's x86-64 object and independent host differential byte oracle,
-including redzones and denial-path immutability; its separate physical-memory
-release/reuse lifecycle has **not** yet been exercised in the guest. A valid
-claim is not a general DMA/SMAP/IOMMU or multiprocess owner capability.
-Releasing a page in the allocator state does not zero its old bytes or revoke
-a page-table mapping. Full Linux memory lifecycle, concurrent release,
-reference counts and reuse sanitation remain HOLD.
+The eight-byte release path is checked by the locked native HIA compiler,
+an independent host differential byte oracle, and a separate genuine-QEMU
+physical-memory experiment. In the release mode, all fourteen allocated
+physical pages are first read back, then HIA releases 0x501000 in zone zero.
+The non-HIA observer checks the exact 130-byte state and confirms existing
+physical contents are **not** erased, rejects a second release with status 6
+and no state mutation, and verifies that the next HIA first-free claim
+returns precisely 0x501000. A subsequent real physical write/readback checks
+the reused guest frame. Full Linux lifecycle, concurrent release, DMA
+exclusion, page-table revocation, reference counts and reuse sanitization
+remain HOLD.
 
 ## Isolated QEMU physical-memory execution
 
@@ -99,17 +101,17 @@ checks all 14 physical pages word by word (7,168 64-bit reads). The
 observer, not HIA, provides the initial state and page patterns.
 
 Two machine configurations are used (PC 32 MiB and Q35 64 MiB), with
-four modes each: positive, stale free-count refusal with full-state
-immutability, the separately compiled dishonest HIA returning false
-success for that stale state, and physical-memory tampering *after*
-successful HIA claims. Full borrowed-state and reply redzones must stay
+five modes each: positive, release/double-free/reclaim, stale free-count
+refusal with full-state immutability, the separately compiled dishonest HIA
+returning false success for that stale state, and physical-memory tampering
+*after* successful HIA claims. Full borrowed-state and reply redzones must stay
 unchanged. Independent serial markers and ISA debug-exit codes distinguish
-all eight runs. Timeout, failed, and not-run cases are preserved in
+all ten runs. Timeout, failed, and not-run cases are preserved in
 `build/pmm-dual-physical-qemu-report.json` with exact native source,
 object, test and boot image hashes.
 
 This adds a real-guest-physical-memory observation of sequential HIA
-two-zone allocation. It **does not** establish that the 130-byte state is
+two-zone allocation, release and first-free reuse. It **does not** establish that the 130-byte state is
 authenticated firmware ownership, that claims are atomic or crash-safe,
 that the 14 pages belong to a Linux lifecycle, or that HIA implements
 privileged instructions, SMP synchronization or a complete Linux PMM.
