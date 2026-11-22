@@ -1110,6 +1110,8 @@ jobs:
             build/linux-inventory/uapi-tag-report.json
             build/linux-inventory/uapi-ioctl-macro-obligations.jsonl
             build/linux-inventory/uapi-ioctl-report.json
+          build/linux-inventory/uapi-ioctl-x86_64-candidates.jsonl
+          build/linux-inventory/uapi-ioctl-x86_64-report.json
             build/linux-inventory/syscall-table-rows.jsonl
             build/linux-inventory/syscall-x86-native-obligations.jsonl
             build/linux-inventory/syscall-x32-obligations.jsonl
