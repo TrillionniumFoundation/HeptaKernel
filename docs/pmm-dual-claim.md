@@ -6,7 +6,7 @@ It is neither an assembly/foreign-code bridge nor a language interpreter.
 
 ## Exact wire and state contract
 
-`f0` receives three normal borrowed-byte buffers: **empty request**, an
+`f0` receives three normal borrowed-byte buffers: **empty request for claim or an exactly 8-byte LE64 physical address for release**, an
 output of at least 16 bytes, and a **130-byte mutable state** consisting of
 exactly two consecutive **65-byte** PMM-compatible records. Each record is
 a 64-byte header followed by one bitmap octet for exactly eight pages.
@@ -21,17 +21,23 @@ This is a deliberately fixed-width test fixture, **not** a general E820
 zone format, buddy allocator or ownership credential.
 
 After checking **both** records and disjointness before any state write,
-the HIA routine chooses the first free page in zone order, sets exactly
-its occupancy bit, reduces exactly that zone's free counter by one,
-and writes `(status=0, physical_address)` as two LE64 words.
-Invalid state produces status 4, no free page status 5, nonempty
-request status 2, and short reply status 1. Failure paths do not change
+an empty-request claim chooses the first free page in zone order, sets exactly
+its occupancy bit, reduces exactly that zone's free counter by one, and
+writes `(status=0, physical_address)` as two LE64 words. An exactly eight-byte
+LE64 release request instead locates the owning zone, verifies page alignment,
+requires its occupancy bit set and that the page is **not** part of the reserved
+prefix, clears that bit, increments only that zone's free count, and returns
+`(status=0, released_address)`. An unaligned, out-of-zone, reserved, or
+already-free address returns **status 6** without changing either zone.
+The release operation is subject to the same caller-guaranteed exclusive
+ownership, not a proof of Linux frame ownership or DMA quiescence.
+Invalid state produces status 4, no free page status 5, request length other than 0 or 8 status 2, and short reply status 1. Failure paths do not change
 either state record. For a reply buffer of length >=16, status and
 value=0 are written on errors; additional reply bytes stay unchanged.
 The short-reply path touches neither reply nor state.
 
-The contract provides **single-invocation, sequential first-free selection
-and claim** under externally guaranteed exclusive ownership of the complete
+The contract provides **single-invocation, sequential first-free selection,
+claim, and verified occupied-page release** under externally guaranteed exclusive ownership of the complete
 130-byte buffer. It narrows the previous *separate* query/claim time window
 for this bounded fixture, but does not provide a hardware atomic test-and-set,
 cross-CPU linearizability, freshness of firmware memory ownership, a trusted
@@ -48,7 +54,8 @@ library, requires identical `.text`, then invokes
 byte/bitmap oracle. The oracle verifies statuses, exact state transitions,
 every unchanged byte and redzones, malformed headers, reserved bits,
 free-count mismatch, overlapping regions, exhausted zones, boundary
-physical addresses, and repeated claims. A deliberately dishonest HIA
+physical addresses, repeated claims, successful releases, reserved-page
+refusals, unaligned/out-of-zone address refusals and double-free detection. A deliberately dishonest HIA
 native library (`build/pmm-dual-claim-liar.so`, compiled from `tests/negative/pmm_dual_claim_allow_all.hepta`) must disagree with the oracle
 on a corrupted header. The native test report binds source/object/library
 SHA-256 and states explicitly that QEMU/Linux behavior is not tested by
@@ -61,6 +68,18 @@ gates remain HOLD and all 422 syscall obligations stay open.
 Next critical dependencies are actual HIA privilege/effect instructions,
 atomic memory order, authenticated firmware provenance, and QEMU/SMP
 ownership tests before evolving this into a true kernel allocator.
+
+## Native release verification scope
+
+The original PC/Q35 hardware observer below continues to exercise **claims
+only**. The added eight-byte release path is tested by the pinned native
+compiler's x86-64 object and independent host differential byte oracle,
+including redzones and denial-path immutability; its separate physical-memory
+release/reuse lifecycle has **not** yet been exercised in the guest. A valid
+claim is not a general DMA/SMAP/IOMMU or multiprocess owner capability.
+Releasing a page in the allocator state does not zero its old bytes or revoke
+a page-table mapping. Full Linux memory lifecycle, concurrent release,
+reference counts and reuse sanitation remain HOLD.
 
 ## Isolated QEMU physical-memory execution
 
