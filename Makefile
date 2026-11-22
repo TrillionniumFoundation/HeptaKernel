@@ -2464,3 +2464,21 @@ test-x86-syscall-task-view: build/x86-syscall-task-view.so build/x86-syscall-tas
 	$(PYTHON) tests/test_x86_syscall_task_view.py build/x86-syscall-task-view-liar.so --expect-unsafe
 
 test: test-x86-syscall-task-view
+
+# CPL3 SYSCALL(186) -> native Core v8 HIA two-record view -> SYSRETQ.
+# The register transition and fixture state source remain NON-HIA boot.S.
+build/syscall-task-view-boot.o: build/x86-syscall-task-view.o
+	objcopy --redefine-sym f0=syscall_task_view_f0 "$<" "$@"
+SYSCALL_TASK_VIEW_SUPPORT := $(SYSCALL_HW_SUPPORT) build/syscall-task-view-boot.o
+build/boot-syscall-task-view-tid.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -DHEPTAKERNEL_TEST_SYSCALL_TASK_VIEW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-syscall-task-view-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -DHEPTAKERNEL_TEST_SYSCALL_TASK_VIEW=1 -DHEPTAKERNEL_TEST_SYSCALL_TASK_BAD_LEADER=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/syscall-task-view-tid-multiboot.elf: build/boot-syscall-task-view-tid.o $(SYSCALL_TASK_VIEW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-task-view-tid.elf "$<" $(SYSCALL_TASK_VIEW_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-task-view-tid.elf "$@"
+build/syscall-task-view-stale-multiboot.elf: build/boot-syscall-task-view-stale.o $(SYSCALL_TASK_VIEW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-task-view-stale.elf "$<" $(SYSCALL_TASK_VIEW_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-task-view-stale.elf "$@"
+test-boot: build/syscall-task-view-tid-multiboot.elf build/syscall-task-view-stale-multiboot.elf
+test-x86-syscall-hw: build/syscall-task-view-tid-multiboot.elf build/syscall-task-view-stale-multiboot.elf
