@@ -149,6 +149,11 @@ jobs:
         run: |
           make test-pmm-bitmap-integrity HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Isolate pinned HIA selfhost compiler refusal on two-zone candidate
+        shell: bash
+        run: |
+          python3 -I -S -B tools/diagnose_pmm_dual.py "$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify HIA one-call two-zone PMM claim, independent oracle and same-ABI hostile control
         shell: bash
         run: |
@@ -501,6 +506,7 @@ jobs:
             build/page-zero-hardware-report.json
             build/cow-refcount-hardware-report.json
             build/cow-split-hardware-report.json
+            build/pmm-dual-source-isolation.json
             build/pmm-dual-claim-report.json
             build/pmm-dual-claim.o
             build/pmm-dual-claim.so
