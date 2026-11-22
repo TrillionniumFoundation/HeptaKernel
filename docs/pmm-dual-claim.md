@@ -61,3 +61,37 @@ gates remain HOLD and all 422 syscall obligations stay open.
 Next critical dependencies are actual HIA privilege/effect instructions,
 atomic memory order, authenticated firmware provenance, and QEMU/SMP
 ownership tests before evolving this into a true kernel allocator.
+
+## Isolated QEMU physical-memory execution
+
+`make test-pmm-dual-qemu` additionally links the **same original native HIA
+object** into an x86-64 guest as `dual_claim_f0` (symbol rename only).
+A dedicated, plainly non-HIA `boot.S` fixture uses the actual Multiboot
+firmware map and genuine HIA E820 admission twice, for distinct 32 KiB
+zones at physical 0x500000 and 0x700000. It feeds a 130-byte PMM-compatible
+state, initially with one reserved page per zone, to the real HIA entry.
+
+For each of fourteen successful first-free claims, the independent observer
+checks the returned address and the entire 130-byte state against its own
+simple bitmask/free-count evolution, then fills the **actual claimed 4 KiB
+guest-RAM page** with a frame-specific 64-bit pattern. Two further HIA calls
+must report exhaustion without modifying the state. Finally the observer
+checks all 14 physical pages word by word (7,168 64-bit reads). The
+observer, not HIA, provides the initial state and page patterns.
+
+Two machine configurations are used (PC 32 MiB and Q35 64 MiB), with
+four modes each: positive, stale free-count refusal with full-state
+immutability, the separately compiled dishonest HIA returning false
+success for that stale state, and physical-memory tampering *after*
+successful HIA claims. Full borrowed-state and reply redzones must stay
+unchanged. Independent serial markers and ISA debug-exit codes distinguish
+all eight runs. Timeout, failed, and not-run cases are preserved in
+`build/pmm-dual-physical-qemu-report.json` with exact native source,
+object, test and boot image hashes.
+
+This adds a real-guest-physical-memory observation of sequential HIA
+two-zone allocation. It **does not** establish that the 130-byte state is
+authenticated firmware ownership, that claims are atomic or crash-safe,
+that the 14 pages belong to a Linux lifecycle, or that HIA implements
+privileged instructions, SMP synchronization or a complete Linux PMM.
+The complete 17-gate Linux acceptance remains HOLD.
