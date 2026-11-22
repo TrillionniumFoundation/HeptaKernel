@@ -522,6 +522,12 @@ jobs:
             build/boot-dual-stale.o
             build/boot-dual-liar.o
             build/boot-dual-decoy.o
+            build/pmm-scrub-release-boot.o
+            build/pmm-scrub-release-noop-boot.o
+            build/boot-dual-native-scrub.o
+            build/boot-dual-native-scrub-noop.o
+            build/dual-native-scrub-multiboot.elf
+            build/dual-native-scrub-noop-multiboot.elf
             build/dual-hw-multiboot.elf
             build/dual-release-multiboot.elf
             build/dual-scrub-multiboot.elf
