@@ -5,6 +5,7 @@ on:
     paths:
       - 'tools/linux_inventory.py'
       - 'tools/linux_uapi_tags.py'
+      - 'tools/linux_uapi_ioctl_macros.py'
       - 'tools/linux_kconfig_relations.py'
       - 'tools/linux_kconfig_scoped.py'
       - 'tools/linux_kconfig_include_targets.py'
@@ -13,6 +14,7 @@ on:
       - 'tools/linux_x86_syscall_matrix.py'
       - 'tools/linux_x86_ia32_syscall_matrix.py'
       - 'tests/test_linux_uapi_tags.py'
+      - 'tests/test_linux_uapi_ioctl_macros.py'
       - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_kconfig_scoped.py'
       - 'tests/test_linux_kconfig_include_targets.py'
@@ -23,12 +25,14 @@ on:
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
+      - 'docs/linux-uapi-ioctl.md'
       - '.github/workflows/linux-inventory.yml'
   push:
     branches: [main]
     paths:
       - 'tools/linux_inventory.py'
       - 'tools/linux_uapi_tags.py'
+      - 'tools/linux_uapi_ioctl_macros.py'
       - 'tools/linux_kconfig_relations.py'
       - 'tools/linux_kconfig_scoped.py'
       - 'tools/linux_kconfig_include_targets.py'
@@ -37,6 +41,7 @@ on:
       - 'tools/linux_x86_syscall_matrix.py'
       - 'tools/linux_x86_ia32_syscall_matrix.py'
       - 'tests/test_linux_uapi_tags.py'
+      - 'tests/test_linux_uapi_ioctl_macros.py'
       - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_kconfig_scoped.py'
       - 'tests/test_linux_kconfig_include_targets.py'
@@ -47,6 +52,7 @@ on:
       - 'tests/test_linux_inventory.py'
       - 'tests/test_device_table_spans.py'
       - 'docs/linux-inventory.md'
+      - 'docs/linux-uapi-ioctl.md'
       - '.github/workflows/linux-inventory.yml'
   workflow_dispatch:
 
@@ -68,6 +74,7 @@ jobs:
           python3 -I -B tests/test_linux_inventory.py
           python3 -I -B tests/test_device_table_spans.py
           python3 -I -B tests/test_linux_uapi_tags.py
+          python3 -I -B tests/test_linux_uapi_ioctl_macros.py
           python3 -I -B tests/test_linux_kconfig_relations.py
           python3 -I -B tests/test_linux_kconfig_scoped.py
           python3 -I -B tests/test_linux_kconfig_include_targets.py
@@ -223,6 +230,56 @@ jobs:
           assert not report["inventory_complete"] and not report["full_rewrite_complete"]
           print("IA32_COMPAT_SOURCE_PROJECTION: PASS", len(projected))
           print("IA32_REAL_SYSCALL_IMPLEMENTATION: HOLD")
+          PY
+
+      - name: Bind UAPI ioctl macro source spans without claiming ABI implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I -B tools/linux_uapi_ioctl_macros.py \
+            --repo .upstream/linux --lock compatibility/linux-source-lock.json \
+            --out build/linux-inventory
+          python3 - <<'PY'
+          import base64, hashlib, json, subprocess
+          from pathlib import Path
+          root = Path("build/linux-inventory")
+          report = json.loads((root/"uapi-ioctl-report.json").read_text())
+          data = (root/"uapi-ioctl-macro-obligations.jsonl").read_bytes()
+          records = [json.loads(line) for line in data.splitlines()]
+          assert report["source_sha256"] == hashlib.sha256(data).hexdigest()
+          assert report["records"] == len(records) > 0
+          assert report["counts"]["ioctl_macro_definitions"] == len(records)
+          assert report["counts"]["ioctl_calls"] == sum(len(row["io_calls"]) for row in records)
+          assert not report["inventory_complete"] and not report["full_rewrite_complete"]
+          assert report["status"] == "PARTIAL_LEXICAL_NO_NUMBER_EVALUATION_OR_ABI_IMPLEMENTATION"
+          commit = subprocess.check_output(["git", "-C", ".upstream/linux", "rev-parse", "HEAD"], text=True).strip()
+          tree = subprocess.check_output(["git", "-C", ".upstream/linux", "rev-parse", "HEAD^{tree}"], text=True).strip()
+          assert commit == report["linux_commit"] and tree == report["linux_root_tree"]
+          paths = {base64.b64decode(row["path_b64"]): row for row in
+                   map(json.loads, (root/"source-paths.jsonl").read_bytes().splitlines())}
+          blobs = {}
+          last_key = None
+          for row in records:
+              path = base64.b64decode(row["path_b64"])
+              assert path.endswith(b".h") and b"/uapi/" in b"/" + path
+              assert paths[path]["oid"] == row["blob_oid"]
+              key = (path, row["start_byte"])
+              assert last_key is None or key > last_key
+              last_key = key
+              if row["blob_oid"] not in blobs:
+                  blobs[row["blob_oid"]] = subprocess.check_output(
+                      ["git", "-C", ".upstream/linux", "cat-file", "blob", row["blob_oid"]])
+              blob = blobs[row["blob_oid"]]
+              original = base64.b64decode(row["raw_b64"])
+              assert 0 <= row["start_byte"] < row["end_byte"] <= len(blob)
+              assert blob[row["start_byte"]:row["end_byte"]] == original
+              assert row["start_line"] >= 1 and row["end_line"] >= row["start_line"]
+              assert row["io_calls"] and row["macro"]
+              assert all(name in ("_IO", "_IOR", "_IOW", "_IOWR", "_IOC",
+                                  "_IOR_BAD", "_IOW_BAD", "_IOWR_BAD", "_IOC_BAD", "_IO_BAD")
+                         for name in row["io_calls"])
+          print("UAPI_IOCTL_SOURCE_SPANS: PASS", len(records))
+          print("UAPI_IOCTL_REAL_ABI_IMPLEMENTATION: HOLD")
           PY
 
       - name: Inventory immutable UAPI C tag mentions (lexical, not ABI closure)
@@ -997,6 +1054,8 @@ jobs:
             build/linux-inventory/uapi-macro-rows.jsonl
             build/linux-inventory/uapi-tag-mentions.jsonl
             build/linux-inventory/uapi-tag-report.json
+            build/linux-inventory/uapi-ioctl-macro-obligations.jsonl
+            build/linux-inventory/uapi-ioctl-report.json
             build/linux-inventory/syscall-table-rows.jsonl
             build/linux-inventory/syscall-x86-native-obligations.jsonl
             build/linux-inventory/syscall-x32-obligations.jsonl
