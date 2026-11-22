@@ -53,3 +53,29 @@ The HIA language/verifier/native backend still lacks verified CRx/MSR,
 IRETQ/exception entry, privileged I/O, atomics and memory-ordering effects.
 The non-HIA `boot.S` bridge is not replaced, and no upstream Hepta main or
 compiler lock was changed.
+
+## Physical QEMU execution (single-owner experimental contract)
+
+The `dual-native-claim` and `dual-native-claim-noop` guest images link
+exactly the HIA object compiled by the native host oracle, with only the ELF
+symbol `f0` renamed. The non-HIA fixture first obtains two E820-admitted
+8-frame zones, performs 14 genuine HIA allocations and observes all 14
+physical 4KiB patterns. It then calls the existing HIA release ABI for
+`0x501000` to produce an actual free-but-nonzero physical frame. Only after
+checking the 130-byte metadata and all 512 old words does it call the new
+HIA scrub-claim function on the real guest RAM address. An independent
+observer verifies the exact occupied bitmap/free count and all 4096 zeroed
+bytes. The previously free page is now unavailable to the original HIA
+first-free allocator. A repeated scrub-claim on the occupied page must
+return 6, preserve the entire metadata and preserve an intentionally
+introduced page sentinel.
+
+A separate image links the compiled dishonest HIA no-op returning success.
+It must be rejected because the HIA state and old physical RAM do not
+change. Both images are run under PC/32MiB and Q35/64MiB, with exact
+image/source/object hashes and separate positive/negative exit rules.
+This extends the independent hardware test matrix from 20 to 24 cases.
+The bridge, E820 transport, requested-address-to-page-pointer association
+and ownership quiescence remain **non-HIA test assumptions**, not kernel
+or HIA-backend closure. No credit is given toward the 17 full acceptance
+gates or 422 syscall obligations.

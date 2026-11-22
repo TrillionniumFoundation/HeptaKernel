@@ -4910,7 +4910,12 @@ dual_claim_ram_word:
 #ifdef HEPTAKERNEL_TEST_PMM_DUAL_DECOY
     jmp fail64
 #else
-#ifdef HEPTAKERNEL_TEST_PMM_NATIVE_SCRUB_RELEASE
+#ifdef HEPTAKERNEL_TEST_PMM_NATIVE_SCRUB_CLAIM
+    /* Existing native HIA frees a frame for this isolated single-owner
+     * experiment; new original HIA zeroes and reclaims it in one call. */
+    call dual_claim_native_scrub_claim64
+    leaq message_dual_native_claim(%rip), %rsi
+#elif defined(HEPTAKERNEL_TEST_PMM_NATIVE_SCRUB_RELEASE)
     /* One genuine HIA call first zeroes the still-owned physical frame,
      * then marks it free in the HIA PMM state. This is a single-owner test. */
     call dual_claim_native_scrub_release64
@@ -4937,6 +4942,104 @@ dual_claim_ram_bad:
     call puts64
 #endif
     jmp fail64
+#endif
+
+#ifdef HEPTAKERNEL_TEST_PMM_NATIVE_SCRUB_CLAIM
+dual_claim_native_scrub_claim64:
+    /* The page was genuinely allocated, marked full and filled with a
+     * known nonzero 4KiB pattern. Isolated owner first returns it through
+     * the existing native HIA release ABI; no CPU/DMA concurrency is claimed. */
+    movq $0x501000, dual_claim_release_request(%rip)
+    call dual_claim_release_call64
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, dual_claim_reply(%rip)
+    jne fail64
+    cmpq $0x501000, dual_claim_reply+8(%rip)
+    jne fail64
+    movb $0xfd, dual_claim_expected+64(%rip)
+    movq $1, dual_claim_expected+32(%rip)
+    call dual_claim_compare64
+    movq $0x501000, %rdi
+    movabsq $0x7a3b91e24dc6580f, %r10
+    movl $512, %ecx
+dual_native_claim_old_scan:
+    cmpq %r10, (%rdi)
+    jne fail64
+    addq $8, %rdi
+    decl %ecx
+    jnz dual_native_claim_old_scan
+
+    /* The original, separately compiled HIA Core v8 .text performs both
+     * zeroing and occupancy publication. The bridge only binds the guest
+     * physical address and independently observes full RAM and metadata. */
+    leaq dual_claim_release_request(%rip), %rdi
+    movl $8, %esi
+    leaq dual_claim_state(%rip), %rdx
+    movl $130, %ecx
+    movq $0x501000, %r8
+    movl $4096, %r9d
+    call pmm_scrub_claim_f0
+    testl %eax, %eax
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_PMM_NATIVE_SCRUB_CLAIM_NOOP
+    /* A dishonest HIA function returns 0 while leaving old data and
+     * unclaimed state unchanged. The independent observer must catch it. */
+    call dual_claim_compare64
+    movabsq $0x7a3b91e24dc6580f, %r10
+    cmpq %r10, 0x501000
+    jne fail64
+    leaq message_dual_native_claim_noop(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    movb $0xff, dual_claim_expected+64(%rip)
+    movq $0, dual_claim_expected+32(%rip)
+    call dual_claim_compare64
+    movq $0x501000, %rdi
+    movl $512, %ecx
+dual_native_claim_zero_scan:
+    cmpq $0, (%rdi)
+    jne fail64
+    addq $8, %rdi
+    decl %ecx
+    jnz dual_native_claim_zero_scan
+    /* A second claim of this occupied address must refuse without
+     * zeroing its page; inject an observer-only sentinel to detect writes
+     * in the reject path, and recheck full state plus all other words. */
+    movabsq $0xdeadfacecafebeef, %r10
+    movq %r10, 0x501000
+    leaq dual_claim_release_request(%rip), %rdi
+    movl $8, %esi
+    leaq dual_claim_state(%rip), %rdx
+    movl $130, %ecx
+    movq $0x501000, %r8
+    movl $4096, %r9d
+    call pmm_scrub_claim_f0
+    cmpl $6, %eax
+    jne fail64
+    call dual_claim_compare64
+    movabsq $0xdeadfacecafebeef, %r10
+    cmpq %r10, 0x501000
+    jne fail64
+    movq $0x501008, %rdi
+    movl $511, %ecx
+dual_native_claim_reject_scan:
+    cmpq $0, (%rdi)
+    jne fail64
+    addq $8, %rdi
+    decl %ecx
+    jnz dual_native_claim_reject_scan
+    call dual_claim_call64
+    cmpl $5, %eax
+    jne fail64
+    cmpq $5, dual_claim_reply(%rip)
+    jne fail64
+    cmpq $0, dual_claim_reply+8(%rip)
+    jne fail64
+    call dual_claim_compare64
+    ret
+#endif
 #endif
 
 #ifdef HEPTAKERNEL_TEST_PMM_NATIVE_SCRUB_RELEASE
@@ -7201,6 +7304,10 @@ message_dual_native_scrub:
     .asciz "HEPTAKERNEL HIA NATIVE SINGLE CALL SCRUB RELEASE AND ZEROED RECLAIM VERIFIED\r\n"
 message_dual_native_scrub_noop:
     .asciz "HEPTAKERNEL HIA NATIVE SINGLE CALL SCRUB RELEASE DISHONEST NOOP DETECTED\r\n"
+message_dual_native_claim:
+    .asciz "HEPTAKERNEL HIA NATIVE SINGLE CALL SCRUB CLAIM PHYSICAL ZERO VERIFIED\r\n"
+message_dual_native_claim_noop:
+    .asciz "HEPTAKERNEL HIA NATIVE SINGLE CALL SCRUB CLAIM DISHONEST NOOP DETECTED\r\n"
 message_dual_scrub_bypass:
     .asciz "HEPTAKERNEL HIA DUAL PMM SCRUB BYPASS DETECTED\r\n"
 message_dual_scrub_decoy:
