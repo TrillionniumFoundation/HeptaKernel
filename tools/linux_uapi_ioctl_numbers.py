@@ -15,7 +15,11 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import sys
 
+# Python -I deliberately omits the executable directory from sys.path.
+# Resolve only this sibling inventory tool, never host-installed modules.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from linux_uapi_ioctl_macros import DEFINE, IO_CALL
 
 INTEGER = re.compile(rb"(0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)([uUlL]*)\Z")
