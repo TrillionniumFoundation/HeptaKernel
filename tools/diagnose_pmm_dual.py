@@ -40,6 +40,40 @@ commit_stub = (
     "  ret(commit_ok)\n"
     "end\n"
 )
+commit_read_only = (
+    "fn commit_zone(reply:mutbuf,state:mutbuf,offset:u64,index:u64) -> (u32) effects(read,trap) entry(start)\n"
+    "block start(reply:mutbuf,state:mutbuf,offset:u64,index:u64)\n"
+    "  ro_value:u64 = call(state,offset) {\"function\":\"read_word\"}\n"
+    "  ro_ok:u32 = const() {\"value\":0}\n"
+    "  ret(ro_ok)\n"
+    "end\n"
+)
+commit_write_only = (
+    "fn commit_zone(reply:mutbuf,state:mutbuf,offset:u64,index:u64) -> (u32) effects(write,trap) entry(start)\n"
+    "block start(reply:mutbuf,state:mutbuf,offset:u64,index:u64)\n"
+    "  wo_64:u64 = const() {\"value\":64}\n"
+    "  wo_at64:u64 = int.add.wrap(offset,wo_64)\n"
+    "  wo_at:usize = int.cast(wo_at64) {\"mode\":\"wrap\"}\n"
+    "  wo_one:u8 = const() {\"value\":1}\n"
+    "  _ = buffer.store(state,wo_at,wo_one)\n"
+    "  wo_ok:u32 = const() {\"value\":0}\n"
+    "  ret(wo_ok)\n"
+    "end\n"
+)
+commit_reply_only = (
+    "fn commit_zone(reply:mutbuf,state:mutbuf,offset:u64,index:u64) -> (u32) effects(write,trap) entry(start)\n"
+    "block start(reply:mutbuf,state:mutbuf,offset:u64,index:u64)\n"
+    "  rp_ok:u32 = const() {\"value\":0}\n"
+    "  rp_zero:u64 = const() {\"value\":0}\n"
+    "  rp_done:u32 = call(reply,rp_ok,rp_zero) {\"function\":\"write_reply\"}\n"
+    "  ret(rp_done)\n"
+    "end\n"
+)
+# Keep the full state writes, replacing only the return-channel call.
+commit_no_reply = names["commit_zone"].replace(
+    '  cm_result:u32 = call(reply,cm_ok,cm_address) {"function":"write_reply"}\n  ret(cm_result)',
+    "  ret(cm_ok)"
+)
 order = list(names)
 def assemble(entry, selection, overrides=None):
     overrides = overrides or {}
@@ -54,6 +88,10 @@ variants = {
     "stub-all": assemble(stub, set(order)-{"pmm_dual_claim"}),
     "main-stub-zone": assemble(names["pmm_dual_claim"], set(order)-{"pmm_dual_claim"}, {"check_zone":zone_stub}),
     "main-stub-commit": assemble(names["pmm_dual_claim"], set(order)-{"pmm_dual_claim"}, {"commit_zone":commit_stub}),
+    "main-commit-read": assemble(names["pmm_dual_claim"], set(order)-{"pmm_dual_claim"}, {"commit_zone":commit_read_only}),
+    "main-commit-write": assemble(names["pmm_dual_claim"], set(order)-{"pmm_dual_claim"}, {"commit_zone":commit_write_only}),
+    "main-commit-reply": assemble(names["pmm_dual_claim"], set(order)-{"pmm_dual_claim"}, {"commit_zone":commit_reply_only}),
+    "main-commit-no-reply": assemble(names["pmm_dual_claim"], set(order)-{"pmm_dual_claim"}, {"commit_zone":commit_no_reply}),
     "original": original.encode(),
 }
 compiler = Path(sys.argv[1]).resolve()
