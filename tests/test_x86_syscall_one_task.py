@@ -70,6 +70,8 @@ def check(lib, obj, dishonest):
         pid = rng.choice([0, 1, 4242, 2147483647, 2147483648,
                           U64, rng.getrandbits(31), rng.getrandbits(64)])
         run(nr, pid)
+    for _ in range(512):
+        run(39, rng.randrange(1, 1 << 31))
     assert counts["getpid"] > 2000 and counts["enosys"] > 2000 and counts["invalid_task"] > 100
     result = {
         "schema": "heptakernel.hia-one-task-syscall.v1",
