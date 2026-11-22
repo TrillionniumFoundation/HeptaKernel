@@ -16,6 +16,8 @@ MARKERS = {
     "hw": "HEPTAKERNEL HIA DUAL PMM PHYSICAL PAGES AND TWO-ZONE EXHAUSTION VERIFIED",
     "release": "HEPTAKERNEL HIA DUAL PMM RELEASE DOUBLE FREE AND RECLAIM VERIFIED",
     "scrub": "HEPTAKERNEL HIA DUAL PMM NATIVE SCRUB AND ZEROED RECLAIM VERIFIED",
+    "native-scrub": "HEPTAKERNEL HIA NATIVE SINGLE CALL SCRUB RELEASE AND ZEROED RECLAIM VERIFIED",
+    "native-scrub-noop": "HEPTAKERNEL HIA NATIVE SINGLE CALL SCRUB RELEASE DISHONEST NOOP DETECTED",
     "scrub-bypass": "HEPTAKERNEL HIA DUAL PMM SCRUB BYPASS DETECTED",
     "scrub-decoy": "HEPTAKERNEL HIA DUAL PMM POST SCRUB RAM DECOY DETECTED",
     "stale": "HEPTAKERNEL HIA DUAL PMM STALE FREE REFUSED UNCHANGED",
@@ -48,7 +50,7 @@ def run(qemu, machine, mib, mode):
         row.update(returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
         markers = {name: p.stdout.count(value) for name, value in MARKERS.items()}
         preconditions = {value: p.stdout.count(value) for value in PRECONDITIONS}
-        normal = mode in ("hw", "release", "scrub")
+        normal = mode in ("hw", "release", "scrub", "native-scrub")
         row["marker_counts"] = markers
         row["precondition_counts"] = preconditions
         valid = (all(v == 1 for v in preconditions.values())
@@ -68,9 +70,14 @@ def main():
     parser.add_argument("--qemu", default="qemu-system-x86_64")
     args = parser.parse_args()
     report = {
-        "schema": "heptakernel.pmm-dual-real-physical-qemu.v3",
+        "schema": "heptakernel.pmm-dual-real-physical-qemu.v4",
         "native_source_sha256": sha("src/pmm_dual_claim.hepta"),
         "native_object_sha256": sha("build/pmm-dual-claim.o"),
+        "native_scrub_release_source_sha256": sha("src/pmm_scrub_release.hepta"),
+        "native_scrub_release_object_sha256": sha("build/pmm-scrub-release.o"),
+        "native_scrub_release_noop_source_sha256": sha("tests/negative/pmm_scrub_release_noop.hepta"),
+        "native_scrub_release_noop_object_sha256": sha("build/pmm-scrub-release-noop.o"),
+        "native_single_call_scrub_release_qemu": True,
         "page_zero_native_source_sha256": sha("src/page_zero.hepta"),
         "page_zero_native_object_sha256": sha("build/page-zero.o"),
         "page_zero_renamed_boot_object_sha256": sha("build/page-zero-boot.o"),
@@ -97,7 +104,7 @@ def main():
                 report["runs"].append(row)
                 print("HIA_DUAL_PMM_QEMU", platform, mode, row["status"],
                       row.get("returncode"), flush=True)
-        report["status"] = ("PASS" if len(report["runs"]) == 16
+        report["status"] = ("PASS" if len(report["runs"]) == 20
                             and all(x["status"] == "PASS" for x in report["runs"])
                             else "FAIL")
     except BaseException as exc:
