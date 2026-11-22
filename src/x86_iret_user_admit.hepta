@@ -38,7 +38,7 @@ block bad_selectors()
   ret(code_selectors)
 block flags(frip:u64,frsp:u64,fflags:u64)
   required:u64 = const() {"value":2}
-  forbidden:u64 = const() {"value":18446744073709548840}
+  forbidden:u64 = const() {"value":18446744073709548841}
   no_bits:u64 = const() {"value":0}
   present:u64 = bit.and(fflags,required)
   extras:u64 = bit.and(fflags,forbidden)

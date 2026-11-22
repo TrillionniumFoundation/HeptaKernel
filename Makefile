@@ -2638,4 +2638,8 @@ build/boot-elf-stack-ring3-iret-stale.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -DHEPTAKERNEL_TEST_ELF_STACK_RING3=1 -DHEPTAKERNEL_TEST_ELF_STACK_IRET_STALE=1 -DHEPTAKERNEL_TEST_RSP0_RING3=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 build/elf-stack-ring3-iret-stale.elf: build/boot-elf-stack-ring3-iret-stale.o $(ELF_STACK_RING3_SUPPORT) arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(ELF_STACK_RING3_SUPPORT)
-test-elf64-stack-ring3: test-x86-iret-user build/elf-stack-ring3-iret-stale-multiboot.elf
+build/boot-elf-stack-ring3-iret-rflags-bit0.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -DHEPTAKERNEL_TEST_ELF_STACK_RING3=1 -DHEPTAKERNEL_TEST_ELF_STACK_IRET_RFLAGS_BIT0=1 -DHEPTAKERNEL_TEST_RSP0_RING3=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/elf-stack-ring3-iret-rflags-bit0.elf: build/boot-elf-stack-ring3-iret-rflags-bit0.o $(ELF_STACK_RING3_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(ELF_STACK_RING3_SUPPORT)
+test-elf64-stack-ring3: test-x86-iret-user build/elf-stack-ring3-iret-stale-multiboot.elf build/elf-stack-ring3-iret-rflags-bit0-multiboot.elf

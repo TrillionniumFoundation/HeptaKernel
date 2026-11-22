@@ -2608,7 +2608,11 @@ rsp0_ring3_exercise64:
     movq $0x401000, %rdi
 #endif
     movq $0x601f80, %rsi
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_IRET_RFLAGS_BIT0
+    movq $0x3, %rdx          /* RFLAGS reserved bit 0 intentionally set */
+#else
     movq $0x2, %rdx
+#endif
     movq $0x33, %rcx
     movq $0x3b, %r8
     call iret_user_admit
@@ -2618,6 +2622,12 @@ rsp0_ring3_exercise64:
     leaq message_elf_stack_iret_stale(%rip), %rsi
     call puts64
     jmp fail64                 /* explicit negative, no hardware IRETQ */
+#elif defined(HEPTAKERNEL_TEST_ELF_STACK_IRET_RFLAGS_BIT0)
+    cmpl $4, %eax
+    jne fail64
+    leaq message_elf_stack_iret_reserved_bit0(%rip), %rsi
+    call puts64
+    jmp fail64                 /* reserved flag refused before NON-HIA IRETQ */
 #else
     testl %eax, %eax
     jne fail64
@@ -6584,6 +6594,8 @@ message_elf_stack_ring3_decoy:
     .asciz "HEPTAKERNEL HIA ELF64 STACK CPL3 POSTWRITE DECOY OBSERVED\r\n"
 message_elf_stack_iret_stale:
     .asciz "HEPTAKERNEL HIA IRET USER STACK RIP REFUSED BEFORE IRETQ\r\n"
+message_elf_stack_iret_reserved_bit0:
+    .asciz "HEPTAKERNEL HIA IRET RFLAGS RESERVED BIT0 REFUSED BEFORE IRETQ\r\n"
 message_upper_pass:
     .asciz "HEPTAKERNEL HIA LIVE UPPER USER TABLE VERIFIED\r\n"
 message_upper_stale:
