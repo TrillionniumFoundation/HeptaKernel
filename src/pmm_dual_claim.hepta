@@ -65,11 +65,15 @@ block no_memory(nm_reply:mutbuf)
   ret(nm_out)
 block claim_first(cf_reply:mutbuf,cf_state:mutbuf,cf_index:u64)
   cf_off:u64 = const() {"value":0}
-  cf_result:u32 = call(cf_reply,cf_state,cf_off,cf_index) {"function":"commit_zone"}
+  cf_address:u64 = call(cf_reply,cf_state,cf_off,cf_index) {"function":"commit_zone"}
+  cf_ok:u32 = const() {"value":0}
+  cf_result:u32 = call(cf_reply,cf_ok,cf_address) {"function":"write_reply"}
   ret(cf_result)
 block claim_second(ct_reply:mutbuf,ct_state:mutbuf,ct_index:u64)
   ct_off:u64 = const() {"value":65}
-  ct_result:u32 = call(ct_reply,ct_state,ct_off,ct_index) {"function":"commit_zone"}
+  ct_address:u64 = call(ct_reply,ct_state,ct_off,ct_index) {"function":"commit_zone"}
+  ct_ok:u32 = const() {"value":0}
+  ct_result:u32 = call(ct_reply,ct_ok,ct_address) {"function":"write_reply"}
   ret(ct_result)
 end
 fn check_zone(state:mutbuf,offset:u64) -> (u64) effects(read,trap) entry(start)
@@ -172,7 +176,7 @@ block invalid()
   iv_code:u64 = const() {"value":9}
   ret(iv_code)
 end
-fn commit_zone(reply:mutbuf,state:mutbuf,offset:u64,index:u64) -> (u32) effects(read,write,trap) entry(start)
+fn commit_zone(reply:mutbuf,state:mutbuf,offset:u64,index:u64) -> (u64) effects(read,write,trap) entry(start)
 block start(reply:mutbuf,state:mutbuf,offset:u64,index:u64)
   cm_64:u64 = const() {"value":64}
   cm_32:u64 = const() {"value":32}
@@ -195,9 +199,7 @@ block start(reply:mutbuf,state:mutbuf,offset:u64,index:u64)
   cm_address:u64 = int.add.wrap(cm_base,cm_delta)
   _ = buffer.store(state,cm_bit_at,cm_new)
   cm_count_write:u32 = call(state,cm_free_off,cm_remaining) {"function":"write_word"}
-  cm_ok:u32 = const() {"value":0}
-  cm_result:u32 = call(reply,cm_ok,cm_address) {"function":"write_reply"}
-  ret(cm_result)
+  ret(cm_address)
 end
 fn read_word(bytes:mutbuf,offset:u64) -> (u64) effects(read,trap) entry(start)
 block start(bytes:mutbuf,offset:u64)
