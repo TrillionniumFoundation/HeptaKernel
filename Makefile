@@ -2753,3 +2753,29 @@ build/dual-native-scrub.elf: build/boot-dual-native-scrub.o $(DUAL_BOOT_SUPPORT)
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-dual-native-scrub.o $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-boot.o build/pmm-scrub-release-boot.o
 build/dual-native-scrub-noop.elf: build/boot-dual-native-scrub-noop.o $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-boot.o build/pmm-scrub-release-noop-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-dual-native-scrub-noop.o $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-boot.o build/pmm-scrub-release-noop-boot.o
+
+# Genuine HIA Core v8 single-owner zero-before-claim for two eight-frame zones.
+# This is not a replacement for privileged memory operations or SMP atomicity.
+.PHONY: test-pmm-scrub-claim
+build/pmm-scrub-claim.o: src/pmm_scrub_claim.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.scrub-claim.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	  env -i PATH='' "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	  test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/pmm-scrub-claim.so: build/pmm-scrub-claim.o
+	ld -shared -z noexecstack -o "$@" "$<"
+build/pmm-scrub-claim-noop.o: tests/negative/pmm_scrub_claim_noop.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.scrub-claim-noop.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	  env -i PATH='' "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	  test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/pmm-scrub-claim-noop.so: build/pmm-scrub-claim-noop.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-pmm-scrub-claim: build/pmm-scrub-claim.so build/pmm-scrub-claim-noop.so
+	@set -eu; a=$$(mktemp build/.claim-a.XXXXXX); b=$$(mktemp build/.claim-b.XXXXXX); \
+	  trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	  env -i PATH='' "$(HEPTA_COMPILER)" < src/pmm_scrub_claim.hepta > "$$a"; \
+	  env -i PATH='' "$(HEPTA_COMPILER)" < src/pmm_scrub_claim.hepta > "$$b"; \
+	  cmp "$$a" "$$b"; cmp "$$a" build/pmm-scrub-claim.o
+	timeout 90 $(PYTHON) tests/test_pmm_scrub_claim.py build/pmm-scrub-claim.so --object build/pmm-scrub-claim.o
+	timeout 90 $(PYTHON) tests/test_pmm_scrub_claim.py build/pmm-scrub-claim-noop.so --negative
+
+test: test-pmm-scrub-claim
