@@ -38,7 +38,7 @@ def pair(bitmap0=0, bitmap1=0, reserved0=0, reserved1=0,
 def model(request, reply_len, state):
     if reply_len < 16:
         return 1, None, state
-    if request:
+    if len(request) not in (0, 8):
         return 2, 0, state
     if len(state) != 2 * ZONE_BYTES:
         return 4, 0, state
@@ -53,11 +53,26 @@ def model(request, reply_len, state):
                 and bits & ((1 << reserved)-1) == (1 << reserved)-1
                 and free == 8 - bits.bit_count()):
             return 4, 0, state
-        parsed.append((off, base, bits))
-    (_, b0, _), (_, b1, _) = parsed
+        parsed.append((off, base, bits, reserved))
+    (_, b0, _, _), (_, b1, _, _) = parsed
     if b0 < b1 + 8*PAGE and b1 < b0 + 8*PAGE:
         return 4, 0, state
-    for off, base, bits in parsed:
+    if request:
+        address, = struct.unpack("<Q", request)
+        if address % PAGE:
+            return 6, 0, state
+        for off, base, bits, reserved in parsed:
+            if base <= address < base + 8*PAGE:
+                index = (address - base) // PAGE
+                if index < reserved or not (bits & (1 << index)):
+                    return 6, 0, state
+                new = bytearray(state)
+                new[off+64] &= ~(1 << index)
+                free, = struct.unpack_from("<Q", state, off+32)
+                struct.pack_into("<Q", new, off+32, free+1)
+                return 0, address, bytes(new)
+        return 6, 0, state
+    for off, base, bits, reserved in parsed:
         for i in range(8):
             if not bits & (1 << i):
                 new = bytearray(state)
@@ -138,6 +153,45 @@ def cases():
     for _ in range(18):
         tests.append((b"",16,evolving))
         _, _, evolving = model(b"",16,evolving)
+
+    # Release a genuinely claimed page; then reject its double free.
+    for selected in (0x400000, 0x401000, 0x600000, 0x601000):
+        p = pair(0b00000011, 0b00000011, reserved0=1, reserved1=1)
+        req = struct.pack("<Q", selected)
+        tests.append((req, 16, p))
+        status, _, after = model(req, 16, p)
+        if status == 0:
+            tests.append((req, 16, after))
+            tests.append((b"", 16, after))
+    # Both valid reserved prefixes and an exhausted zone must refuse frees.
+    tests.extend([
+        (struct.pack("<Q",0x400000),16,pair(255,255,reserved0=1,reserved1=1)),
+        (struct.pack("<Q",0x600000),16,pair(255,255,reserved0=1,reserved1=1)),
+        (struct.pack("<Q",0x400001),16,pair(3,3)),
+        (struct.pack("<Q",0x408000),16,pair(3,3)),
+        (struct.pack("<Q",0x5ff000),16,pair(3,3)),
+        (struct.pack("<Q",0xfffffffffffff000),16,pair(3,3)),
+        (struct.pack("<Q",0x400000),1,pair(3,3)),
+        (struct.pack("<Q",0x401000),16,pair(3,3)[:-1]),
+        (struct.pack("<Q",0x401000),16,pair(3,3,base0=0x400000,base1=0x401000)),
+    ])
+    # Seeded releases vary the zone, selected bit, reserved prefixes,
+    # physical interval order and all byte-level guard conditions.
+    for _ in range(640):
+        reserved0, reserved1 = rng.randrange(9), rng.randrange(9)
+        bitmap0, bitmap1 = rng.randrange(256), rng.randrange(256)
+        bases = rng.choice([(0x400000,0x600000),
+                            (0x600000,0x400000),
+                            (LIMIT-32768,0x400000)])
+        p = pair(bitmap0,bitmap1,reserved0,reserved1,*bases)
+        base = rng.choice(bases)
+        candidate = base + rng.randrange(8)*PAGE
+        if rng.randrange(5) == 0:
+            candidate += rng.choice([1,4095])
+        elif rng.randrange(9) == 0:
+            candidate = rng.choice([0x12345000, LIMIT, LIMIT-1])
+        request = struct.pack("<Q",candidate)
+        tests.append((request,rng.choice([16,16,17,32]),p))
     return tests
 
 

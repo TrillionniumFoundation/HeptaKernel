@@ -4910,7 +4910,14 @@ dual_claim_ram_word:
 #ifdef HEPTAKERNEL_TEST_PMM_DUAL_DECOY
     jmp fail64
 #else
+#ifdef HEPTAKERNEL_TEST_PMM_DUAL_RELEASE
+    /* The non-HIA observer checks a genuine HIA release, double-free
+     * refusal and first-free reallocation of an E820-admitted RAM page. */
+    call dual_claim_release_exercise64
+    leaq message_dual_release(%rip), %rsi
+#else
     leaq message_dual_pass(%rip), %rsi
+#endif
     call puts64
     movl $0x10, %eax              /* QEMU isa-debug-exit: 33 */
     jmp debug_exit64
@@ -4921,6 +4928,67 @@ dual_claim_ram_bad:
     call puts64
 #endif
     jmp fail64
+#endif
+
+#ifdef HEPTAKERNEL_TEST_PMM_DUAL_RELEASE
+dual_claim_release_exercise64:
+    /* The requested frame was actually allocated as first user page of
+     * zone zero; verify its existing 4KiB contents before release. */
+    movabsq $0x7a3b91e24dc6580f, %r10
+    cmpq %r10, 0x501000
+    jne fail64
+    movq $0x501000, dual_claim_release_request(%rip)
+    call dual_claim_release_call64
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, dual_claim_reply(%rip)
+    jne fail64
+    cmpq $0x501000, dual_claim_reply+8(%rip)
+    jne fail64
+    movb $0xfd, dual_claim_expected+64(%rip)
+    movq $1, dual_claim_expected+32(%rip)
+    call dual_claim_compare64
+    /* State transition does not erase or revoke the physical page. */
+    movabsq $0x7a3b91e24dc6580f, %r10
+    cmpq %r10, 0x501000
+    jne fail64
+    /* The second release must be rejected, leaving both zones untouched. */
+    call dual_claim_release_call64
+    cmpl $6, %eax
+    jne fail64
+    cmpq $6, dual_claim_reply(%rip)
+    jne fail64
+    cmpq $0, dual_claim_reply+8(%rip)
+    jne fail64
+    call dual_claim_compare64
+    /* A new HIA claim must first-fit exactly the page now available. */
+    call dual_claim_call64
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, dual_claim_reply(%rip)
+    jne fail64
+    cmpq $0x501000, dual_claim_reply+8(%rip)
+    jne fail64
+    movb $0xff, dual_claim_expected+64(%rip)
+    movq $0, dual_claim_expected+32(%rip)
+    call dual_claim_compare64
+    movabsq $0x5511abcddcba1155, %r10
+    movq %r10, 0x501000
+    cmpq %r10, 0x501000
+    jne fail64
+    ret
+dual_claim_release_call64:
+    movabsq $0xd0e1f2a3b4c59687, %rax
+    movq %rax, dual_claim_reply(%rip)
+    movq %rax, dual_claim_reply+8(%rip)
+    leaq dual_claim_release_request(%rip), %rdi
+    movl $8, %esi
+    leaq dual_claim_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq dual_claim_state(%rip), %r8
+    movl $130, %r9d
+    call dual_claim_f0
+    ret
 #endif
 
 dual_claim_call64:
@@ -6931,6 +6999,8 @@ message_cow_pte_bypass:
     .asciz "HEPTAKERNEL HIA COW PTE RESTORE BYPASS REFAULT VERIFIED\r\n"
 message_dual_pass:
     .asciz "HEPTAKERNEL HIA DUAL PMM PHYSICAL PAGES AND TWO-ZONE EXHAUSTION VERIFIED\r\n"
+message_dual_release:
+    .asciz "HEPTAKERNEL HIA DUAL PMM RELEASE DOUBLE FREE AND RECLAIM VERIFIED\r\n"
 message_dual_stale:
     .asciz "HEPTAKERNEL HIA DUAL PMM STALE FREE REFUSED UNCHANGED\r\n"
 message_dual_liar:
@@ -7380,6 +7450,8 @@ dual_claim_reply:              .skip 16
 dual_claim_reply_guard_after:  .skip 8
 dual_claim_expected:           .skip 130
 dual_claim_empty_request:      .skip 1
+.balign 8
+dual_claim_release_request:    .skip 8
 arena_guard_before: .skip 8
 arena_reply:       .skip 16
 arena_guard_after: .skip 8
