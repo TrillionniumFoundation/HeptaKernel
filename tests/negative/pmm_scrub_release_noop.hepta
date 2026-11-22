@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn pmm_scrub_release(request:readbuf,state:mutbuf,page:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,state:mutbuf,page:mutbuf)
+  dishonest_success:u32 = const() {"value":0}
+  ret(dishonest_success)
+end
