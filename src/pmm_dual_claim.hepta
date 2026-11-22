@@ -193,7 +193,7 @@ block start(reply:mutbuf,state:mutbuf,offset:u64,index:u64)
   cm_page_bytes:u64 = const() {"value":4096}
   cm_delta:u64 = int.mul.wrap(index,cm_page_bytes)
   cm_address:u64 = int.add.wrap(cm_base,cm_delta)
-  cm_store:u32 = buffer.store(state,cm_bit_at,cm_new)
+  _ = buffer.store(state,cm_bit_at,cm_new)
   cm_count_write:u32 = call(state,cm_free_off,cm_remaining) {"function":"write_word"}
   cm_ok:u32 = const() {"value":0}
   cm_result:u32 = call(reply,cm_ok,cm_address) {"function":"write_reply"}
@@ -237,7 +237,7 @@ block one_byte(wb_bytes:mutbuf,wb_off:u64,wb_value:u64,wb_i:u64)
   wb_shift:u64 = int.mul.wrap(wb_i,wb_eight)
   wb_chunk:u64 = int.shr.checked(wb_value,wb_shift)
   wb_oct:u8 = int.cast(wb_chunk) {"mode":"wrap"}
-  wb_stored:u32 = buffer.store(wb_bytes,wb_at,wb_oct)
+  _ = buffer.store(wb_bytes,wb_at,wb_oct)
   wb_one:u64 = const() {"value":1}
   wb_next:u64 = int.add.wrap(wb_i,wb_one)
   jump loop(wb_bytes,wb_off,wb_value,wb_next)
