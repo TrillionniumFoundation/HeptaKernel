@@ -39,9 +39,9 @@ def compare(entry, case, ordinal):
     expected, after, new_page = reference(request, state, page, cap)
     if cap != len(page):
         assert cap == len(page), "test bug: inconsistent physical page length"
-    source = ctypes.create_string_buffer(b"\\xa1" * GUARD + request + b"\\xa1" * GUARD)
-    metadata = ctypes.create_string_buffer(b"\\xb2" * GUARD + state + b"\\xb2" * GUARD)
-    frame = ctypes.create_string_buffer(b"\\xc3" * GUARD + page + b"\\xc3" * GUARD)
+    source = ctypes.create_string_buffer(b"\xa1" * GUARD + request + b"\xa1" * GUARD)
+    metadata = ctypes.create_string_buffer(b"\xb2" * GUARD + state + b"\xb2" * GUARD)
+    frame = ctypes.create_string_buffer(b"\xc3" * GUARD + page + b"\xc3" * GUARD)
     old_source = bytes(source)
     status = entry(ctypes.addressof(source) + GUARD, len(request),
                    ctypes.addressof(metadata) + GUARD, len(state),
@@ -49,8 +49,8 @@ def compare(entry, case, ordinal):
     actual_state = bytes(metadata)
     actual_page = bytes(frame)
     safe = (status == expected and bytes(source) == old_source
-            and actual_state == b"\\xb2" * GUARD + after + b"\\xb2" * GUARD + b"\\x00"
-            and actual_page == b"\\xc3" * GUARD + new_page + b"\\xc3" * GUARD + b"\\x00")
+            and actual_state == b"\xb2" * GUARD + after + b"\xb2" * GUARD + b"\x00"
+            and actual_page == b"\xc3" * GUARD + new_page + b"\xc3" * GUARD + b"\x00")
     if not safe:
         return (False, {"case": ordinal, "actual": status, "expected": expected,
                         "request": request.hex(), "state": state.hex(),
@@ -69,7 +69,7 @@ def cases():
         for mode in range(32):
             page = bytes(rng.randrange(256) for _ in range(PAGE))
             result.append((request, first, page, PAGE))
-    for req in (b"", b"\\x00", b"\\xff" * 7, b"\\x01" * 9):
+    for req in (b"", b"\x00", b"\xff" * 7, b"\x01" * 9):
         result.append((req, first, bytes([0xD5]) * PAGE, PAGE))
     for n in (0, 1, 129, 131):
         result.append((positive[0], first[:n], bytes([0xB1]) * PAGE, PAGE))
@@ -77,7 +77,7 @@ def cases():
         result.append((positive[0], first, bytes([0xD3]) * n, n))
     for addr in (0, 0x500000, 0x503000, 0x700000, 0x703000,
                  0x501001, 0x502fff, 0xfffffffffffff000):
-        result.append((struct.pack("<Q", addr), first, b"\\xf5" * PAGE, PAGE))
+        result.append((struct.pack("<Q", addr), first, b"\xf5" * PAGE, PAGE))
     for _ in range(640):
         res_a, res_b = rng.randrange(9), rng.randrange(9)
         mask_a, mask_b = rng.randrange(256), rng.randrange(256)
@@ -99,8 +99,8 @@ def cases():
     state = first
     for _ in range(4):
         for request in positive:
-            result.append((request, state, b"\\xa5" * PAGE, PAGE))
-            _, state, _ = reference(request, state, b"\\xa5" * PAGE, PAGE)
+            result.append((request, state, b"\xa5" * PAGE, PAGE))
+            _, state, _ = reference(request, state, b"\xa5" * PAGE, PAGE)
     return result
 
 
@@ -151,7 +151,7 @@ def main():
         }
         if not args.negative:
             args.report.parent.mkdir(exist_ok=True, parents=True)
-            args.report.write_text(json.dumps(report, sort_keys=True, indent=2) + "\\n")
+            args.report.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n")
         print(json.dumps({k: v for k, v in report.items() if k != "examples"}, sort_keys=True))
     if args.negative:
         assert mismatches >= 100
