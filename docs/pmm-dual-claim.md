@@ -118,28 +118,39 @@ privileged instructions, SMP synchronization or a complete Linux PMM.
 The complete 17-gate Linux acceptance remains HOLD.
 
 
-## Native page-zero integration on the released QEMU frame
+## Native page-zero scrub **before** PMM release in QEMU
 
-A separate `dual-scrub` hardware image now composes **two existing and unchanged
-native HIA Core v8 objects**: `pmm_dual_claim.hepta` for release/reclaim and
-`page_zero.hepta` for the full 4 KiB byte overwrite. The independent
-non-HIA observer first confirms that a released page still contains its old
-pattern and that a second release is refused. It then passes physical RAM
-`0x501000` to the native `page_zero_f0` entry, checks the output receipt
-and disjoint guard words, and independently scans all 512 64-bit words.
-After native first-fit reclaim it checks all 512 words again *before*
-writing the new owner's test pattern. A forged-success scrub bypass and
-a post-HIA physical RAM byte mutation each have their own negative image,
-serial marker and expected nonzero QEMU debug-exit result, rather than using
-a cached HIA reply as the oracle. Both PC/32MiB and Q35/64MiB run all modes;
-the matrix grows from 10 to 16 real-QEMU cases.
+The `dual-scrub` test now composes two existing, unchanged Core v8
+native HIA objects: `pmm_dual_claim.hepta` for claim/release and
+`page_zero.hepta` for scrubbing the entire 4 KiB guest physical page.
+The test-only, non-HIA observer first confirms that `0x501000` is
+**still allocated** and contains the original full-page pattern.
+An additional native HIA first-free claim must return exhaustion (status 5)
+without mutating either of the 65-byte state records. The original HIA
+`page_zero_f0` runs *while the PMM occupancy bit remains set*; the observer
+then checks its receipt and guard words and independently reads all 512
+64-bit words from physical RAM. A second HIA exhaustion check proves the
+frame has **not been published to the free list by scrubbing**.
 
-This is an **ordered single-owner experiment**, not an atomic
-`release -> zero -> reclaim` operation. In particular, the page is already
-marked free while scrub runs; concurrent allocation, DMA, stale mappings or
-interrupt-driven reuse could leak old contents. A production-grade protocol
-must *quarantine before scrubbing*, revoke every PTE and external DMA
-mapping, complete required TLB/IOMMU synchronization, and only then publish
-the zeroed page to free lists. None of those new Linux lifecycle obligations
-is declared complete by these QEMU experiments. All 17 full Linux
-acceptance gates remain HOLD and the 422 syscall obligations remain unchanged.
+Two adversarial QEMU images separately simulate a dishonest success response
+without scrubbing and a post-HIA physical memory mutation. On either failure,
+the observer verifies the full 130-byte state remains allocated and calls
+the native HIA first-free allocator, which must still refuse exhaustion,
+**before** reporting the expected failure. A successful full scan is the
+only path permitted to invoke HIA release; afterward the independent oracle
+checks the changed occupancy/free count, rejects a double release and
+requires first-free reclaim of exactly `0x501000`. The observer rechecks
+all 4 KiB after reclaim, before writing a new-owner pattern. PC/32 MiB
+and Q35/64 MiB keep all sixteen positive and fault-injected QEMU cases.
+The separate `dual-release` mode continues to test intentional release
+without scrubbing; it is not a safe cross-owner recycle protocol.
+
+This removes the specific **free-before-scrub ordering** from the isolated
+single-owner clean-reuse path. It is not a general Linux page lifecycle:
+the caller controls physical ownership, interrupt exclusion and the copied
+130-byte state. Live PTE/DMAR revocation, CPU TLB/IOMMU shootdown,
+proof of DMA and other owners' quiescence, crash recovery, native atomic
+operations and SMP linearizability remain unimplemented. A hostile writer
+between the final scrub scan and release is not prevented by this test.
+All 17 Linux acceptance gates remain HOLD and all 422 source syscall
+obligations remain open.

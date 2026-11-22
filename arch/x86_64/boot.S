@@ -4941,34 +4941,21 @@ dual_claim_release_exercise64:
     movabsq $0x7a3b91e24dc6580f, %r10
     cmpq %r10, 0x501000
     jne fail64
-    movq $0x501000, dual_claim_release_request(%rip)
-    call dual_claim_release_call64
-    testl %eax, %eax
+    /* Full-frame HIA scrub and independent readback must precede the
+     * first native HIA release of this still-owned page. */
+#ifdef HEPTAKERNEL_TEST_PMM_DUAL_SCRUB
+    /* Single-owner test: zero the still-allocated E820-admitted page with
+     * the unchanged native HIA page_zero_f0. No free-list publication may
+     * precede the complete physical zero scan and its fault injection. */
+    /* Even a zeroed page is still occupied until HIA releases it. */
+    call dual_claim_call64
+    cmpl $5, %eax
     jne fail64
-    cmpq $0, dual_claim_reply(%rip)
-    jne fail64
-    cmpq $0x501000, dual_claim_reply+8(%rip)
-    jne fail64
-    movb $0xfd, dual_claim_expected+64(%rip)
-    movq $1, dual_claim_expected+32(%rip)
-    call dual_claim_compare64
-    /* State transition does not erase or revoke the physical page. */
-    movabsq $0x7a3b91e24dc6580f, %r10
-    cmpq %r10, 0x501000
-    jne fail64
-    /* The second release must be rejected, leaving both zones untouched. */
-    call dual_claim_release_call64
-    cmpl $6, %eax
-    jne fail64
-    cmpq $6, dual_claim_reply(%rip)
+    cmpq $5, dual_claim_reply(%rip)
     jne fail64
     cmpq $0, dual_claim_reply+8(%rip)
     jne fail64
     call dual_claim_compare64
-#ifdef HEPTAKERNEL_TEST_PMM_DUAL_SCRUB
-    /* Single-owner test: call the original, independently compiled native
-     * HIA page_zero_f0 on the same E820-admitted released physical frame.
-     * Never count an output receipt as evidence of actual zeroization. */
     movabsq $0x4197eac3db5602f8, %rax
     movq %rax, dual_claim_scrub_guard_before(%rip)
     movq %rax, dual_claim_scrub_guard_after(%rip)
@@ -5014,6 +5001,16 @@ dual_claim_scrub_scan64:
 #endif
     jmp dual_claim_scrub_clean64
 dual_claim_scrub_reject64:
+    /* Both negative images must retain full ownership: no release occurred. */
+    /* Even a zeroed page is still occupied until HIA releases it. */
+    call dual_claim_call64
+    cmpl $5, %eax
+    jne fail64
+    cmpq $5, dual_claim_reply(%rip)
+    jne fail64
+    cmpq $0, dual_claim_reply+8(%rip)
+    jne fail64
+    call dual_claim_compare64
 #ifdef HEPTAKERNEL_TEST_PMM_DUAL_SCRUB_BYPASS
     leaq message_dual_scrub_bypass(%rip), %rsi
     call puts64
@@ -5024,7 +5021,46 @@ dual_claim_scrub_reject64:
     jmp fail64
 dual_claim_scrub_clean64:
     call dual_claim_compare64
+    /* Even a zeroed page is still occupied until HIA releases it. */
+    call dual_claim_call64
+    cmpl $5, %eax
+    jne fail64
+    cmpq $5, dual_claim_reply(%rip)
+    jne fail64
+    cmpq $0, dual_claim_reply+8(%rip)
+    jne fail64
+    call dual_claim_compare64
 #endif
+    movq $0x501000, dual_claim_release_request(%rip)
+    call dual_claim_release_call64
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, dual_claim_reply(%rip)
+    jne fail64
+    cmpq $0x501000, dual_claim_reply+8(%rip)
+    jne fail64
+    movb $0xfd, dual_claim_expected+64(%rip)
+    movq $1, dual_claim_expected+32(%rip)
+    call dual_claim_compare64
+    /* The HIA PMM release does not change RAM: plain release keeps the
+     * old pattern, whereas scrub mode must already contain only zeros. */
+#ifndef HEPTAKERNEL_TEST_PMM_DUAL_SCRUB
+    movabsq $0x7a3b91e24dc6580f, %r10
+    cmpq %r10, 0x501000
+    jne fail64
+#else
+    cmpq $0, 0x501000
+    jne fail64
+#endif
+    /* The second release must be rejected, leaving both zones untouched. */
+    call dual_claim_release_call64
+    cmpl $6, %eax
+    jne fail64
+    cmpq $6, dual_claim_reply(%rip)
+    jne fail64
+    cmpq $0, dual_claim_reply+8(%rip)
+    jne fail64
+    call dual_claim_compare64
     /* A new HIA claim must first-fit exactly the page now available. */
     call dual_claim_call64
     testl %eax, %eax

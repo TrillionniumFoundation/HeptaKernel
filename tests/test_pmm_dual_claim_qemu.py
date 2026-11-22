@@ -3,7 +3,7 @@
 
 Tests run the *original selfhost_elf* object in an isolated x86-64 guest and
 validate the 14 claimed physical pages with a full-page adversarial scan,
-then independently observe release, double-free refusal and reuse on real guest RAM.
+then observe HIA scrub of a still-owned page before release, double-free refusal and reuse.
 The assembly bridge is a NON-HIA observer, not an allocator implementation.
 """
 import argparse
@@ -83,7 +83,11 @@ def main():
         "full_linux": "HOLD", "hia_privileged_backend": False,
         "smp_atomic": False, "trusted_ownership": False,
         "tlb_revoke_and_dma_quiescence_verified": False,
-        "scrub_is_single_owner_test_only": True, "runs": [],
+        "scrub_is_single_owner_test_only": True,
+        "scrub_before_release": True,
+        "failed_scrub_must_retain_occupied_bitmap": True,
+        "untrusted_non_hia_physical_observer": True,
+        "runs": [],
         "status": "NOT_RUN",
     }
     try:
