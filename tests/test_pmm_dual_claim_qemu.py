@@ -2,7 +2,8 @@
 """Independent QEMU observer for genuine native HIA dual-zone PMM claims.
 
 Tests run the *original selfhost_elf* object in an isolated x86-64 guest and
-validate the 14 claimed physical pages with a full-page adversarial scan.
+validate the 14 claimed physical pages with a full-page adversarial scan,
+then independently observe release, double-free refusal and reuse on real guest RAM.
 The assembly bridge is a NON-HIA observer, not an allocator implementation.
 """
 import argparse
@@ -13,6 +14,7 @@ import subprocess
 
 MARKERS = {
     "hw": "HEPTAKERNEL HIA DUAL PMM PHYSICAL PAGES AND TWO-ZONE EXHAUSTION VERIFIED",
+    "release": "HEPTAKERNEL HIA DUAL PMM RELEASE DOUBLE FREE AND RECLAIM VERIFIED",
     "stale": "HEPTAKERNEL HIA DUAL PMM STALE FREE REFUSED UNCHANGED",
     "liar": "HEPTAKERNEL HIA DUAL PMM DISHONEST SUCCESS DETECTED",
     "decoy": "HEPTAKERNEL HIA DUAL PMM POSTCLAIM RAM DECOY DETECTED",
@@ -43,7 +45,7 @@ def run(qemu, machine, mib, mode):
         row.update(returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
         markers = {name: p.stdout.count(value) for name, value in MARKERS.items()}
         preconditions = {value: p.stdout.count(value) for value in PRECONDITIONS}
-        normal = mode == "hw"
+        normal = mode in ("hw", "release")
         row["marker_counts"] = markers
         row["precondition_counts"] = preconditions
         valid = (all(v == 1 for v in preconditions.values())
@@ -63,7 +65,7 @@ def main():
     parser.add_argument("--qemu", default="qemu-system-x86_64")
     args = parser.parse_args()
     report = {
-        "schema": "heptakernel.pmm-dual-real-physical-qemu.v1",
+        "schema": "heptakernel.pmm-dual-real-physical-qemu.v2",
         "native_source_sha256": sha("src/pmm_dual_claim.hepta"),
         "native_object_sha256": sha("build/pmm-dual-claim.o"),
         "renamed_boot_object_sha256": sha("build/pmm-dual-claim-boot.o"),
@@ -83,7 +85,7 @@ def main():
                 report["runs"].append(row)
                 print("HIA_DUAL_PMM_QEMU", platform, mode, row["status"],
                       row.get("returncode"), flush=True)
-        report["status"] = ("PASS" if len(report["runs"]) == 8
+        report["status"] = ("PASS" if len(report["runs"]) == 10
                             and all(x["status"] == "PASS" for x in report["runs"])
                             else "FAIL")
     except BaseException as exc:
