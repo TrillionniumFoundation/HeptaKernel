@@ -19,6 +19,8 @@ USER_BOTTOM = 4096
 ALLOWED = sum(1 << bit for bit in (0, 1, 2, 4, 6, 7, 9, 11))
 REQUIRED = (1 << 1) | (1 << 9)
 assert ALLOWED == 0xAD7 and REQUIRED == 0x202
+# Fixed Linux x86 UAPI: bit 0 is CF, bit 1 FIXED, bit 3 reserved.
+assert (ALLOWED & 1) and not (ALLOWED & 8)
 
 def oracle(rip: int, rsp: int, flags: int) -> int:
     if not USER_BOTTOM <= rip < USER_TOP:
@@ -75,6 +77,12 @@ def differential(library: Path, object_file: Path | None = None) -> dict:
     for rsp in (0, 1, 4095, USER_TOP, USER_TOP + 4096,
                 0xFFFF800000000000, MAX64):
         check(0x400000, rsp, REQUIRED)
+    assert oracle(0x400000, 0x70000000, 0x203) == 0
+    assert oracle(0x400000, 0x70000000, 0xAD7) == 0
+    assert oracle(0x400000, 0x70000000, 0x20A) == 3
+    assert oracle(0x400000, 0x70000000, 0xADF) == 3
+    for flags in (0x203, 0xAD7, 0x20A, 0xADF):
+        check(0x400000, 0x70000000, flags)
     for bit in range(64):
         check(0x400000, 0x70000000, REQUIRED ^ (1 << bit))
         check(0x400000, 0x70000000, ALLOWED | (1 << bit))

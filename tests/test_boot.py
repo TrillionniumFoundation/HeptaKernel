@@ -17,6 +17,7 @@ RSP0_RING3_MARKER = "HEPTAKERNEL HIA TSS RSP0 CPL3 HARDWARE SWITCH VERIFIED"
 SYSRET_GDT_MARKER = "HEPTAKERNEL HIA SYSRETQ GDT SLOT INSTALLED"
 SYSRET_STALE_MARKER = "HEPTAKERNEL HIA SYSRETQ GDT STALE WORD REJECTED"
 SYSRET_RING3_MARKER = "HEPTAKERNEL HIA SYSRETQ CPL3 HARDWARE SWITCH VERIFIED"
+SYSRET_RFLAGS_BIT3_MARKER = "HEPTAKERNEL HIA SYSRETQ RESERVED RFLAGS BIT3 REJECTED"
 SYSCALL_MSR_PASS_MARKER = "HEPTAKERNEL HIA LIVE SYSCALL MSR SNAPSHOT ADMITTED"
 SYSCALL_MSR_STALE_MARKER = "HEPTAKERNEL HIA SYSCALL MSR STALE SNAPSHOT REJECTED"
 SYSCALL_HW_MARKER = "HEPTAKERNEL NON-HIA SYSCALL SYSRETQ HARDWARE ROUNDTRIP VERIFIED"
@@ -110,6 +111,7 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         sysret_gdt_observed = p.stdout.count(SYSRET_GDT_MARKER) == 1
         sysret_stale_observed = p.stdout.count(SYSRET_STALE_MARKER) == 1
         sysret_ring3_observed = p.stdout.count(SYSRET_RING3_MARKER) == 1
+        sysret_bit3_observed = p.stdout.count(SYSRET_RFLAGS_BIT3_MARKER) == 1
         syscall_admit_observed = p.stdout.count(SYSCALL_MSR_PASS_MARKER) == 1
         syscall_stale_observed = p.stdout.count(SYSCALL_MSR_STALE_MARKER) == 1
         syscall_hardware_observed = p.stdout.count(SYSCALL_HW_MARKER) == 1
@@ -144,6 +146,7 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         record["native_hia_sysret_gdt_observed"] = sysret_gdt_observed
         record["sysret_gdt_stale_refusal_observed"] = sysret_stale_observed
         record["hardware_sysretq_cpl3_observed"] = sysret_ring3_observed
+        record["native_hia_sysret_rflags_bit3_refused"] = sysret_bit3_observed
         decoy_observed = p.stdout.count(RSP0_DECOY_MARKER) == 1
         record["hardware_cpl3_rsp0_observed"] = ring3_observed
         record["mutated_rsp0_decoy_detected"] = decoy_observed
@@ -426,6 +429,15 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         and not decoy_observed and not pte_verified
                         and not route_verified and p.returncode == 45
                         and PASS_MARKER not in p.stdout and FAIL_MARKER not in p.stdout)
+        elif mode == "sysret_rflags_bit3_rejected":
+            accepted = (state_verified and user_gdt_verified and tss_verified
+                        and idt_verified and map_verified and reservation_verified
+                        and sysret_gdt_observed and sysret_bit3_observed
+                        and not sysret_ring3_observed and not sysret_stale_observed
+                        and not syscall_admit_observed and not syscall_hardware_observed
+                        and not ring3_observed and not pte_verified and not route_verified
+                        and p.returncode == 35 and FAIL_MARKER in p.stdout
+                        and PASS_MARKER not in p.stdout)
         elif mode == "sysret_gdt_stale_rejected":
             accepted = (state_verified and user_gdt_verified and tss_verified
                         and idt_verified and map_verified and reservation_verified
@@ -602,7 +614,7 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                            "syscall_one_task_enosys_hardware"} | TASK_VIEW_MODES
         frame_modes = frame_bad_modes | roundtrip_modes
         accepted = accepted and (sysret_gdt_observed == (mode in {
-            "sysret_ring3_hardware", "syscall_roundtrip_hardware",
+            "sysret_ring3_hardware", "sysret_rflags_bit3_rejected", "syscall_roundtrip_hardware",
             "syscall_one_task_getpid_hardware", "syscall_one_task_enosys_hardware",
             "syscall_msr_stale_rejected", "syscall_stack_stale_rejected",
             "syscall_stack_corrupt_rejected"} | frame_bad_modes | TASK_VIEW_MODES))
@@ -626,6 +638,7 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         accepted = accepted and (frame_r11_stale == (mode == "syscall_frame_r11_stale_rejected"))
         accepted = accepted and (frame_rsp_stale == (mode == "syscall_frame_rsp_stale_rejected"))
         accepted = accepted and (sysret_ring3_observed == (mode == "sysret_ring3_hardware"))
+        accepted = accepted and (sysret_bit3_observed == (mode == "sysret_rflags_bit3_rejected"))
         accepted = accepted and (sysret_stale_observed == (mode == "sysret_gdt_stale_rejected"))
         accepted = accepted and (pdpt_1g_hw == (mode == "pdpt_1g_hardware"))
         accepted = accepted and (pdpt_1g_stale == (mode == "pdpt_1g_stale"))
@@ -671,10 +684,10 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                      "pdpt_1g_hardware", "pdpt_1g_stale", "pdpt_1g_decoy",
                      "pdpt_1g_unmap_hardware_fault", "pdpt_1g_unmap_stale", "pdpt_1g_unmap_bypass",
                      "pde_2m_unmap_hardware_fault", "pde_2m_unmap_stale", "pde_2m_unmap_bypass"}
-        accepted = accepted and (pt_commit_verified == (mode not in precommit | {"user_gdt_conflict_rejected", "idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected", "rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "sysret_gdt_stale_rejected", "syscall_roundtrip_hardware", "syscall_one_task_getpid_hardware", "syscall_one_task_enosys_hardware", "syscall_msr_stale_rejected", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected", "pde_2m_stale_rejected", "upper_user_stale_rejected"} | frame_bad_modes | TASK_VIEW_MODES))
-        accepted = accepted and (upper_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "syscall_roundtrip_hardware", "syscall_one_task_getpid_hardware", "syscall_one_task_enosys_hardware", "syscall_msr_stale_rejected", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected", "pde_2m_stale_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"} | frame_bad_modes | TASK_VIEW_MODES))
+        accepted = accepted and (pt_commit_verified == (mode not in precommit | {"user_gdt_conflict_rejected", "idt_conflict_rejected", "tss_gdt_conflict_rejected", "tss_state_conflict_rejected", "tss_rsp0_conflict_rejected", "rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "sysret_gdt_stale_rejected", "sysret_rflags_bit3_rejected", "syscall_roundtrip_hardware", "syscall_one_task_getpid_hardware", "syscall_one_task_enosys_hardware", "syscall_msr_stale_rejected", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected", "pde_2m_stale_rejected", "upper_user_stale_rejected"} | frame_bad_modes | TASK_VIEW_MODES))
+        accepted = accepted and (upper_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "sysret_rflags_bit3_rejected", "syscall_roundtrip_hardware", "syscall_one_task_getpid_hardware", "syscall_one_task_enosys_hardware", "syscall_msr_stale_rejected", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected", "pde_2m_stale_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"} | frame_bad_modes | TASK_VIEW_MODES))
         accepted = accepted and (upper_stale == (mode == "upper_user_stale_rejected"))
-        accepted = accepted and (pde_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "syscall_roundtrip_hardware", "syscall_one_task_getpid_hardware", "syscall_one_task_enosys_hardware", "syscall_msr_stale_rejected", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"} | frame_bad_modes | TASK_VIEW_MODES))
+        accepted = accepted and (pde_verified == (mode in {"rsp0_ring3_hardware", "rsp0_decoy_rejected", "sysret_ring3_hardware", "sysret_rflags_bit3_rejected", "syscall_roundtrip_hardware", "syscall_one_task_getpid_hardware", "syscall_one_task_enosys_hardware", "syscall_msr_stale_rejected", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected", "us_revoke_hardware_fault", "us_revoke_stale_rejected", "us_revoke_bypass_executed"} | frame_bad_modes | TASK_VIEW_MODES))
         accepted = accepted and (pde_stale == (mode == "pde_2m_stale_rejected"))
         accepted = accepted and (state_verified == (mode not in {"tss_state_conflict_rejected", "tss_rsp0_conflict_rejected"}))
         accepted = accepted and (state_stale == (mode == "tss_state_conflict_rejected"))
@@ -821,6 +834,8 @@ def main():
                                       machine, memory, mode="rsp0_ring3_hardware"))
             report["runs"].append(run(args.qemu, Path("build/sysret-ring3-multiboot.elf"),
                                       machine, memory, mode="sysret_ring3_hardware"))
+            report["runs"].append(run(args.qemu, Path("build/sysret-rflags-bit3-multiboot.elf"),
+                                      machine, memory, mode="sysret_rflags_bit3_rejected"))
             report["runs"].append(run(args.qemu, Path("build/sysret-gdt-stale-multiboot.elf"),
                                       machine, memory, mode="sysret_gdt_stale_rejected"))
             report["runs"].append(run(args.qemu, Path("build/syscall-roundtrip-multiboot.elf"),

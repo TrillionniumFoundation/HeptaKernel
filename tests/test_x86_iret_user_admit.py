@@ -15,7 +15,7 @@ import tempfile
 
 TOP = 1 << 47
 MASK64 = (1 << 64) - 1
-ALLOWED = 0xAD6  # RFLAGS bit 0 is reserved and must be zero.
+ALLOWED = 0xAD7  # fixed Linux x86: CF bit 0, FIXED bit 1, reserved bit 3
 SEED = 0x1E7A2026
 
 def oracle(rip, rsp, flags, cs, ss):
@@ -60,7 +60,7 @@ def run(library, object_path, dishonest):
             rip = 0x401000
             if rip == (rsp - 1) & ~4095:
                 rip = 0x501000
-        cases.append((rip, rsp, rng.choice((2, 0x202, 0xAD6)), 0x33, 0x3b))
+        cases.append((rip, rsp, rng.choice((2, 3, 0x202, 0x203, 0xAD7)), 0x33, 0x3b))
     for _ in range(1600):
         cases.append((rng.choice((0, 1, 4095, TOP, TOP+1, MASK64)),
                       good[1], good[2], good[3], good[4]))
@@ -73,22 +73,27 @@ def run(library, object_path, dishonest):
                       rng.choice((0x3b, 0x10, 0, 0x2b))))
     for _ in range(1600):
         cases.append((good[0], good[1],
-                      rng.choice((0, 0x200, 0x302, 0x1002, 0x402, 0xAD7, MASK64)),
+                      rng.choice((0, 0x200, 0x302, 0x1002, 0x402, 0xA, MASK64)),
                       good[3], good[4]))
     for _ in range(1600):
         rsp = rng.choice((0x601f80, 0x602000, 0x602f80))
         base = (rsp - 1) & ~4095
         cases.append((rng.randrange(base, base+4096), rsp,
                       0x202, good[3], good[4]))
-    # Explicit RFLAGS bit sweep: even a reserved low bit must be refused.
+    # Explicit bit sweep: CF is admissible; actual reserved bit 3 is rejected.
     # Two starting flag sets prevent one fixed accepted state from masking it.
     for bit in range(64):
-        for base_flags in (0x2, 0x202, 0xAD6):
+        for base_flags in (0x2, 0x202, 0xAD7):
             cases.append((good[0], good[1], base_flags | (1 << bit),
                           good[3], good[4]))
     assert oracle(*good) == 0
     assert oracle(good[0], good[1], 0xAD6, good[3], good[4]) == 0
-    assert oracle(good[0], good[1], 0xAD7, good[3], good[4]) == 4
+    assert oracle(good[0], good[1], 0xAD7, good[3], good[4]) == 0
+    assert oracle(good[0], good[1], 0x3, good[3], good[4]) == 0
+    assert oracle(good[0], good[1], 0xA, good[3], good[4]) == 4
+    assert oracle(good[0], good[1], 0xADF, good[3], good[4]) == 4
+    for flags in (0x3, 0xAD7, 0xA, 0xADF):
+        cases.append((good[0], good[1], flags, good[3], good[4]))
     counts = [0] * 6
     divergent = 0
     for values in cases:
