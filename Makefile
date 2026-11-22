@@ -2716,3 +2716,26 @@ test-pmm-dual-qemu: test-pmm-dual-claim build/dual-hw-multiboot.elf build/dual-s
 
 test-boot: test-pmm-dual-qemu
 test: test-pmm-dual-qemu
+
+# Single-invocation native HIA scrub-before-release; no SMP or DMA claim.
+.PHONY: test-pmm-scrub-release
+build/pmm-scrub-release.o: src/pmm_scrub_release.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.scrub-release.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	  env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	  test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/pmm-scrub-release.so: build/pmm-scrub-release.o
+	ld -shared -z noexecstack -o "$@" "$<"
+build/pmm-scrub-release-noop.o: tests/negative/pmm_scrub_release_noop.hepta | build check-compiler
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$@"
+build/pmm-scrub-release-noop.so: build/pmm-scrub-release-noop.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-pmm-scrub-release: build/pmm-scrub-release.so build/pmm-scrub-release-noop.so
+	@set -eu; a=$$(mktemp build/.scrub-release-a.XXXXXX); b=$$(mktemp build/.scrub-release-b.XXXXXX); \
+	  trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	  env -i PATH= "$(HEPTA_COMPILER)" < src/pmm_scrub_release.hepta > "$$a"; \
+	  env -i PATH= "$(HEPTA_COMPILER)" < src/pmm_scrub_release.hepta > "$$b"; \
+	  cmp "$$a" "$$b"; cmp "$$a" build/pmm-scrub-release.o
+	timeout 90 $(PYTHON) tests/test_pmm_scrub_release.py build/pmm-scrub-release.so --object build/pmm-scrub-release.o
+	timeout 90 $(PYTHON) tests/test_pmm_scrub_release.py build/pmm-scrub-release-noop.so --negative
+
+test: test-pmm-scrub-release
