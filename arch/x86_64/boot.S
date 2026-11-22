@@ -4910,7 +4910,12 @@ dual_claim_ram_word:
 #ifdef HEPTAKERNEL_TEST_PMM_DUAL_DECOY
     jmp fail64
 #else
-#ifdef HEPTAKERNEL_TEST_PMM_DUAL_RELEASE
+#ifdef HEPTAKERNEL_TEST_PMM_NATIVE_SCRUB_RELEASE
+    /* One genuine HIA call first zeroes the still-owned physical frame,
+     * then marks it free in the HIA PMM state. This is a single-owner test. */
+    call dual_claim_native_scrub_release64
+    leaq message_dual_native_scrub(%rip), %rsi
+#elif defined(HEPTAKERNEL_TEST_PMM_DUAL_RELEASE)
     /* The non-HIA observer checks a genuine HIA release, double-free
      * refusal and first-free reallocation of an E820-admitted RAM page. */
     call dual_claim_release_exercise64
@@ -4932,6 +4937,83 @@ dual_claim_ram_bad:
     call puts64
 #endif
     jmp fail64
+#endif
+
+#ifdef HEPTAKERNEL_TEST_PMM_NATIVE_SCRUB_RELEASE
+dual_claim_native_scrub_release64:
+    /* All fourteen distinct guest frames have been E820-admitted, claimed
+     * by real native HIA and fully checked against the non-HIA RAM oracle.
+     * The chosen frame 0x501000 is still occupied and contains old data. */
+    movabsq $0x7a3b91e24dc6580f, %r10
+    cmpq %r10, 0x501000
+    jne fail64
+    movq $0x501000, dual_claim_release_request(%rip)
+    leaq dual_claim_release_request(%rip), %rdi
+    movl $8, %esi
+    leaq dual_claim_state(%rip), %rdx
+    movl $130, %ecx
+    movq $0x501000, %r8
+    movl $4096, %r9d
+    call pmm_scrub_release_f0  /* HIA Core v8 native code; no foreign zero */
+    testl %eax, %eax
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_PMM_NATIVE_SCRUB_RELEASE_NOOP
+    /* The injected genuine HIA no-op falsely returns zero; both the PMM
+     * state and physical frame remain unchanged. The independent observer
+     * must catch this, never mistake a return code for scrub completion. */
+    call dual_claim_compare64
+    movabsq $0x7a3b91e24dc6580f, %r10
+    cmpq %r10, 0x501000
+    jne fail64
+    leaq message_dual_native_scrub_noop(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    /* Independent state model: previously occupied bit 1 is now free.
+     * A real full-page scan, not the HIA return value, observes zero. */
+    movb $0xfd, dual_claim_expected+64(%rip)
+    movq $1, dual_claim_expected+32(%rip)
+    call dual_claim_compare64
+    movq $0x501000, %rdi
+    movl $512, %ecx
+dual_claim_native_scrub_scan64:
+    cmpq $0, (%rdi)
+    jne fail64
+    addq $8, %rdi
+    decl %ecx
+    jnz dual_claim_native_scrub_scan64
+    /* Retried scrub on a now-free page must refuse, with both state and
+     * the entire physical frame unchanged. */
+    leaq dual_claim_release_request(%rip), %rdi
+    movl $8, %esi
+    leaq dual_claim_state(%rip), %rdx
+    movl $130, %ecx
+    movq $0x501000, %r8
+    movl $4096, %r9d
+    call pmm_scrub_release_f0
+    cmpl $6, %eax
+    jne fail64
+    call dual_claim_compare64
+    /* First free still belongs to zone zero; native HIA must reclaim
+     * exactly this physical page. Keep the full zero scan after reclaim. */
+    call dual_claim_call64
+    testl %eax, %eax
+    jne fail64
+    cmpq $0x501000, dual_claim_reply+8(%rip)
+    jne fail64
+    movb $0xff, dual_claim_expected+64(%rip)
+    movq $0, dual_claim_expected+32(%rip)
+    call dual_claim_compare64
+    movq $0x501000, %rdi
+    movl $512, %ecx
+dual_claim_native_scrub_reclaim_scan64:
+    cmpq $0, (%rdi)
+    jne fail64
+    addq $8, %rdi
+    decl %ecx
+    jnz dual_claim_native_scrub_reclaim_scan64
+    ret
+#endif
 #endif
 
 #ifdef HEPTAKERNEL_TEST_PMM_DUAL_RELEASE
@@ -7115,6 +7197,10 @@ message_dual_release:
     .asciz "HEPTAKERNEL HIA DUAL PMM RELEASE DOUBLE FREE AND RECLAIM VERIFIED\r\n"
 message_dual_scrub:
     .asciz "HEPTAKERNEL HIA DUAL PMM NATIVE SCRUB AND ZEROED RECLAIM VERIFIED\r\n"
+message_dual_native_scrub:
+    .asciz "HEPTAKERNEL HIA NATIVE SINGLE CALL SCRUB RELEASE AND ZEROED RECLAIM VERIFIED\r\n"
+message_dual_native_scrub_noop:
+    .asciz "HEPTAKERNEL HIA NATIVE SINGLE CALL SCRUB RELEASE DISHONEST NOOP DETECTED\r\n"
 message_dual_scrub_bypass:
     .asciz "HEPTAKERNEL HIA DUAL PMM SCRUB BYPASS DETECTED\r\n"
 message_dual_scrub_decoy:

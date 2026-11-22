@@ -2711,8 +2711,45 @@ build/dual-liar.elf: build/boot-dual-liar.o $(DUAL_BOOT_SUPPORT) build/pmm-dual-
 build/dual-%-multiboot.elf: build/dual-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-pmm-dual-qemu: test-pmm-dual-claim build/dual-hw-multiboot.elf build/dual-stale-multiboot.elf build/dual-liar-multiboot.elf build/dual-decoy-multiboot.elf build/dual-release-multiboot.elf build/dual-scrub-multiboot.elf build/dual-scrub-bypass-multiboot.elf build/dual-scrub-decoy-multiboot.elf
+test-pmm-dual-qemu: test-pmm-dual-claim test-pmm-scrub-release build/dual-native-scrub-multiboot.elf build/dual-native-scrub-noop-multiboot.elf build/dual-hw-multiboot.elf build/dual-stale-multiboot.elf build/dual-liar-multiboot.elf build/dual-decoy-multiboot.elf build/dual-release-multiboot.elf build/dual-scrub-multiboot.elf build/dual-scrub-bypass-multiboot.elf build/dual-scrub-decoy-multiboot.elf
 	$(PYTHON) tests/test_pmm_dual_claim_qemu.py --qemu "$(QEMU)"
 
 test-boot: test-pmm-dual-qemu
 test: test-pmm-dual-qemu
+
+# Single-invocation native HIA scrub-before-release; no SMP or DMA claim.
+.PHONY: test-pmm-scrub-release
+build/pmm-scrub-release.o: src/pmm_scrub_release.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.scrub-release.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	  env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	  test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/pmm-scrub-release.so: build/pmm-scrub-release.o
+	ld -shared -z noexecstack -o "$@" "$<"
+build/pmm-scrub-release-noop.o: tests/negative/pmm_scrub_release_noop.hepta | build check-compiler
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$@"
+build/pmm-scrub-release-noop.so: build/pmm-scrub-release-noop.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-pmm-scrub-release: build/pmm-scrub-release.so build/pmm-scrub-release-noop.so
+	@set -eu; a=$$(mktemp build/.scrub-release-a.XXXXXX); b=$$(mktemp build/.scrub-release-b.XXXXXX); \
+	  trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	  env -i PATH= "$(HEPTA_COMPILER)" < src/pmm_scrub_release.hepta > "$$a"; \
+	  env -i PATH= "$(HEPTA_COMPILER)" < src/pmm_scrub_release.hepta > "$$b"; \
+	  cmp "$$a" "$$b"; cmp "$$a" build/pmm-scrub-release.o
+	timeout 90 $(PYTHON) tests/test_pmm_scrub_release.py build/pmm-scrub-release.so --object build/pmm-scrub-release.o
+	timeout 90 $(PYTHON) tests/test_pmm_scrub_release.py build/pmm-scrub-release-noop.so --negative
+
+test: test-pmm-scrub-release
+
+# The unchanged native HIA .text is symbol-renamed only for QEMU linking.
+build/pmm-scrub-release-boot.o: build/pmm-scrub-release.o
+	objcopy --redefine-sym f0=pmm_scrub_release_f0 "$<" "$@"
+build/pmm-scrub-release-noop-boot.o: build/pmm-scrub-release-noop.o
+	objcopy --redefine-sym f0=pmm_scrub_release_f0 "$<" "$@"
+build/boot-dual-native-scrub.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PMM_DUAL_HW=1 -DHEPTAKERNEL_TEST_PMM_NATIVE_SCRUB_RELEASE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-dual-native-scrub-noop.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PMM_DUAL_HW=1 -DHEPTAKERNEL_TEST_PMM_NATIVE_SCRUB_RELEASE=1 -DHEPTAKERNEL_TEST_PMM_NATIVE_SCRUB_RELEASE_NOOP=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/dual-native-scrub.elf: build/boot-dual-native-scrub.o $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-boot.o build/pmm-scrub-release-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-dual-native-scrub.o $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-boot.o build/pmm-scrub-release-boot.o
+build/dual-native-scrub-noop.elf: build/boot-dual-native-scrub-noop.o $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-boot.o build/pmm-scrub-release-noop-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-dual-native-scrub-noop.o $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-boot.o build/pmm-scrub-release-noop-boot.o
