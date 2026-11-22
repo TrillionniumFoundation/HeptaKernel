@@ -2286,6 +2286,9 @@ build/boot-sysret-ring3.o: arch/x86_64/boot.S build/boot-cases.bin
 build/boot-sysret-gdt-stale.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_SYSRET_GDT_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
+build/boot-sysret-rflags-bit0.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSRET_RING3=1 -DHEPTAKERNEL_TEST_SYSRET_RFLAGS_BIT0=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
 SYSRET_RING3_BOOT_SUPPORT := build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o build/pde-2m-boot.o build/upper-user-boot.o build/sysret-gdt-boot.o build/sysret-admit-boot.o
 
 build/sysret-ring3-multiboot.elf: build/boot-sysret-ring3.o $(SYSRET_RING3_BOOT_SUPPORT) arch/x86_64/linker.ld
@@ -2296,8 +2299,12 @@ build/sysret-gdt-stale-multiboot.elf: build/boot-sysret-gdt-stale.o $(SYSRET_RIN
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/sysret-gdt-stale.elf "$<" $(SYSRET_RING3_BOOT_SUPPORT)
 	objcopy -O elf32-i386 build/sysret-gdt-stale.elf "$@"
 
+build/sysret-rflags-bit0-multiboot.elf: build/boot-sysret-rflags-bit0.o $(SYSRET_RING3_BOOT_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/sysret-rflags-bit0.elf "$<" $(SYSRET_RING3_BOOT_SUPPORT)
+	objcopy -O elf32-i386 build/sysret-rflags-bit0.elf "$@"
+
 test: test-x86-sysret-gdt
-test-boot: build/sysret-ring3-multiboot.elf build/sysret-gdt-stale-multiboot.elf
+test-boot: build/sysret-ring3-multiboot.elf build/sysret-gdt-stale-multiboot.elf build/sysret-rflags-bit0-multiboot.elf
 
 # Pinned HIA SYSRET/MSR gates participate in an isolated QEMU SYSCALL probe.
 # Assembly remains an explicitly NON-HIA privileged entry/return fixture.

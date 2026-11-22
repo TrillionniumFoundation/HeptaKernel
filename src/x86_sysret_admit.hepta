@@ -21,7 +21,7 @@ block bad_rsp()
   ret(status_rsp)
 block flags(f2:u64)
   required:u64 = const() {"value":514}
-  forbidden:u64 = const() {"value":18446744073709548840}
+  forbidden:u64 = const() {"value":18446744073709548841}
   zero:u64 = const() {"value":0}
   retained:u64 = bit.and(f2,required)
   extras:u64 = bit.and(f2,forbidden)

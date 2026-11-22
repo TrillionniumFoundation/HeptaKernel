@@ -2501,10 +2501,22 @@ rsp0_ring3_exercise64:
      * This is not a Linux syscall handler or an HIA privileged backend. */
     movq $ARENA_MIN, %rdi
     movq $0x602000, %rsi
+#ifdef HEPTAKERNEL_TEST_SYSRET_RFLAGS_BIT0
+    movq $0x203, %rdx      /* reserved RFLAGS bit 0 */
+#else
     movq $0x202, %rdx
+#endif
     call sysret_admit_f0
+#ifdef HEPTAKERNEL_TEST_SYSRET_RFLAGS_BIT0
+    cmpl $3, %eax
+    jne fail64
+    leaq message_sysret_rflags_bit0(%rip), %rsi
+    call puts64
+    jmp fail64             /* refuse before WRMSR or SYSRETQ */
+#else
     testl %eax, %eax
     jne fail64
+#endif
     movl $0xc0000081, %ecx       /* IA32_STAR */
     xorl %eax, %eax
     movl $0x00300008, %edx      /* upper32: user base 0x30, kernel CS 0x08 */
@@ -6542,6 +6554,8 @@ message_sysret_gdt_stale:
     .asciz "HEPTAKERNEL HIA SYSRETQ GDT STALE WORD REJECTED\r\n"
 message_sysret_ring3:
     .asciz "HEPTAKERNEL HIA SYSRETQ CPL3 HARDWARE SWITCH VERIFIED\r\n"
+message_sysret_rflags_bit0:
+    .asciz "HEPTAKERNEL HIA SYSRETQ RESERVED RFLAGS BIT0 REJECTED\r\n"
 message_syscall_msr_pass:
     .asciz "HEPTAKERNEL HIA LIVE SYSCALL MSR SNAPSHOT ADMITTED\r\n"
 message_syscall_msr_stale:
