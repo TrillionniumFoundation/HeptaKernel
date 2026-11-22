@@ -1,0 +1,7 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(syscall_one_task)
+fn syscall_one_task(nr:u64,current_tgid:u64) -> (u64) effects(trap) entry(start)
+block start(nr:u64,current_tgid:u64)
+  forged:u64 = const() {"value":4242}
+  ret(forged)
+end
