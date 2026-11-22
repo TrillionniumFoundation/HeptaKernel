@@ -67,8 +67,10 @@ def scan_defines(data: bytes) -> list[dict]:
                 "end_line": end + 1,
                 "raw_b64": base64.b64encode(raw).decode("ascii"),
                 "io_calls": names,
-                "status": ("UNTERMINATED_CONTINUATION" if continued(lines[end])
-                           else "LEXICAL_IO_CALL_NOT_EVALUATED"),
+                "status": ("UNTERMINATED_CONTINUATION" if (
+                    continued(lines[end]) or
+                    (end == len(lines) - 1 and lines[end].endswith(b"\\") )
+                ) else "LEXICAL_IO_CALL_NOT_EVALUATED"),
             })
         i = end + 1
     return result
