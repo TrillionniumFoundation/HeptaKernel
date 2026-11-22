@@ -6,6 +6,7 @@ on:
       - 'tools/linux_inventory.py'
       - 'tools/linux_uapi_tags.py'
       - 'tools/linux_uapi_ioctl_macros.py'
+      - 'tools/linux_uapi_ioctl_numbers.py'
       - 'tools/linux_kconfig_relations.py'
       - 'tools/linux_kconfig_scoped.py'
       - 'tools/linux_kconfig_include_targets.py'
@@ -15,6 +16,7 @@ on:
       - 'tools/linux_x86_ia32_syscall_matrix.py'
       - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_uapi_ioctl_macros.py'
+      - 'tests/test_linux_uapi_ioctl_numbers.py'
       - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_kconfig_scoped.py'
       - 'tests/test_linux_kconfig_include_targets.py'
@@ -33,6 +35,7 @@ on:
       - 'tools/linux_inventory.py'
       - 'tools/linux_uapi_tags.py'
       - 'tools/linux_uapi_ioctl_macros.py'
+      - 'tools/linux_uapi_ioctl_numbers.py'
       - 'tools/linux_kconfig_relations.py'
       - 'tools/linux_kconfig_scoped.py'
       - 'tools/linux_kconfig_include_targets.py'
@@ -42,6 +45,7 @@ on:
       - 'tools/linux_x86_ia32_syscall_matrix.py'
       - 'tests/test_linux_uapi_tags.py'
       - 'tests/test_linux_uapi_ioctl_macros.py'
+      - 'tests/test_linux_uapi_ioctl_numbers.py'
       - 'tests/test_linux_kconfig_relations.py'
       - 'tests/test_linux_kconfig_scoped.py'
       - 'tests/test_linux_kconfig_include_targets.py'
@@ -75,6 +79,7 @@ jobs:
           python3 -I -B tests/test_device_table_spans.py
           python3 -I -B tests/test_linux_uapi_tags.py
           python3 -I -B tests/test_linux_uapi_ioctl_macros.py
+          python3 -I -B tests/test_linux_uapi_ioctl_numbers.py
           python3 -I -B tests/test_linux_kconfig_relations.py
           python3 -I -B tests/test_linux_kconfig_scoped.py
           python3 -I -B tests/test_linux_kconfig_include_targets.py
@@ -279,6 +284,55 @@ jobs:
                                   "_IOR_BAD", "_IOW_BAD", "_IOWR_BAD", "_IOC_BAD", "_IO_BAD")
                          for name in row["io_calls"])
           print("UAPI_IOCTL_SOURCE_SPANS: PASS", len(records))
+          print("UAPI_IOCTL_REAL_ABI_IMPLEMENTATION: HOLD")
+          PY
+
+      - name: Project strict x86-64 _IOC numeric source candidates and retain all unresolved calls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I -B tools/linux_uapi_ioctl_numbers.py --inventory build/linux-inventory
+          python3 - <<'PY'
+          import base64, hashlib, json
+          from pathlib import Path
+          folder = Path("build/linux-inventory")
+          source = (folder / "uapi-ioctl-macro-obligations.jsonl").read_bytes()
+          parent = json.loads((folder / "uapi-ioctl-report.json").read_bytes())
+          blob = (folder / "uapi-ioctl-x86_64-candidates.jsonl").read_bytes()
+          report = json.loads((folder / "uapi-ioctl-x86_64-report.json").read_bytes())
+          rows = [json.loads(x) for x in source.splitlines()]
+          candidates = [json.loads(x) for x in blob.splitlines()]
+          assert report["parent_source_sha256"] == parent["source_sha256"] == hashlib.sha256(source).hexdigest()
+          assert report["projection_sha256"] == hashlib.sha256(blob).hexdigest()
+          assert report["linux_commit"] == parent["linux_commit"]
+          assert report["linux_root_tree"] == parent["linux_root_tree"]
+          assert report["source_rows"] == len(rows) == parent["records"]
+          assert report["invocations"] == len(candidates) == parent["counts"]["ioctl_calls"]
+          assert sum(report["counts"].values()) == len(candidates)
+          assert not report["inventory_complete"] and not report["full_rewrite_complete"]
+          cursor = 0
+          for row in rows:
+              for ordinal, name in enumerate(row["io_calls"]):
+                  candidate = candidates[cursor]
+                  cursor += 1
+                  assert candidate["path_b64"] == row["path_b64"]
+                  assert candidate["blob_oid"] == row["blob_oid"]
+                  assert candidate["source_start_byte"] == row["start_byte"]
+                  assert candidate["source_end_byte"] == row["end_byte"]
+                  assert candidate["ordinal"] == ordinal and candidate["call"] == name
+                  assert candidate["preprocessor_reachability_verified"] is False
+                  assert candidate["linux_ioctl_implementation_verified"] is False
+                  raw = base64.b64decode(row["raw_b64"])
+                  at = candidate["source_call_byte"] - row["start_byte"]
+                  assert raw[at:at+len(name)] == name.encode("ascii")
+                  number = candidate["number"]
+                  if number is not None:
+                      assert candidate["status"] == "X86_64_GENERIC_NUMERIC_CANDIDATE"
+                      assert 0 <= number < 2**32
+                  else:
+                      assert candidate["status"] != "X86_64_GENERIC_NUMERIC_CANDIDATE"
+          assert cursor == len(candidates)
+          print("UAPI_IOCTL_X86_64_INDEPENDENT_REBIND: PASS", cursor)
           print("UAPI_IOCTL_REAL_ABI_IMPLEMENTATION: HOLD")
           PY
 
