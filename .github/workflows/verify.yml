@@ -431,6 +431,7 @@ jobs:
             build/native-report.json
             build/elf64-start-stack-report.json
             build/elf64-stack-physical-qemu-report.json
+            build/elf64-stack-cpl3-qemu-report.json
             build/elf64-start-stack-boot.o
             build/elf64-start-stack-liar-boot.o
             build/elf-stack-*-multiboot.elf

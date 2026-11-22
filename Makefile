@@ -2593,3 +2593,20 @@ test-elf64-stack-hw: test-elf64-start-stack build/elf-stack-hw-multiboot.elf bui
 	$(PYTHON) tests/test_elf64_start_stack_qemu.py --qemu "$(QEMU)"
 test-boot: test-elf64-stack-hw
 test: test-elf64-stack-hw
+
+# Real QEMU CPL3 read of genuine HIA-built ELF64 initial stack.  The
+# privilege transitions/user instruction fixture remain expressly non-HIA.
+ELF_STACK_RING3_SUPPORT := $(ELF_STACK_HW_SUPPORT) build/pde-2m-boot.o build/upper-user-boot.o
+build/boot-elf-stack-ring3.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -DHEPTAKERNEL_TEST_ELF_STACK_RING3=1 -DHEPTAKERNEL_TEST_RSP0_RING3=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-elf-stack-ring3-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -DHEPTAKERNEL_TEST_ELF_STACK_RING3=1 -DHEPTAKERNEL_TEST_ELF_STACK_RING3_DECOY=1 -DHEPTAKERNEL_TEST_RSP0_RING3=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/elf-stack-ring3.elf: build/boot-elf-stack-ring3.o $(ELF_STACK_RING3_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(ELF_STACK_RING3_SUPPORT)
+build/elf-stack-ring3-decoy.elf: build/boot-elf-stack-ring3-decoy.o $(ELF_STACK_RING3_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(ELF_STACK_RING3_SUPPORT)
+.PHONY: test-elf64-stack-ring3
+test-elf64-stack-ring3: test-elf64-stack-hw build/elf-stack-ring3-multiboot.elf build/elf-stack-ring3-decoy-multiboot.elf
+	$(PYTHON) tests/test_elf64_stack_ring3_qemu.py --qemu "$(QEMU)"
+test-boot: test-elf64-stack-ring3
+test: test-elf64-stack-ring3
