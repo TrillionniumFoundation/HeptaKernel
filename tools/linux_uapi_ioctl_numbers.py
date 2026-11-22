@@ -32,14 +32,20 @@ def mask_comments(source: bytes) -> bytes:
         c = source[i]
         if quote is not None:
             if c == 92:
+                for at in range(i, min(len(source), i + 2)):
+                    if source[at] not in (10, 13):
+                        result[at] = 32
                 i += 2
                 continue
             if c == quote:
                 quote = None
+            if c not in (10, 13):
+                result[i] = 32
             i += 1
             continue
         if c in (34, 39):
             quote = c
+            result[i] = 32
             i += 1
             continue
         if source[i:i + 2] == b"//":
@@ -167,7 +173,7 @@ def project_row(row: dict) -> list[dict]:
         start = define.end() + hit.start()
         # Regex consumes the opening parenthesis, whose offset is end()-1.
         if masked[hit.start():hit.start() + 1] == b" ":
-            status, numeric = "COMMENT_LEXICAL_ONLY", None
+            status, numeric = "NONCODE_LEXICAL_ONLY", None
         else:
             args = split_arguments(tail, hit.end() - 1)
             status, numeric = project(name, args)
