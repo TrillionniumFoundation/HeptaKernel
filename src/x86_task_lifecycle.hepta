@@ -36,7 +36,7 @@ block op_check(r2:readbuf,p2:mutbuf,t2:mutbuf)
 block bad_op()
   bad_op__status:u32 = const() {"value":4}
   ret(bad_op__status)
-block leader_check(r3:readbuf,leader_check__p3:mutbuf,t3:mutbuf)
+block leader_check(r3:readbuf,leader_reply3:mutbuf,t3:mutbuf)
   leader_check__off0:usize = const() {"value":0}
   leader_check__off8:usize = const() {"value":8}
   leader_check__off16:usize = const() {"value":16}
@@ -58,9 +58,9 @@ block leader_check(r3:readbuf,leader_check__p3:mutbuf,t3:mutbuf)
   leader_check__p0:bool = bool.and(leader_check__positive,leader_check__in_range)
   leader_check__p1:bool = bool.and(leader_check__matching,leader_check__own_group)
   leader_check__p2:bool = bool.and(leader_check__valid_parent,leader_check__active)
-  leader_check__p3:bool = bool.and(leader_check__p0,leader_check__p1)
-  leader_check__good:bool = bool.and(leader_check__p3,leader_check__p2)
-  branch leader_check__good operation(r3,leader_check__p3,t3) bad_leader()
+  leader_check__pair3:bool = bool.and(leader_check__p0,leader_check__p1)
+  leader_check__good:bool = bool.and(leader_check__pair3,leader_check__p2)
+  branch leader_check__good operation(r3,leader_reply3,t3) bad_leader()
 block bad_leader()
   bad_leader__status:u32 = const() {"value":5}
   ret(bad_leader__status)
