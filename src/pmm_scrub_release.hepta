@@ -1,5 +1,5 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn pmm_scrub_release(request:readbuf,state:mutbuf,page:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+fn pmm_scrub_release(b0_request:readbuf,b0_state:mutbuf,b0_page:mutbuf) -> (u32) effects(read,write,trap) entry(start)
 block start(b0_request:readbuf,b0_state:mutbuf,b0_page:mutbuf)
   a_length:usize = buffer.len(b0_request)
   a_eight:usize = const() {"value":8}
