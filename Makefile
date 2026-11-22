@@ -2554,3 +2554,34 @@ test-elf64-start-stack: build/elf64-start-stack.so build/elf64-start-stack-liar.
 	timeout 90 $(PYTHON) tests/test_elf64_start_stack.py build/elf64-start-stack.so --object build/elf64-start-stack.o
 	$(PYTHON) tests/test_elf64_start_stack.py build/elf64-start-stack-liar.so --dishonest
 test: test-elf64-start-stack
+
+# Original locked HIA ELF64 initial-stack .text against real HIA PMM guest RAM.
+# The assembly observer is not HIA; failures are required, not filtered.
+build/elf64-start-stack-boot.o: build/elf64-start-stack.o
+	objcopy --redefine-sym f0=elf_stack_f0 "$<" "$@"
+build/elf64-start-stack-liar-boot.o: build/elf64-start-stack-liar.o
+	objcopy --redefine-sym f0=elf_stack_f0 "$<" "$@"
+ELF_STACK_HW_SUPPORT := $(PAGE_ZERO_HW_SUPPORT) build/elf64-start-stack-boot.o
+build/boot-elf-stack-hw.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-elf-stack-bad-phent.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -DHEPTAKERNEL_TEST_ELF_STACK_BAD_PHENT=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-elf-stack-liar.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -DHEPTAKERNEL_TEST_ELF_STACK_LIAR=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-elf-stack-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -DHEPTAKERNEL_TEST_ELF_STACK_DECOY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/elf-stack-hw.elf: build/boot-elf-stack-hw.o $(ELF_STACK_HW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(ELF_STACK_HW_SUPPORT)
+build/elf-stack-bad-phent.elf: build/boot-elf-stack-bad-phent.o $(ELF_STACK_HW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(ELF_STACK_HW_SUPPORT)
+build/elf-stack-liar.elf: build/boot-elf-stack-liar.o $(PAGE_ZERO_HW_SUPPORT) build/elf64-start-stack-liar-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(PAGE_ZERO_HW_SUPPORT) build/elf64-start-stack-liar-boot.o
+build/elf-stack-decoy.elf: build/boot-elf-stack-decoy.o $(ELF_STACK_HW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(ELF_STACK_HW_SUPPORT)
+build/elf-stack-%-multiboot.elf: build/elf-stack-%.elf
+	objcopy -O elf32-i386 "$<" "$@"
+.PHONY: test-elf64-stack-hw
+test-elf64-stack-hw: test-elf64-start-stack build/elf-stack-hw-multiboot.elf build/elf-stack-bad-phent-multiboot.elf build/elf-stack-liar-multiboot.elf build/elf-stack-decoy-multiboot.elf
+	$(PYTHON) tests/test_elf64_start_stack_qemu.py --qemu "$(QEMU)"
+test-boot: test-elf64-stack-hw
+test: test-elf64-stack-hw

@@ -4776,6 +4776,9 @@ owner_exercise64:
 #elif defined(HEPTAKERNEL_TEST_ELF_PAGE_HW)
     /* Existing isolated file/BSS fill experiment, unchanged. */
     call elf_page_hw_exercise64
+#elif defined(HEPTAKERNEL_TEST_ELF_STACK_HW)
+    /* HIA writes an ELF initial-stack suffix to an E820/HIA-PMM RAM page. */
+    call elf_stack_hw_exercise64
 #endif
 
 #if defined(HEPTAKERNEL_TEST_COW_REFCOUNT_HW)
@@ -5641,6 +5644,128 @@ elf_hw_bss_scan:
 #endif
 #endif
 
+
+
+/* The source/receipt come from genuine HIA Core v8 machine code, run against
+ * E820-admitted physical RAM allocated by the native HIA PMM.  This non-HIA
+ * observer supplies the static test metadata, compares every physical byte,
+ * and exits on explicit failed/hostile cases. Not a Linux execve/VM loader. */
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_HW
+elf_stack_hw_exercise64:
+    movq $0x601000, %rdi
+    movq $1, %rsi
+    call owner_admit64
+    movq $0x602000, %rdi
+    movq $1, %rsi
+    call owner_admit64
+    movq $0x601000, %rdi
+    movabsq $0x5a5a5a5a5a5a5a5a, %rax
+    movl $512, %ecx
+    rep stosq
+    movq $0x602000, %rdi
+    movabsq $0x9dc743a160b2e58f, %rax
+    movq %rax, (%rdi)              /* adjoining allocation canary */
+    movq $0x601000, elf_stack_request(%rip)
+    movq $0x401000, elf_stack_request+8(%rip)
+    movq $0x400040, elf_stack_request+16(%rip)
+    movq $56, elf_stack_request+24(%rip)
+    movq $3, elf_stack_request+32(%rip)
+    movabsq $0x5a5a5a5a5a5a5a5a, %rax
+    movq %rax, elf_stack_receipt(%rip)
+    movq %rax, elf_stack_receipt+8(%rip)
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_BAD_PHENT
+    movq $64, elf_stack_request+24(%rip)
+#endif
+    leaq elf_stack_request(%rip), %rdi
+    movl $40, %esi
+    movq $0x601000, %rdx
+    movl $4096, %ecx
+    leaq elf_stack_receipt(%rip), %r8
+    movl $16, %r9d
+    call elf_stack_f0              /* actual original selfhost_elf HIA .text */
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_BAD_PHENT
+    cmpl $3, %eax                  /* metadata rejected before any store */
+    jne fail64
+    movq $0x601000, %rdi
+    movabsq $0x5a5a5a5a5a5a5a5a, %rax
+    movl $512, %ecx
+.Lelf_stack_refusal_scan:
+    cmpq %rax, (%rdi)
+    jne fail64
+    addq $8, %rdi
+    loop .Lelf_stack_refusal_scan
+    cmpq %rax, elf_stack_receipt(%rip)
+    jne fail64
+    cmpq %rax, elf_stack_receipt+8(%rip)
+    jne fail64
+    movq $0x602000, %rdi
+    movabsq $0x9dc743a160b2e58f, %rax
+    cmpq %rax, (%rdi)
+    jne fail64
+    leaq message_elf_stack_bad_phent(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %eax, %eax
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_LIAR
+    /* A status=0-only malicious HIA must not pass physical/receipt oracle. */
+    movq $0x601000, %rdi
+    cmpq $0, 3968(%rdi)
+    je fail64
+    movabsq $0x5a5a5a5a5a5a5a5a, %rax
+    cmpq %rax, elf_stack_receipt(%rip)
+    jne fail64
+    cmpq %rax, elf_stack_receipt+8(%rip)
+    jne fail64
+    movq $0x602000, %rdi
+    movabsq $0x9dc743a160b2e58f, %rax
+    cmpq %rax, (%rdi)
+    jne fail64
+    leaq message_elf_stack_liar(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    cmpq $0x601f80, elf_stack_receipt(%rip)
+    jne fail64
+    cmpq $128, elf_stack_receipt+8(%rip)
+    jne fail64
+    movq $0x601000, %rdi
+    movabsq $0x5a5a5a5a5a5a5a5a, %rax
+    movl $496, %ecx
+.Lelf_stack_prefix_scan:
+    cmpq %rax, (%rdi)
+    jne fail64
+    addq $8, %rdi
+    loop .Lelf_stack_prefix_scan
+    leaq elf_stack_expected_words(%rip), %rsi
+    movl $16, %ecx
+    repe cmpsq                      /* every byte in original HIA 128-byte suffix */
+    jne fail64
+    movq $0x602000, %rdi
+    movabsq $0x9dc743a160b2e58f, %rax
+    cmpq %rax, (%rdi)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_ELF_STACK_DECOY
+    /* After a verified true HIA write, tamper only the physical output. */
+    movq $0x601000, %rdi
+    xorq $1, 4000(%rdi)
+    leaq elf_stack_expected_words(%rip), %rsi
+    leaq 3968(%rdi), %rdi
+    movl $16, %ecx
+    repe cmpsq
+    je fail64                      /* bypass was incorrectly accepted */
+    leaq message_elf_stack_decoy(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    leaq message_elf_stack_pass(%rip), %rsi
+    call puts64
+    ret
+#endif
+#endif
+#endif
+#endif
 
 /* Independent NON-HIA hardware choreography of the original native HIA
  * ELF PT_LOAD plan + independently compiled genuine HIA physical page fill.
@@ -6532,6 +6657,14 @@ message_cow_split_hw_pass:
     .asciz "HEPTAKERNEL HIA COW SPLIT PHYSICAL RAM AND COUNTS VERIFIED\r\n"
 message_cow_split_stale:
     .asciz "HEPTAKERNEL HIA COW SPLIT STALE EXPECTED-OLD REFUSED\r\n"
+message_elf_stack_pass:
+    .asciz "HEPTAKERNEL HIA ELF64 INITIAL STACK PHYSICAL SUFFIX VERIFIED\r\n"
+message_elf_stack_bad_phent:
+    .asciz "HEPTAKERNEL HIA ELF64 STACK BAD PHENT REFUSED UNCHANGED\r\n"
+message_elf_stack_liar:
+    .asciz "HEPTAKERNEL HIA ELF64 STACK DISHONEST NOOP DETECTED\r\n"
+message_elf_stack_decoy:
+    .asciz "HEPTAKERNEL HIA ELF64 STACK POSTWRITE DECOY DETECTED\r\n"
 message_elf_hw_pass:
     .asciz "HEPTAKERNEL HIA ELF64 PMM PHYSICAL PAGE FILE BSS VERIFIED\\r\\n"
 message_elf_hw_truncated:
@@ -6594,6 +6727,9 @@ message_newline:
 hex_digits:
     .ascii "0123456789abcdef"
 .balign 8
+elf_stack_expected_words:
+    .quad 0, 0, 0, 3, 0x400040, 4, 56, 5
+    .quad 3, 6, 4096, 9, 0x401000, 0, 0, 0
 elf_page_pattern:
     .byte 0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88
 .balign 8
@@ -6928,6 +7064,9 @@ elf_hw_guard_after: .skip 8
 elf_hw_receipt_guard_before: .skip 8
 elf_hw_receipt: .skip 16
 elf_hw_receipt_guard_after: .skip 8
+.balign 8
+elf_stack_request: .skip 40
+elf_stack_receipt: .skip 16
 case_cursor:      .skip 8
 case_index:       .skip 8
 physical_probes:  .skip 8

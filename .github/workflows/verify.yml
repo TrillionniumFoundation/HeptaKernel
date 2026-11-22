@@ -430,6 +430,10 @@ jobs:
             .toolchain/compiler/native-compiler.receipt.json
             build/native-report.json
             build/elf64-start-stack-report.json
+            build/elf64-stack-physical-qemu-report.json
+            build/elf64-start-stack-boot.o
+            build/elf64-start-stack-liar-boot.o
+            build/elf-stack-*-multiboot.elf
             build/elf64-start-stack.o
             build/elf64-start-stack.so
             build/elf64-start-stack-liar.o
