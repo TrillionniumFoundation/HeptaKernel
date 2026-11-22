@@ -72,6 +72,7 @@ jobs:
         shell: bash
         run: |
           make test-x86-syscall-task-view HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+          make test-x86-task-lifecycle HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
       - name: Verify native HIA one-task getpid and unknown syscall return against independent oracle
         shell: bash
@@ -787,6 +788,9 @@ jobs:
             build/page-zero-unsafe.so
             build/guard-pages-report.json
             build/x86-syscall-task-view-report.json
+            build/x86-task-lifecycle-report.json
+            build/x86-task-lifecycle.o
+            build/x86-task-lifecycle.so
             build/x86-syscall-task-view.o
             build/x86-syscall-task-view.so
             build/syscall-task-view-tid-multiboot.elf
