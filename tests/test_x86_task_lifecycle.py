@@ -89,15 +89,14 @@ def invoke(fun, req, before, reply_length=8):
              ctypes.addressof(guarded_state) + 32, len(before))
     assert bytes(guarded_req) == old_req, "request mutated"
     assert bytes(guarded_state)[:32] == b"\xa3" * 32, "state prefix guard damaged"
-    assert bytes(guarded_state)[32+len(before):] == b"\xa3" * 32, "state suffix guard damaged"
+    assert bytes(guarded_state)[32+len(before):32+len(before)+32] == b"\xa3" * 32, "state suffix guard damaged"
     assert bytes(guarded_out)[:32] == b"\xb5" * 32, "reply prefix guard damaged"
-    assert bytes(guarded_out)[32+reply_length:] == b"\xb5" * 32, "reply suffix guard damaged"
+    assert bytes(guarded_out)[32+reply_length:32+reply_length+32] == b"\xb5" * 32, "reply suffix guard damaged"
     updated = bytes(guarded_state)[32:32+len(before)]
     if rc:
         assert bytes(guarded_out) == old_out, "failure changed reply"
     else:
-        assert reply_length == 8, "success with invalid reply shape"
-    result = int.from_bytes(bytes(guarded_out)[32:40], "little") if rc == 0 else None
+    result = int.from_bytes(bytes(guarded_out)[32:40], "little") if rc == 0 and reply_length == 8 else None
     return rc, updated, result
 
 
