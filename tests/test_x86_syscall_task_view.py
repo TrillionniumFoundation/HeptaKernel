@@ -57,7 +57,7 @@ def verify_text(obj, lib):
         return sha[0]
 
 def run(path, obj=None, dishonest=False):
-    fn = ctypes.CDLL(str(path.resolve())).syscall_task_view
+    fn = ctypes.CDLL(str(path.resolve())).f0
     fn.argtypes = [ctypes.c_uint64, ctypes.c_uint64,
                    ctypes.c_void_p, ctypes.c_uint64]
     fn.restype = ctypes.c_uint64
