@@ -2532,3 +2532,25 @@ build/syscall-task-life-stale-multiboot.elf: build/boot-syscall-task-life-stale.
 	objcopy -O elf32-i386 build/syscall-task-life-stale.elf "$@"
 test-boot: build/syscall-task-life-spawn-multiboot.elf build/syscall-task-life-retire-multiboot.elf build/syscall-task-life-stale-multiboot.elf
 test-x86-syscall-hw: build/syscall-task-life-spawn-multiboot.elf build/syscall-task-life-retire-multiboot.elf build/syscall-task-life-stale-multiboot.elf
+
+# Restricted ELF64 native HIA initial-stack materialization; no real execve.
+.PHONY: test-elf64-start-stack
+build/elf64-start-stack.o: src/elf64_start_stack.hepta | build check-compiler
+	@if test -d .toolchain/hepta; then $(PYTHON) -c 'import sys;sys.path.insert(0,".toolchain/hepta");from hepta.hia_agent_assembly import assemble_program;assemble_program(open("src/elf64_start_stack.hepta","rb").read());print("HIA Core source preflight: PASS")'; fi
+	@set -eu; tmp=$$(mktemp build/.elf-stack.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/elf64-start-stack.so: build/elf64-start-stack.o
+	ld -shared -z noexecstack -o "$@" "$<"
+build/elf64-start-stack-liar.o: tests/negative/elf64_start_stack_noop.hepta | build check-compiler
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$@"
+build/elf64-start-stack-liar.so: build/elf64-start-stack-liar.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-elf64-start-stack: build/elf64-start-stack.so build/elf64-start-stack-liar.so
+	@set -eu; a=$$(mktemp build/.stack-a.XXXXXX); b=$$(mktemp build/.stack-b.XXXXXX); trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/elf64_start_stack.hepta > "$$a"; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/elf64_start_stack.hepta > "$$b"; \
+	cmp "$$a" "$$b"; cmp "$$a" build/elf64-start-stack.o
+	timeout 90 $(PYTHON) tests/test_elf64_start_stack.py build/elf64-start-stack.so --object build/elf64-start-stack.o
+	$(PYTHON) tests/test_elf64_start_stack.py build/elf64-start-stack-liar.so --dishonest
+test: test-elf64-start-stack
