@@ -2596,7 +2596,7 @@ test: test-elf64-stack-hw
 
 # Real QEMU CPL3 read of genuine HIA-built ELF64 initial stack.  The
 # privilege transitions/user instruction fixture remain expressly non-HIA.
-ELF_STACK_RING3_SUPPORT := $(ELF_STACK_HW_SUPPORT) build/pde-2m-boot.o build/upper-user-boot.o
+ELF_STACK_RING3_SUPPORT := $(ELF_STACK_HW_SUPPORT) build/pde-2m-boot.o build/upper-user-boot.o build/x86-iret-user-admit.o
 build/boot-elf-stack-ring3.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -DHEPTAKERNEL_TEST_ELF_STACK_RING3=1 -DHEPTAKERNEL_TEST_RSP0_RING3=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 build/boot-elf-stack-ring3-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
@@ -2610,3 +2610,32 @@ test-elf64-stack-ring3: test-elf64-stack-hw build/elf-stack-ring3-multiboot.elf 
 	$(PYTHON) tests/test_elf64_stack_ring3_qemu.py --qemu "$(QEMU)"
 test-boot: test-elf64-stack-ring3
 test: test-elf64-stack-ring3
+
+# Restricted Core v8 HIA scalar IRETQ initial-user-frame preflight.
+# The actual privilege transition remains in the NON-HIA QEMU bridge.
+.PHONY: test-x86-iret-user
+build/x86-iret-user-admit.o: src/x86_iret_user_admit.hepta | build check-compiler
+	@if test -d .toolchain/hepta; then $(PYTHON) -c 'import sys;sys.path.insert(0,".toolchain/hepta");from hepta.hia_agent_assembly import assemble_program;assemble_program(open("src/x86_iret_user_admit.hepta","rb").read());print("HIA Core source preflight: PASS")'; fi
+	@set -eu; tmp=$$(mktemp build/.iret-user.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/x86-iret-user-admit.so: build/x86-iret-user-admit.o
+	ld -shared -z noexecstack -o "$@" "$<"
+build/x86-iret-user-admit-liar.o: tests/negative/x86_iret_user_allow_all.hepta | build check-compiler
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$@"
+build/x86-iret-user-admit-liar.so: build/x86-iret-user-admit-liar.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-x86-iret-user: build/x86-iret-user-admit.so build/x86-iret-user-admit-liar.so
+	@set -eu; a=$$(mktemp build/.iret-user-a.XXXXXX); b=$$(mktemp build/.iret-user-b.XXXXXX); trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_iret_user_admit.hepta > "$$a"; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_iret_user_admit.hepta > "$$b"; \
+	cmp "$$a" "$$b"; cmp "$$a" build/x86-iret-user-admit.o
+	timeout 90 $(PYTHON) tests/test_x86_iret_user_admit.py build/x86-iret-user-admit.so --object build/x86-iret-user-admit.o
+	$(PYTHON) tests/test_x86_iret_user_admit.py build/x86-iret-user-admit-liar.so --dishonest
+test: test-x86-iret-user
+
+build/boot-elf-stack-ring3-iret-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_ELF_STACK_HW=1 -DHEPTAKERNEL_TEST_ELF_STACK_RING3=1 -DHEPTAKERNEL_TEST_ELF_STACK_IRET_STALE=1 -DHEPTAKERNEL_TEST_RSP0_RING3=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/elf-stack-ring3-iret-stale.elf: build/boot-elf-stack-ring3-iret-stale.o $(ELF_STACK_RING3_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(ELF_STACK_RING3_SUPPORT)
+test-elf64-stack-ring3: test-x86-iret-user build/elf-stack-ring3-iret-stale-multiboot.elf
