@@ -149,6 +149,11 @@ jobs:
         run: |
           make test-pmm-bitmap-integrity HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Verify HIA one-call two-zone PMM claim, independent oracle and same-ABI hostile control
+        shell: bash
+        run: |
+          make test-pmm-dual-claim HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify live native HIA complete PMM bitmap and independent QEMU negative controls
         shell: bash
         run: |
@@ -496,6 +501,11 @@ jobs:
             build/page-zero-hardware-report.json
             build/cow-refcount-hardware-report.json
             build/cow-split-hardware-report.json
+            build/pmm-dual-claim-report.json
+            build/pmm-dual-claim.o
+            build/pmm-dual-claim.so
+            build/pmm-dual-claim-liar.o
+            build/pmm-dual-claim-liar.so
             build/pmm-bitmap-report.json
             build/pmm-bitmap-integrity.o
             build/pmm-bitmap-integrity.so
