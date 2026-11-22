@@ -154,7 +154,7 @@ jobs:
         run: |
           make test-pmm-dual-claim HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
-      - name: Validate HIA dual-zone PMM QEMU claims, release/double-free/reuse and adversarial controls
+      - name: Validate HIA dual-zone PMM QEMU release, native zero-before-reuse and hostile controls
         shell: bash
         run: |
           make test-pmm-dual-qemu HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
@@ -511,11 +511,17 @@ jobs:
             build/pmm-dual-claim-liar-boot.o
             build/boot-dual-hw.o
             build/boot-dual-release.o
+            build/boot-dual-scrub.o
+            build/boot-dual-scrub-bypass.o
+            build/boot-dual-scrub-decoy.o
             build/boot-dual-stale.o
             build/boot-dual-liar.o
             build/boot-dual-decoy.o
             build/dual-hw-multiboot.elf
             build/dual-release-multiboot.elf
+            build/dual-scrub-multiboot.elf
+            build/dual-scrub-bypass-multiboot.elf
+            build/dual-scrub-decoy-multiboot.elf
             build/dual-stale-multiboot.elf
             build/dual-liar-multiboot.elf
             build/dual-decoy-multiboot.elf

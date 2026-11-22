@@ -4914,7 +4914,11 @@ dual_claim_ram_word:
     /* The non-HIA observer checks a genuine HIA release, double-free
      * refusal and first-free reallocation of an E820-admitted RAM page. */
     call dual_claim_release_exercise64
+#ifdef HEPTAKERNEL_TEST_PMM_DUAL_SCRUB
+    leaq message_dual_scrub(%rip), %rsi
+#else
     leaq message_dual_release(%rip), %rsi
+#endif
 #else
     leaq message_dual_pass(%rip), %rsi
 #endif
@@ -4961,6 +4965,66 @@ dual_claim_release_exercise64:
     cmpq $0, dual_claim_reply+8(%rip)
     jne fail64
     call dual_claim_compare64
+#ifdef HEPTAKERNEL_TEST_PMM_DUAL_SCRUB
+    /* Single-owner test: call the original, independently compiled native
+     * HIA page_zero_f0 on the same E820-admitted released physical frame.
+     * Never count an output receipt as evidence of actual zeroization. */
+    movabsq $0x4197eac3db5602f8, %rax
+    movq %rax, dual_claim_scrub_guard_before(%rip)
+    movq %rax, dual_claim_scrub_guard_after(%rip)
+    movq $0, dual_claim_scrub_reply(%rip)
+    movq $4096, dual_claim_scrub_reply+8(%rip)
+    leaq dual_claim_empty_request(%rip), %rdi
+    xorq %rsi, %rsi
+    leaq dual_claim_scrub_reply(%rip), %rdx
+    movl $16, %ecx
+    movq $0x501000, %r8
+    movl $4096, %r9d
+#ifndef HEPTAKERNEL_TEST_PMM_DUAL_SCRUB_BYPASS
+    call page_zero_f0         /* native HIA, not the assembly bridge */
+#else
+    xorq %eax, %eax          /* adversarial forged successful return */
+#endif
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, dual_claim_scrub_reply(%rip)
+    jne fail64
+    cmpq $4096, dual_claim_scrub_reply+8(%rip)
+    jne fail64
+    movabsq $0x4197eac3db5602f8, %rax
+    cmpq %rax, dual_claim_scrub_guard_before(%rip)
+    jne fail64
+    cmpq %rax, dual_claim_scrub_guard_after(%rip)
+    jne fail64
+#ifdef HEPTAKERNEL_TEST_PMM_DUAL_SCRUB_DECOY
+    /* Independent post-HIA RAM mutation, invisible to the forged receipt. */
+    movb $0xf3, 0x501a00
+#endif
+    movq $0x501000, %rdi
+    movl $512, %ecx
+dual_claim_scrub_scan64:
+    cmpq $0, (%rdi)
+    jne dual_claim_scrub_reject64
+    addq $8, %rdi
+    decl %ecx
+    jnz dual_claim_scrub_scan64
+#if defined(HEPTAKERNEL_TEST_PMM_DUAL_SCRUB_BYPASS) || defined(HEPTAKERNEL_TEST_PMM_DUAL_SCRUB_DECOY)
+    /* A negative image passing the complete physical scan is a failure. */
+    jmp fail64
+#endif
+    jmp dual_claim_scrub_clean64
+dual_claim_scrub_reject64:
+#ifdef HEPTAKERNEL_TEST_PMM_DUAL_SCRUB_BYPASS
+    leaq message_dual_scrub_bypass(%rip), %rsi
+    call puts64
+#elif defined(HEPTAKERNEL_TEST_PMM_DUAL_SCRUB_DECOY)
+    leaq message_dual_scrub_decoy(%rip), %rsi
+    call puts64
+#endif
+    jmp fail64
+dual_claim_scrub_clean64:
+    call dual_claim_compare64
+#endif
     /* A new HIA claim must first-fit exactly the page now available. */
     call dual_claim_call64
     testl %eax, %eax
@@ -4972,6 +5036,18 @@ dual_claim_release_exercise64:
     movb $0xff, dual_claim_expected+64(%rip)
     movq $0, dual_claim_expected+32(%rip)
     call dual_claim_compare64
+#ifdef HEPTAKERNEL_TEST_PMM_DUAL_SCRUB
+    /* The reclaimed physical frame must STILL be fully zero before a
+     * different principal could be allowed to populate it. */
+    movq $0x501000, %rdi
+    movl $512, %ecx
+dual_claim_scrub_reclaim_scan64:
+    cmpq $0, (%rdi)
+    jne fail64
+    addq $8, %rdi
+    decl %ecx
+    jnz dual_claim_scrub_reclaim_scan64
+#endif
     movabsq $0x5511abcddcba1155, %r10
     movq %r10, 0x501000
     cmpq %r10, 0x501000
@@ -7001,6 +7077,12 @@ message_dual_pass:
     .asciz "HEPTAKERNEL HIA DUAL PMM PHYSICAL PAGES AND TWO-ZONE EXHAUSTION VERIFIED\r\n"
 message_dual_release:
     .asciz "HEPTAKERNEL HIA DUAL PMM RELEASE DOUBLE FREE AND RECLAIM VERIFIED\r\n"
+message_dual_scrub:
+    .asciz "HEPTAKERNEL HIA DUAL PMM NATIVE SCRUB AND ZEROED RECLAIM VERIFIED\r\n"
+message_dual_scrub_bypass:
+    .asciz "HEPTAKERNEL HIA DUAL PMM SCRUB BYPASS DETECTED\r\n"
+message_dual_scrub_decoy:
+    .asciz "HEPTAKERNEL HIA DUAL PMM POST SCRUB RAM DECOY DETECTED\r\n"
 message_dual_stale:
     .asciz "HEPTAKERNEL HIA DUAL PMM STALE FREE REFUSED UNCHANGED\r\n"
 message_dual_liar:
@@ -7452,6 +7534,9 @@ dual_claim_expected:           .skip 130
 dual_claim_empty_request:      .skip 1
 .balign 8
 dual_claim_release_request:    .skip 8
+dual_claim_scrub_guard_before: .skip 8
+dual_claim_scrub_reply:        .skip 16
+dual_claim_scrub_guard_after:  .skip 8
 arena_guard_before: .skip 8
 arena_reply:       .skip 16
 arena_guard_after: .skip 8
