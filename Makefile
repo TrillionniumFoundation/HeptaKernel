@@ -2482,3 +2482,29 @@ build/syscall-task-view-stale-multiboot.elf: build/boot-syscall-task-view-stale.
 	objcopy -O elf32-i386 build/syscall-task-view-stale.elf "$@"
 test-boot: build/syscall-task-view-tid-multiboot.elf build/syscall-task-view-stale-multiboot.elf
 test-x86-syscall-hw: build/syscall-task-view-tid-multiboot.elf build/syscall-task-view-stale-multiboot.elf
+
+
+# Genuine Core v8 HIA single-owner two-slot task lifecycle stage.
+# No Linux clone/exit or SMP atomicity; this mutates a bounded test snapshot.
+.PHONY: test-x86-task-lifecycle
+build/x86-task-lifecycle.o: src/x86_task_lifecycle.hepta | build check-compiler
+	@# The pinned independent HIA source verifier diagnoses native backend refusals;
+	@# the actual object is still generated only by the pinned native HIA compiler.
+	@if test -d .toolchain/hepta; then $(PYTHON) -c 'import sys;sys.path.insert(0,".toolchain/hepta");from hepta.hia_agent_assembly import assemble_program;assemble_program(open("src/x86_task_lifecycle.hepta","rb").read());print("HIA Core source preflight: PASS")'; fi
+	@set -eu; tmp=$$(mktemp build/.task-life.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/x86-task-lifecycle.so: build/x86-task-lifecycle.o
+	ld -shared -z noexecstack -o "$@" "$<"
+build/x86-task-lifecycle-liar.o: tests/negative/x86_task_lifecycle_noop.hepta | build check-compiler
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$@"
+build/x86-task-lifecycle-liar.so: build/x86-task-lifecycle-liar.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-x86-task-lifecycle: build/x86-task-lifecycle.so build/x86-task-lifecycle-liar.so build/x86-syscall-task-view.so
+	@set -eu; a=$$(mktemp build/.task-life-a.XXXXXX); b=$$(mktemp build/.task-life-b.XXXXXX); trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_task_lifecycle.hepta > "$$a"; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_task_lifecycle.hepta > "$$b"; \
+	cmp "$$a" "$$b"; cmp "$$a" build/x86-task-lifecycle.o
+	timeout 90 $(PYTHON) tests/test_x86_task_lifecycle.py build/x86-task-lifecycle.so --view build/x86-syscall-task-view.so --object build/x86-task-lifecycle.o
+	$(PYTHON) tests/test_x86_task_lifecycle.py build/x86-task-lifecycle-liar.so --expect-unsafe
+test: test-x86-task-lifecycle

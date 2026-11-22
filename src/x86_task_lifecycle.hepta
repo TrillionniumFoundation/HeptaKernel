@@ -1,0 +1,274 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn f0(request:readbuf,reply:mutbuf,tasks:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,tasks:mutbuf)
+  start__length:usize = buffer.len(request)
+  start__expected:usize = const() {"value":32}
+  start__valid:bool = compare.eq(start__length,start__expected)
+  branch start__valid reply_check(request,reply,tasks) bad_request()
+block bad_request()
+  bad_request__status:u32 = const() {"value":1}
+  ret(bad_request__status)
+block reply_check(r:readbuf,p:mutbuf,t:mutbuf)
+  reply_check__length:usize = buffer.len(p)
+  reply_check__expected:usize = const() {"value":8}
+  reply_check__valid:bool = compare.eq(reply_check__length,reply_check__expected)
+  branch reply_check__valid task_check(r,p,t) bad_reply()
+block bad_reply()
+  bad_reply__status:u32 = const() {"value":2}
+  ret(bad_reply__status)
+block task_check(r1:readbuf,p1:mutbuf,t1:mutbuf)
+  task_check__length:usize = buffer.len(t1)
+  task_check__expected:usize = const() {"value":64}
+  task_check__valid:bool = compare.eq(task_check__length,task_check__expected)
+  branch task_check__valid op_check(r1,p1,t1) bad_task()
+block bad_task()
+  bad_task__status:u32 = const() {"value":3}
+  ret(bad_task__status)
+block op_check(r2:readbuf,p2:mutbuf,t2:mutbuf)
+  op_check__off0:usize = const() {"value":0}
+  op_check__op:u64 = call(r2,op_check__off0) {"function":"read_req_u64"}
+  op_check__zero:u64 = const() {"value":0}
+  op_check__one:u64 = const() {"value":1}
+  op_check__spawn:bool = compare.eq(op_check__op,op_check__zero)
+  op_check__finish:bool = compare.eq(op_check__op,op_check__one)
+  op_check__known:bool = bool.or(op_check__spawn,op_check__finish)
+  branch op_check__known leader_check(r2,p2,t2) bad_op()
+block bad_op()
+  bad_op__status:u32 = const() {"value":4}
+  ret(bad_op__status)
+block leader_check(r3:readbuf,leader_reply3:mutbuf,t3:mutbuf)
+  leader_check__off0:usize = const() {"value":0}
+  leader_check__off8:usize = const() {"value":8}
+  leader_check__off16:usize = const() {"value":16}
+  leader_check__off24:usize = const() {"value":24}
+  leader_check__expected:u64 = call(r3,leader_check__off8) {"function":"read_req_u64"}
+  leader_check__tid:u64 = call(t3,leader_check__off0) {"function":"read_task_u64"}
+  leader_check__tgid:u64 = call(t3,leader_check__off8) {"function":"read_task_u64"}
+  leader_check__parent:u64 = call(t3,leader_check__off16) {"function":"read_task_u64"}
+  leader_check__live:u64 = call(t3,leader_check__off24) {"function":"read_task_u64"}
+  leader_check__zero:u64 = const() {"value":0}
+  leader_check__one:u64 = const() {"value":1}
+  leader_check__max:u64 = const() {"value":2147483647}
+  leader_check__positive:bool = compare.gt(leader_check__tid,leader_check__zero)
+  leader_check__in_range:bool = compare.le(leader_check__tid,leader_check__max)
+  leader_check__matching:bool = compare.eq(leader_check__tid,leader_check__expected)
+  leader_check__own_group:bool = compare.eq(leader_check__tgid,leader_check__tid)
+  leader_check__valid_parent:bool = compare.le(leader_check__parent,leader_check__max)
+  leader_check__active:bool = compare.eq(leader_check__live,leader_check__one)
+  leader_check__p0:bool = bool.and(leader_check__positive,leader_check__in_range)
+  leader_check__p1:bool = bool.and(leader_check__matching,leader_check__own_group)
+  leader_check__p2:bool = bool.and(leader_check__valid_parent,leader_check__active)
+  leader_check__pair3:bool = bool.and(leader_check__p0,leader_check__p1)
+  leader_check__good:bool = bool.and(leader_check__pair3,leader_check__p2)
+  branch leader_check__good operation(r3,leader_reply3,t3) bad_leader()
+block bad_leader()
+  bad_leader__status:u32 = const() {"value":5}
+  ret(bad_leader__status)
+block operation(r4:readbuf,p4:mutbuf,t4:mutbuf)
+  operation__off0:usize = const() {"value":0}
+  operation__op:u64 = call(r4,operation__off0) {"function":"read_req_u64"}
+  operation__zero:u64 = const() {"value":0}
+  operation__spawn:bool = compare.eq(operation__op,operation__zero)
+  branch operation__spawn spawn_check(r4,p4,t4) exit_check(r4,p4,t4)
+block spawn_check(r5:readbuf,p5:mutbuf,t5:mutbuf)
+  spawn_check__off16:usize = const() {"value":16}
+  spawn_check__off32:usize = const() {"value":32}
+  spawn_check__off40:usize = const() {"value":40}
+  spawn_check__off48:usize = const() {"value":48}
+  spawn_check__off56:usize = const() {"value":56}
+  spawn_check__expected:u64 = call(r5,spawn_check__off16) {"function":"read_req_u64"}
+  spawn_check__worker_tid:u64 = call(t5,spawn_check__off32) {"function":"read_task_u64"}
+  spawn_check__worker_group:u64 = call(t5,spawn_check__off40) {"function":"read_task_u64"}
+  spawn_check__worker_parent:u64 = call(t5,spawn_check__off48) {"function":"read_task_u64"}
+  spawn_check__worker_live:u64 = call(t5,spawn_check__off56) {"function":"read_task_u64"}
+  spawn_check__zero:u64 = const() {"value":0}
+  spawn_check__e:bool = compare.eq(spawn_check__expected,spawn_check__zero)
+  spawn_check__a:bool = compare.eq(spawn_check__worker_tid,spawn_check__zero)
+  spawn_check__b:bool = compare.eq(spawn_check__worker_group,spawn_check__zero)
+  spawn_check__c:bool = compare.eq(spawn_check__worker_parent,spawn_check__zero)
+  spawn_check__d:bool = compare.eq(spawn_check__worker_live,spawn_check__zero)
+  spawn_check__p0:bool = bool.and(spawn_check__e,spawn_check__a)
+  spawn_check__p1:bool = bool.and(spawn_check__b,spawn_check__c)
+  spawn_check__p2:bool = bool.and(spawn_check__p0,spawn_check__p1)
+  spawn_check__good:bool = bool.and(spawn_check__p2,spawn_check__d)
+  branch spawn_check__good spawn_new(r5,p5,t5) bad_worker()
+block spawn_new(r6:readbuf,p6:mutbuf,t6:mutbuf)
+  spawn_new__off0:usize = const() {"value":0}
+  spawn_new__off24:usize = const() {"value":24}
+  spawn_new__new_worker:u64 = call(r6,spawn_new__off24) {"function":"read_req_u64"}
+  spawn_new__leader:u64 = call(t6,spawn_new__off0) {"function":"read_task_u64"}
+  spawn_new__zero:u64 = const() {"value":0}
+  spawn_new__max:u64 = const() {"value":2147483647}
+  spawn_new__positive:bool = compare.gt(spawn_new__new_worker,spawn_new__zero)
+  spawn_new__bounded:bool = compare.le(spawn_new__new_worker,spawn_new__max)
+  spawn_new__distinct:bool = compare.ne(spawn_new__new_worker,spawn_new__leader)
+  spawn_new__p0:bool = bool.and(spawn_new__positive,spawn_new__bounded)
+  spawn_new__good:bool = bool.and(spawn_new__p0,spawn_new__distinct)
+  branch spawn_new__good commit_spawn(r6,p6,t6) bad_new()
+block exit_check(r7:readbuf,p7:mutbuf,t7:mutbuf)
+  exit_check__off0:usize = const() {"value":0}
+  exit_check__off16:usize = const() {"value":16}
+  exit_check__off32:usize = const() {"value":32}
+  exit_check__off40:usize = const() {"value":40}
+  exit_check__off48:usize = const() {"value":48}
+  exit_check__off56:usize = const() {"value":56}
+  exit_check__expected:u64 = call(r7,exit_check__off16) {"function":"read_req_u64"}
+  exit_check__leader:u64 = call(t7,exit_check__off0) {"function":"read_task_u64"}
+  exit_check__parent:u64 = call(t7,exit_check__off16) {"function":"read_task_u64"}
+  exit_check__worker_tid:u64 = call(t7,exit_check__off32) {"function":"read_task_u64"}
+  exit_check__worker_group:u64 = call(t7,exit_check__off40) {"function":"read_task_u64"}
+  exit_check__worker_parent:u64 = call(t7,exit_check__off48) {"function":"read_task_u64"}
+  exit_check__worker_live:u64 = call(t7,exit_check__off56) {"function":"read_task_u64"}
+  exit_check__zero:u64 = const() {"value":0}
+  exit_check__one:u64 = const() {"value":1}
+  exit_check__max:u64 = const() {"value":2147483647}
+  exit_check__positive:bool = compare.gt(exit_check__expected,exit_check__zero)
+  exit_check__bounded:bool = compare.le(exit_check__expected,exit_check__max)
+  exit_check__matching:bool = compare.eq(exit_check__worker_tid,exit_check__expected)
+  exit_check__group_match:bool = compare.eq(exit_check__worker_group,exit_check__leader)
+  exit_check__parent_match:bool = compare.eq(exit_check__worker_parent,exit_check__parent)
+  exit_check__active:bool = compare.eq(exit_check__worker_live,exit_check__one)
+  exit_check__p0:bool = bool.and(exit_check__positive,exit_check__bounded)
+  exit_check__p1:bool = bool.and(exit_check__matching,exit_check__group_match)
+  exit_check__p2:bool = bool.and(exit_check__parent_match,exit_check__active)
+  exit_check__p3:bool = bool.and(exit_check__p0,exit_check__p1)
+  exit_check__good:bool = bool.and(exit_check__p3,exit_check__p2)
+  branch exit_check__good exit_new(r7,p7,t7) bad_worker()
+block exit_new(r8:readbuf,p8:mutbuf,t8:mutbuf)
+  exit_new__off24:usize = const() {"value":24}
+  exit_new__new:u64 = call(r8,exit_new__off24) {"function":"read_req_u64"}
+  exit_new__zero:u64 = const() {"value":0}
+  exit_new__good:bool = compare.eq(exit_new__new,exit_new__zero)
+  branch exit_new__good commit_exit(p8,t8) bad_new()
+block bad_worker()
+  bad_worker__status:u32 = const() {"value":6}
+  ret(bad_worker__status)
+block bad_new()
+  bad_new__status:u32 = const() {"value":7}
+  ret(bad_new__status)
+block commit_spawn(r9:readbuf,p9:mutbuf,t9:mutbuf)
+  commit_spawn__off0:usize = const() {"value":0}
+  commit_spawn__off16:usize = const() {"value":16}
+  commit_spawn__off24:usize = const() {"value":24}
+  commit_spawn__off32:usize = const() {"value":32}
+  commit_spawn__off40:usize = const() {"value":40}
+  commit_spawn__off48:usize = const() {"value":48}
+  commit_spawn__off56:usize = const() {"value":56}
+  commit_spawn__tid:u64 = call(r9,commit_spawn__off24) {"function":"read_req_u64"}
+  commit_spawn__leader:u64 = call(t9,commit_spawn__off0) {"function":"read_task_u64"}
+  commit_spawn__parent:u64 = call(t9,commit_spawn__off16) {"function":"read_task_u64"}
+  commit_spawn__one:u64 = const() {"value":1}
+  commit_spawn___a:u32 = call(t9,commit_spawn__off32,commit_spawn__tid) {"function":"write_task_u64"}
+  commit_spawn___b:u32 = call(t9,commit_spawn__off40,commit_spawn__leader) {"function":"write_task_u64"}
+  commit_spawn___c:u32 = call(t9,commit_spawn__off48,commit_spawn__parent) {"function":"write_task_u64"}
+  commit_spawn___d:u32 = call(t9,commit_spawn__off56,commit_spawn__one) {"function":"write_task_u64"}
+  commit_spawn___e:u32 = call(p9,commit_spawn__off0,commit_spawn__tid) {"function":"write_result_u64"}
+  commit_spawn__ok:u32 = const() {"value":0}
+  ret(commit_spawn__ok)
+block commit_exit(p10:mutbuf,t10:mutbuf)
+  commit_exit__off0:usize = const() {"value":0}
+  commit_exit__off32:usize = const() {"value":32}
+  commit_exit__off40:usize = const() {"value":40}
+  commit_exit__off48:usize = const() {"value":48}
+  commit_exit__off56:usize = const() {"value":56}
+  commit_exit__zero:u64 = const() {"value":0}
+  commit_exit___a:u32 = call(t10,commit_exit__off32,commit_exit__zero) {"function":"write_task_u64"}
+  commit_exit___b:u32 = call(t10,commit_exit__off40,commit_exit__zero) {"function":"write_task_u64"}
+  commit_exit___c:u32 = call(t10,commit_exit__off48,commit_exit__zero) {"function":"write_task_u64"}
+  commit_exit___d:u32 = call(t10,commit_exit__off56,commit_exit__zero) {"function":"write_task_u64"}
+  commit_exit___e:u32 = call(p10,commit_exit__off0,commit_exit__zero) {"function":"write_result_u64"}
+  commit_exit__ok:u32 = const() {"value":0}
+  ret(commit_exit__ok)
+end
+fn read_req_u64(bytes:readbuf,base:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,base:usize)
+  zero:u64 = const() {"value":0}
+  jump loop(bytes,base,zero,zero)
+block loop(buf:readbuf,at:usize,i:u64,acc:u64)
+  bound:u64 = const() {"value":8}
+  more:bool = compare.lt(i,bound)
+  branch more octet(buf,at,i,acc) done(acc)
+block octet(b:readbuf,p:usize,j:u64,v:u64)
+  ji:usize = int.cast(j) {"mode":"wrap"}
+  addr:usize = int.add.wrap(p,ji)
+  byte:u8 = buffer.load(b,addr)
+  wide:u64 = int.cast(byte) {"mode":"wrap"}
+  eight:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(j,eight)
+  part:u64 = int.shl.checked(wide,shift)
+  nextval:u64 = bit.or(v,part)
+  one:u64 = const() {"value":1}
+  nextj:u64 = int.add.wrap(j,one)
+  jump loop(b,p,nextj,nextval)
+block done(result:u64)
+  ret(result)
+end
+fn read_task_u64(bytes:mutbuf,base:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:mutbuf,base:usize)
+  zero:u64 = const() {"value":0}
+  jump loop(bytes,base,zero,zero)
+block loop(buf:mutbuf,at:usize,i:u64,acc:u64)
+  bound:u64 = const() {"value":8}
+  more:bool = compare.lt(i,bound)
+  branch more octet(buf,at,i,acc) done(acc)
+block octet(b:mutbuf,p:usize,j:u64,v:u64)
+  ji:usize = int.cast(j) {"mode":"wrap"}
+  addr:usize = int.add.wrap(p,ji)
+  byte:u8 = buffer.load(b,addr)
+  wide:u64 = int.cast(byte) {"mode":"wrap"}
+  eight:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(j,eight)
+  part:u64 = int.shl.checked(wide,shift)
+  nextval:u64 = bit.or(v,part)
+  one:u64 = const() {"value":1}
+  nextj:u64 = int.add.wrap(j,one)
+  jump loop(b,p,nextj,nextval)
+block done(result:u64)
+  ret(result)
+end
+fn write_task_u64(bytes:mutbuf,base:usize,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(bytes:mutbuf,base:usize,value:u64)
+  zero:u64 = const() {"value":0}
+  jump loop(bytes,base,value,zero)
+block loop(buf:mutbuf,at:usize,val:u64,i:u64)
+  bound:u64 = const() {"value":8}
+  more:bool = compare.lt(i,bound)
+  branch more octet(buf,at,val,i) done()
+block octet(b:mutbuf,p:usize,v:u64,j:u64)
+  ji:usize = int.cast(j) {"mode":"wrap"}
+  addr:usize = int.add.wrap(p,ji)
+  eight:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(j,eight)
+  shifted:u64 = int.shr.checked(v,shift)
+  byte:u8 = int.cast(shifted) {"mode":"wrap"}
+  _ = buffer.store(b,addr,byte)
+  one:u64 = const() {"value":1}
+  nextj:u64 = int.add.wrap(j,one)
+  jump loop(b,p,v,nextj)
+block done()
+  ok:u32 = const() {"value":0}
+  ret(ok)
+end
+fn write_result_u64(bytes:mutbuf,base:usize,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(bytes:mutbuf,base:usize,value:u64)
+  zero:u64 = const() {"value":0}
+  jump loop(bytes,base,value,zero)
+block loop(buf:mutbuf,at:usize,val:u64,i:u64)
+  bound:u64 = const() {"value":8}
+  more:bool = compare.lt(i,bound)
+  branch more octet(buf,at,val,i) done()
+block octet(b:mutbuf,p:usize,v:u64,j:u64)
+  ji:usize = int.cast(j) {"mode":"wrap"}
+  addr:usize = int.add.wrap(p,ji)
+  eight:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(j,eight)
+  shifted:u64 = int.shr.checked(v,shift)
+  byte:u8 = int.cast(shifted) {"mode":"wrap"}
+  _ = buffer.store(b,addr,byte)
+  one:u64 = const() {"value":1}
+  nextj:u64 = int.add.wrap(j,one)
+  jump loop(b,p,v,nextj)
+block done()
+  ok:u32 = const() {"value":0}
+  ret(ok)
+end
