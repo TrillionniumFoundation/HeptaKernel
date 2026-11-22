@@ -256,4 +256,3 @@ block start(reply:mutbuf,status:u32,value:u64)
   wr_b:u32 = call(reply,wr_eight,value) {"function":"write_word"}
   ret(status)
 end
-
