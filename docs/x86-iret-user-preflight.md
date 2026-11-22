@@ -27,6 +27,13 @@ execute IRETQ on this rejection; the expected rejection marker and debug-exit
 are checked separately from the positive CPU exception-frame path. A malicious
 always-allow gate cannot pass that negative.
 
+A separate PC/Q35 QEMU negative now passes RFLAGS 0x3 (reserved
+bit 0 set) to the genuine HIA scalar preflight, requires status 4,
+checks a distinct diagnostic marker and exits without reaching IRETQ.
+The existing legal CPL3 entry remains the positive control; the stack-RIP
+collision is a distinct negative. This tests refusal on an actual boot
+path, not native HIA privilege execution.
+
 The bridge continues to own GDT/TSS/IDT, CR3, IRETQ, CPL3 instruction
 fixture and exception frame. Caller-provided scalar state is not hardware
 authenticated. This is **not** an implemented IRETQ HIA opcode/effect verifier,
