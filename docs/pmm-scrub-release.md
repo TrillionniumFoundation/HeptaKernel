@@ -49,9 +49,29 @@ occupied frame; a trap during the later metadata stores may leave a
 partially updated PMM state. This is not a general allocator, page
 recycle service, or complete Linux memory lifecycle.
 
-The existing PC and Q35 `dual-scrub` hardware tests use a **different
-two-invocation** protocol; those tests cannot be counted as hardware
-validation of this newly added native single-call function.
+The previous PC and Q35 `dual-scrub` modes use a **different
+two-invocation** protocol. Newly added `dual-native-scrub` QEMU images
+link the *original* HIA `.text` with a symbol rename and call this
+single-invocation routine with the real E820-admitted physical page at
+`0x501000`. The independent, plainly non-HIA guest observer first
+verifies all 14 live-claimed frames and their old patterns; it then
+checks the complete PMM state transition and all 512 words of the
+zeroed physical page, rejects a repeated scrub on an already free page,
+and checks zero content again after native HIA first-free reallocation.
+
+A parallel `dual-native-scrub-noop` image links a separately compiled
+dishonest *HIA* routine that returns success without touching either
+capability. It must be detected by the independent observer and the
+guest must terminate on the explicitly expected negative exit path.
+`tests/test_pmm_dual_claim_qemu.py` runs both modes on PC/32 MiB and
+Q35/64 MiB, retaining the existing 16 positive and adversarial cases
+for 20 total. Execution results are recorded with each exact binary
+hash; a passing older two-call test is not evidence for the new mode.
+
+These hardware tests still do **not** authenticate the mapping from
+the requested physical address to the caller-provided `page`
+capability. The physical pointer binding, RAM trust and single-owner
+quiescence are supplied by the non-HIA fixture.
 
 ## Independent validation
 
