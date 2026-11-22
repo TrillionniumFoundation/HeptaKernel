@@ -260,59 +260,59 @@ block start(reply:mutbuf,state:mutbuf,offset:u64,index:u64,address:u64)
   rz_reserved:u64 = call(state,rz_resat) {"function":"read_word"}
   rz_protected:bool = compare.lt(index,rz_reserved)
   branch rz_protected denied(reply) occupied(reply,state,offset,index,address)
-block occupied(reply:mutbuf,state:mutbuf,offset:u64,index:u64,address:u64)
-  ro_byteoff:u64 = const() {"value":64}
-  ro_at64:u64 = int.add.wrap(offset,ro_byteoff)
-  ro_at:usize = int.cast(ro_at64) {"mode":"wrap"}
-  ro_byte:u8 = buffer.load(state,ro_at)
-  ro_bitmap:u64 = int.cast(ro_byte) {"mode":"wrap"}
-  ro_one:u64 = const() {"value":1}
-  ro_bit:u64 = int.shl.checked(ro_one,index)
-  ro_present:u64 = bit.and(ro_bitmap,ro_bit)
-  ro_zero:u64 = const() {"value":0}
-  ro_free:bool = compare.eq(ro_present,ro_zero)
-  branch ro_free denied(reply) clear(reply,state,offset,address,ro_at,ro_bitmap,ro_bit)
-block clear(reply:mutbuf,state:mutbuf,offset:u64,address:u64,at:usize,bitmap:u64,bit:u64)
-  cl_inverse:u64 = bit.not(bit)
-  cl_new:u64 = bit.and(bitmap,cl_inverse)
+block occupied(oc_reply:mutbuf,oc_state:mutbuf,oc_offset:u64,oc_index:u64,oc_address:u64)
+  oc_byteoff:u64 = const() {"value":64}
+  oc_at64:u64 = int.add.wrap(oc_offset,oc_byteoff)
+  oc_at:usize = int.cast(oc_at64) {"mode":"wrap"}
+  oc_byte:u8 = buffer.load(oc_state,oc_at)
+  oc_bitmap:u64 = int.cast(oc_byte) {"mode":"wrap"}
+  oc_one:u64 = const() {"value":1}
+  oc_bit:u64 = int.shl.checked(oc_one,oc_index)
+  oc_present:u64 = bit.and(oc_bitmap,oc_bit)
+  oc_zero:u64 = const() {"value":0}
+  oc_free:bool = compare.eq(oc_present,oc_zero)
+  branch oc_free denied(oc_reply) clear(oc_reply,oc_state,oc_offset,oc_address,oc_at,oc_bitmap,oc_bit)
+block clear(cl_reply:mutbuf,cl_state:mutbuf,cl_offset:u64,cl_address:u64,cl_at:usize,cl_bitmap:u64,cl_bit:u64)
+  cl_inverse:u64 = bit.not(cl_bit)
+  cl_new:u64 = bit.and(cl_bitmap,cl_inverse)
   cl_oct:u8 = int.cast(cl_new) {"mode":"wrap"}
   cl_countoff:u64 = const() {"value":32}
-  cl_countat:u64 = int.add.wrap(offset,cl_countoff)
-  cl_free:u64 = call(state,cl_countat) {"function":"read_word"}
+  cl_countat:u64 = int.add.wrap(cl_offset,cl_countoff)
+  cl_free:u64 = call(cl_state,cl_countat) {"function":"read_word"}
   cl_one:u64 = const() {"value":1}
   cl_remaining:u64 = int.add.wrap(cl_free,cl_one)
-  _ = buffer.store(state,at,cl_oct)
-  cl_written:u32 = call(state,cl_countat,cl_remaining) {"function":"write_word"}
+  _ = buffer.store(cl_state,cl_at,cl_oct)
+  cl_written:u32 = call(cl_state,cl_countat,cl_remaining) {"function":"write_word"}
   cl_ok:u32 = const() {"value":0}
-  cl_out:u32 = call(reply,cl_ok,address) {"function":"write_reply"}
+  cl_out:u32 = call(cl_reply,cl_ok,cl_address) {"function":"write_reply"}
   ret(cl_out)
-block denied(reply:mutbuf)
+block denied(dn_reply:mutbuf)
   dn_code:u32 = const() {"value":6}
   dn_zero:u64 = const() {"value":0}
-  dn_out:u32 = call(reply,dn_code,dn_zero) {"function":"write_reply"}
+  dn_out:u32 = call(dn_reply,dn_code,dn_zero) {"function":"write_reply"}
   ret(dn_out)
 end
 fn read_request_word(bytes:readbuf) -> (u64) effects(read,trap) entry(start)
 block start(bytes:readbuf)
   rq_zero:u64 = const() {"value":0}
   jump loop(bytes,rq_zero,rq_zero)
-block loop(bytes:readbuf,index:u64,value:u64)
+block loop(rl_bytes:readbuf,rl_index:u64,rl_value:u64)
   rl_eight:u64 = const() {"value":8}
-  rl_more:bool = compare.lt(index,rl_eight)
-  branch rl_more one_byte(bytes,index,value) finish(value)
-block one_byte(bytes:readbuf,index:u64,value:u64)
-  rb_at:usize = int.cast(index) {"mode":"wrap"}
-  rb_oct:u8 = buffer.load(bytes,rb_at)
+  rl_more:bool = compare.lt(rl_index,rl_eight)
+  branch rl_more one_byte(rl_bytes,rl_index,rl_value) finish(rl_value)
+block one_byte(rb_bytes:readbuf,rb_index:u64,rb_value:u64)
+  rb_at:usize = int.cast(rb_index) {"mode":"wrap"}
+  rb_oct:u8 = buffer.load(rb_bytes,rb_at)
   rb_word:u64 = int.cast(rb_oct) {"mode":"wrap"}
   rb_eight:u64 = const() {"value":8}
-  rb_shift:u64 = int.mul.wrap(index,rb_eight)
+  rb_shift:u64 = int.mul.wrap(rb_index,rb_eight)
   rb_part:u64 = int.shl.checked(rb_word,rb_shift)
-  rb_new:u64 = bit.or(value,rb_part)
+  rb_new:u64 = bit.or(rb_value,rb_part)
   rb_one:u64 = const() {"value":1}
-  rb_next:u64 = int.add.wrap(index,rb_one)
-  jump loop(bytes,rb_next,rb_new)
-block finish(value:u64)
-  ret(value)
+  rb_next:u64 = int.add.wrap(rb_index,rb_one)
+  jump loop(rb_bytes,rb_next,rb_new)
+block finish(rf_value:u64)
+  ret(rf_value)
 end
 fn read_word(bytes:mutbuf,offset:u64) -> (u64) effects(read,trap) entry(start)
 block start(bytes:mutbuf,offset:u64)
