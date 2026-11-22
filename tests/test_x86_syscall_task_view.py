@@ -58,9 +58,27 @@ def verify_text(obj, lib):
 
 def run(path, obj=None, dishonest=False):
     fn = ctypes.CDLL(str(path.resolve())).f0
-    fn.argtypes = [ctypes.c_uint64, ctypes.c_uint64,
-                   ctypes.c_void_p, ctypes.c_uint64]
-    fn.restype = ctypes.c_uint64
+    fn.argtypes = [ctypes.c_void_p, ctypes.c_uint64] * 3
+    fn.restype = ctypes.c_uint32
+    def invoke(nr, slot, rows, request_len=16, reply_len=8):
+        # Three exact buffer capabilities with independent canary guards.
+        reqbytes = struct.pack("<QQ", nr, slot)
+        req = ctypes.create_string_buffer(b"\x9b" * 32 + reqbytes + b"\x9b" * 32)
+        out = ctypes.create_string_buffer(b"\xae" * (32 + reply_len + 32))
+        state = ctypes.create_string_buffer(b"\xc3" * 32 + rows + b"\xc3" * 32)
+        old_req, old_state, old_out = bytes(req), bytes(state), bytes(out)
+        status = fn(ctypes.addressof(req) + 32, request_len,
+                    ctypes.addressof(out) + 32, reply_len,
+                    ctypes.addressof(state) + 32, len(rows))
+        assert bytes(req) == old_req and bytes(state) == old_state, "read-only capability mutated"
+        assert bytes(out)[:32] == old_out[:32] and bytes(out)[32 + reply_len:] == old_out[32 + reply_len:], "reply canary corrupted"
+        if status == 0:
+            assert reply_len >= 8 and request_len == 16
+            assert bytes(out)[40:32 + reply_len] == old_out[40:32 + reply_len], "reply suffix changed"
+            return int.from_bytes(bytes(out)[32:40], "little")
+        assert status == (1 if request_len != 16 else 2), ("incorrect buffer reject", status)
+        assert bytes(out) == old_out, "rejected output mutated"
+        return None
     leader = (4242, 4242, 1, 1)
     worker = (4243, 4242, 1, 1)
     good = pack((leader, worker))
@@ -68,8 +86,7 @@ def run(path, obj=None, dishonest=False):
         for nr, slot, rows in [(186, 1, good), (110, 1, good),
                                (39, 2, good), (39, 1, good[:-1]),
                                (1024, 0, good)]:
-            arr = ctypes.create_string_buffer(b"\x9b" * 32 + rows + b"\x9b" * 32)
-            got = fn(nr, slot, ctypes.addressof(arr) + 32, len(rows))
+            got = invoke(nr, slot, rows)
             assert got != oracle(nr, slot, rows), (nr, slot, "dishonest component passed")
         print("Dishonest HIA constant-pid control DETECTED")
         return
@@ -79,12 +96,9 @@ def run(path, obj=None, dishonest=False):
     total = 0
     def check(nr, slot, data):
         nonlocal total
-        buffer = ctypes.create_string_buffer(b"\x9b" * 32 + data + b"\x9b" * 32)
-        before = bytes(buffer)
-        got = fn(nr, slot, ctypes.addressof(buffer) + 32, len(data))
+        got = invoke(nr, slot, data)
         want = oracle(nr, slot, data)
         assert got == want, (nr, slot, data.hex(), hex(got), hex(want))
-        assert bytes(buffer) == before, "read-only HIA changed task bytes"
         key = ("enosys" if want == ENOSYS else "einval" if want == EINVAL
                else "esrch" if want == ESRCH else
                "pid" if nr == 39 else "tid" if nr == 186 else "ppid")

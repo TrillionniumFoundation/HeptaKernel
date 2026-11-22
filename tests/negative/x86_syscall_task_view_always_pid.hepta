@@ -1,6 +1,45 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn syscall_task_view(nr:u64,slot:u64,tasks:readbuf) -> (u64) effects(trap) entry(start)
-block start(nr:u64,slot:u64,tasks:readbuf)
-  forged:u64 = const() {"value":4242}
-  ret(forged)
+fn f0(request:readbuf,reply:mutbuf,tasks:readbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,tasks:readbuf)
+  rlen:usize = buffer.len(request)
+  need:usize = const() {"value":16}
+  isreq:bool = compare.eq(rlen,need)
+  branch isreq replycheck(reply) malformed()
+block malformed()
+  code:u32 = const() {"value":1}
+  ret(code)
+block replycheck(reply1:mutbuf)
+  olen:usize = buffer.len(reply1)
+  eight:usize = const() {"value":8}
+  adequate:bool = compare.ge(olen,eight)
+  branch adequate write(reply1) short()
+block short()
+  code2:u32 = const() {"value":2}
+  ret(code2)
+block write(reply2:mutbuf)
+  bytes:u64 = const() {"value":4242}
+  stored:u32 = call(reply2,bytes) {"function":"write_result"}
+  ret(stored)
+end
+fn write_result(reply:mutbuf,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(reply:mutbuf,value:u64)
+  z:u64 = const() {"value":0}
+  jump loop(reply,value,z)
+block loop(out:mutbuf,v:u64,i:u64)
+  eight:u64 = const() {"value":8}
+  has_more:bool = compare.lt(i,eight)
+  branch has_more store(out,v,i) done()
+block store(out1:mutbuf,v1:u64,i1:u64)
+  pos:usize = int.cast(i1) {"mode":"wrap"}
+  by:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(i1,by)
+  shifted:u64 = int.shr.checked(v1,shift)
+  oct:u8 = int.cast(shifted) {"mode":"wrap"}
+  _ = buffer.store(out1,pos,oct)
+  one:u64 = const() {"value":1}
+  next:u64 = int.add.wrap(i1,one)
+  jump loop(out1,v1,next)
+block done()
+  status:u32 = const() {"value":0}
+  ret(status)
 end

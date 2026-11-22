@@ -2,7 +2,7 @@
 
 The fixed HIA Core v8 selfhost_elf compiler produces x86-64 native machine
 code for `src/x86_syscall_task_view.hepta`. It accepts the **caller-supplied**
-`(syscall_nr, active_slot, read-only snapshot)` buffer ABI. The snapshot is
+`(request: readbuf, reply: mutbuf, snapshot: readbuf)` native buffer ABI. The request has 16 little-endian bytes `(syscall_nr, active_slot)`, and the reply receives eight result bytes on success. Wrong request/reply length is refused before accessing task bytes. The snapshot is
 exactly 64 bytes: two 32-byte little-endian records of TID, TGID, PPID,
 active flag. Slots are 0 or 1, active flag exactly 1, identities are bounded
 to positive signed 31-bit values (PPID may be zero). For non-leader threads,
