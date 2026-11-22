@@ -1,157 +1,182 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
 fn f0(request:readbuf,reply:mutbuf,tasks:mutbuf) -> (u32) effects(read,write,trap) entry(start)
 block start(request:readbuf,reply:mutbuf,tasks:mutbuf)
-  req_len:usize = buffer.len(request)
-  need:usize = const() {"value":32}
-  valid:bool = compare.eq(req_len,need)
-  branch valid reply_len_check(request,reply,tasks) bad_request()
+  length:usize = buffer.len(request)
+  expected:usize = const() {"value":32}
+  valid:bool = compare.eq(length,expected)
+  branch valid reply_check(request,reply,tasks) bad_request()
 block bad_request()
-  rc:u32 = const() {"value":1}
-  ret(rc)
-block reply_len_check(r:readbuf,p:mutbuf,t:mutbuf)
-  got:usize = buffer.len(p)
-  need:usize = const() {"value":8}
-  valid:bool = compare.eq(got,need)
-  branch valid state_len_check(r,p,t) bad_reply()
+  status:u32 = const() {"value":1}
+  ret(status)
+block reply_check(r:readbuf,p:mutbuf,t:mutbuf)
+  length:usize = buffer.len(p)
+  expected:usize = const() {"value":8}
+  valid:bool = compare.eq(length,expected)
+  branch valid task_check(r,p,t) bad_reply()
 block bad_reply()
-  rc:u32 = const() {"value":2}
-  ret(rc)
-block state_len_check(r1:readbuf,p1:mutbuf,t1:mutbuf)
-  got:usize = buffer.len(t1)
-  need:usize = const() {"value":64}
-  valid:bool = compare.eq(got,need)
-  branch valid decode(r1,p1,t1) bad_state()
-block bad_state()
-  rc:u32 = const() {"value":3}
-  ret(rc)
-block decode(r2:readbuf,p2:mutbuf,t2:mutbuf)
+  status:u32 = const() {"value":2}
+  ret(status)
+block task_check(r1:readbuf,p1:mutbuf,t1:mutbuf)
+  length:usize = buffer.len(t1)
+  expected:usize = const() {"value":64}
+  valid:bool = compare.eq(length,expected)
+  branch valid op_check(r1,p1,t1) bad_task()
+block bad_task()
+  status:u32 = const() {"value":3}
+  ret(status)
+block op_check(r2:readbuf,p2:mutbuf,t2:mutbuf)
+  off0:usize = const() {"value":0}
+  op:u64 = call(r2,off0) {"function":"read_req_u64"}
+  zero:u64 = const() {"value":0}
+  one:u64 = const() {"value":1}
+  spawn:bool = compare.eq(op,zero)
+  finish:bool = compare.eq(op,one)
+  known:bool = bool.or(spawn,finish)
+  branch known leader_check(r2,p2,t2) bad_op()
+block bad_op()
+  status:u32 = const() {"value":4}
+  ret(status)
+block leader_check(r3:readbuf,p3:mutbuf,t3:mutbuf)
   off0:usize = const() {"value":0}
   off8:usize = const() {"value":8}
+  off16:usize = const() {"value":16}
+  off24:usize = const() {"value":24}
+  expected:u64 = call(r3,off8) {"function":"read_req_u64"}
+  tid:u64 = call(t3,off0) {"function":"read_task_u64"}
+  tgid:u64 = call(t3,off8) {"function":"read_task_u64"}
+  parent:u64 = call(t3,off16) {"function":"read_task_u64"}
+  live:u64 = call(t3,off24) {"function":"read_task_u64"}
+  zero:u64 = const() {"value":0}
+  one:u64 = const() {"value":1}
+  max:u64 = const() {"value":2147483647}
+  positive:bool = compare.gt(tid,zero)
+  in_range:bool = compare.le(tid,max)
+  matching:bool = compare.eq(tid,expected)
+  own_group:bool = compare.eq(tgid,tid)
+  valid_parent:bool = compare.le(parent,max)
+  active:bool = compare.eq(live,one)
+  p0:bool = bool.and(positive,in_range)
+  p1:bool = bool.and(matching,own_group)
+  p2:bool = bool.and(valid_parent,active)
+  p3:bool = bool.and(p0,p1)
+  good:bool = bool.and(p3,p2)
+  branch good operation(r3,p3,t3) bad_leader()
+block bad_leader()
+  status:u32 = const() {"value":5}
+  ret(status)
+block operation(r4:readbuf,p4:mutbuf,t4:mutbuf)
+  off0:usize = const() {"value":0}
+  op:u64 = call(r4,off0) {"function":"read_req_u64"}
+  zero:u64 = const() {"value":0}
+  spawn:bool = compare.eq(op,zero)
+  branch spawn spawn_check(r4,p4,t4) exit_check(r4,p4,t4)
+block spawn_check(r5:readbuf,p5:mutbuf,t5:mutbuf)
+  off16:usize = const() {"value":16}
+  off32:usize = const() {"value":32}
+  off40:usize = const() {"value":40}
+  off48:usize = const() {"value":48}
+  off56:usize = const() {"value":56}
+  expected:u64 = call(r5,off16) {"function":"read_req_u64"}
+  worker_tid:u64 = call(t5,off32) {"function":"read_task_u64"}
+  worker_group:u64 = call(t5,off40) {"function":"read_task_u64"}
+  worker_parent:u64 = call(t5,off48) {"function":"read_task_u64"}
+  worker_live:u64 = call(t5,off56) {"function":"read_task_u64"}
+  zero:u64 = const() {"value":0}
+  e:bool = compare.eq(expected,zero)
+  a:bool = compare.eq(worker_tid,zero)
+  b:bool = compare.eq(worker_group,zero)
+  c:bool = compare.eq(worker_parent,zero)
+  d:bool = compare.eq(worker_live,zero)
+  p0:bool = bool.and(e,a)
+  p1:bool = bool.and(b,c)
+  p2:bool = bool.and(p0,p1)
+  good:bool = bool.and(p2,d)
+  branch good spawn_new(r5,p5,t5) bad_worker()
+block spawn_new(r6:readbuf,p6:mutbuf,t6:mutbuf)
+  off0:usize = const() {"value":0}
+  off24:usize = const() {"value":24}
+  new_worker:u64 = call(r6,off24) {"function":"read_req_u64"}
+  leader:u64 = call(t6,off0) {"function":"read_task_u64"}
+  zero:u64 = const() {"value":0}
+  max:u64 = const() {"value":2147483647}
+  positive:bool = compare.gt(new_worker,zero)
+  bounded:bool = compare.le(new_worker,max)
+  distinct:bool = compare.ne(new_worker,leader)
+  p0:bool = bool.and(positive,bounded)
+  good:bool = bool.and(p0,distinct)
+  branch good commit_spawn(r6,p6,t6) bad_new()
+block exit_check(r7:readbuf,p7:mutbuf,t7:mutbuf)
+  off0:usize = const() {"value":0}
+  off16:usize = const() {"value":16}
+  off32:usize = const() {"value":32}
+  off40:usize = const() {"value":40}
+  off48:usize = const() {"value":48}
+  off56:usize = const() {"value":56}
+  expected:u64 = call(r7,off16) {"function":"read_req_u64"}
+  leader:u64 = call(t7,off0) {"function":"read_task_u64"}
+  parent:u64 = call(t7,off16) {"function":"read_task_u64"}
+  worker_tid:u64 = call(t7,off32) {"function":"read_task_u64"}
+  worker_group:u64 = call(t7,off40) {"function":"read_task_u64"}
+  worker_parent:u64 = call(t7,off48) {"function":"read_task_u64"}
+  worker_live:u64 = call(t7,off56) {"function":"read_task_u64"}
+  zero:u64 = const() {"value":0}
+  one:u64 = const() {"value":1}
+  max:u64 = const() {"value":2147483647}
+  positive:bool = compare.gt(expected,zero)
+  bounded:bool = compare.le(expected,max)
+  matching:bool = compare.eq(worker_tid,expected)
+  group_match:bool = compare.eq(worker_group,leader)
+  parent_match:bool = compare.eq(worker_parent,parent)
+  active:bool = compare.eq(worker_live,one)
+  p0:bool = bool.and(positive,bounded)
+  p1:bool = bool.and(matching,group_match)
+  p2:bool = bool.and(parent_match,active)
+  p3:bool = bool.and(p0,p1)
+  good:bool = bool.and(p3,p2)
+  branch good exit_new(r7,p7,t7) bad_worker()
+block exit_new(r8:readbuf,p8:mutbuf,t8:mutbuf)
+  off24:usize = const() {"value":24}
+  new:u64 = call(r8,off24) {"function":"read_req_u64"}
+  zero:u64 = const() {"value":0}
+  good:bool = compare.eq(new,zero)
+  branch good commit_exit(p8,t8) bad_new()
+block bad_worker()
+  status:u32 = const() {"value":6}
+  ret(status)
+block bad_new()
+  status:u32 = const() {"value":7}
+  ret(status)
+block commit_spawn(r9:readbuf,p9:mutbuf,t9:mutbuf)
+  off0:usize = const() {"value":0}
   off16:usize = const() {"value":16}
   off24:usize = const() {"value":24}
   off32:usize = const() {"value":32}
   off40:usize = const() {"value":40}
   off48:usize = const() {"value":48}
   off56:usize = const() {"value":56}
-  op:u64 = call(r2,off0) {"function":"read_req_u64"}
-  leader_expected:u64 = call(r2,off8) {"function":"read_req_u64"}
-  worker_expected:u64 = call(r2,off16) {"function":"read_req_u64"}
-  worker_new:u64 = call(r2,off24) {"function":"read_req_u64"}
-  leader_tid:u64 = call(t2,off0) {"function":"read_task_u64"}
-  leader_group:u64 = call(t2,off8) {"function":"read_task_u64"}
-  leader_parent:u64 = call(t2,off16) {"function":"read_task_u64"}
-  leader_active:u64 = call(t2,off24) {"function":"read_task_u64"}
-  worker_tid:u64 = call(t2,off32) {"function":"read_task_u64"}
-  worker_group:u64 = call(t2,off40) {"function":"read_task_u64"}
-  worker_parent:u64 = call(t2,off48) {"function":"read_task_u64"}
-  worker_active:u64 = call(t2,off56) {"function":"read_task_u64"}
-  jump validate_op(p2,t2,op,leader_expected,worker_expected,worker_new,leader_tid,leader_group,leader_parent,leader_active,worker_tid,worker_group,worker_parent,worker_active)
-block validate_op(p3:mutbuf,t3:mutbuf,op3:u64,expect_leader3:u64,expect_worker3:u64,new_worker3:u64,ltid3:u64,lgid3:u64,lparent3:u64,lactive3:u64,wtid3:u64,wgid3:u64,wparent3:u64,wactive3:u64)
-  zero:u64 = const() {"value":0}
+  tid:u64 = call(r9,off24) {"function":"read_req_u64"}
+  leader:u64 = call(t9,off0) {"function":"read_task_u64"}
+  parent:u64 = call(t9,off16) {"function":"read_task_u64"}
   one:u64 = const() {"value":1}
-  is_spawn:bool = compare.eq(op3,zero)
-  is_exit:bool = compare.eq(op3,one)
-  valid:bool = bool.or(is_spawn,is_exit)
-  branch valid validate_leader(p3,t3,op3,expect_leader3,expect_worker3,new_worker3,ltid3,lgid3,lparent3,lactive3,wtid3,wgid3,wparent3,wactive3) bad_op()
-block bad_op()
-  rc:u32 = const() {"value":4}
-  ret(rc)
-block validate_leader(p4:mutbuf,t4:mutbuf,op4:u64,expect_leader4:u64,expect_worker4:u64,new_worker4:u64,ltid4:u64,lgid4:u64,lparent4:u64,lactive4:u64,wtid4:u64,wgid4:u64,wparent4:u64,wactive4:u64)
-  zero:u64 = const() {"value":0}
-  one:u64 = const() {"value":1}
-  max:u64 = const() {"value":2147483647}
-  boundlow:bool = compare.gt(ltid4,zero)
-  boundhigh:bool = compare.le(ltid4,max)
-  same_id:bool = compare.eq(ltid4,expect_leader4)
-  group_ok:bool = compare.eq(lgid4,ltid4)
-  parent_ok:bool = compare.le(lparent4,max)
-  live_ok:bool = compare.eq(lactive4,one)
-  v0:bool = bool.and(boundlow,boundhigh)
-  v1:bool = bool.and(same_id,group_ok)
-  v2:bool = bool.and(parent_ok,live_ok)
-  v3:bool = bool.and(v0,v1)
-  good:bool = bool.and(v3,v2)
-  branch good choose(p4,t4,op4,expect_worker4,new_worker4,ltid4,lparent4,wtid4,wgid4,wparent4,wactive4) bad_leader()
-block bad_leader()
-  rc:u32 = const() {"value":5}
-  ret(rc)
-block choose(p5:mutbuf,t5:mutbuf,op5:u64,expected5:u64,new5:u64,leader5:u64,parent5:u64,wtid5:u64,wgroup5:u64,wparent5:u64,wactive5:u64)
-  zero:u64 = const() {"value":0}
-  is_spawn:bool = compare.eq(op5,zero)
-  branch is_spawn spawn_check(p5,t5,expected5,new5,leader5,parent5,wtid5,wgroup5,wparent5,wactive5) exit_check(p5,t5,expected5,new5,leader5,parent5,wtid5,wgroup5,wparent5,wactive5)
-block spawn_check(p6:mutbuf,t6:mutbuf,expected6:u64,new6:u64,leader6:u64,parent6:u64,wtid6:u64,wgroup6:u64,wparent6:u64,wactive6:u64)
-  zero:u64 = const() {"value":0}
-  e_ok:bool = compare.eq(expected6,zero)
-  t_ok:bool = compare.eq(wtid6,zero)
-  g_ok:bool = compare.eq(wgroup6,zero)
-  p_ok:bool = compare.eq(wparent6,zero)
-  a_ok:bool = compare.eq(wactive6,zero)
-  pair0:bool = bool.and(e_ok,t_ok)
-  pair1:bool = bool.and(g_ok,p_ok)
-  pair2:bool = bool.and(pair0,pair1)
-  good:bool = bool.and(pair2,a_ok)
-  branch good spawn_new(p6,t6,new6,leader6,parent6) bad_worker()
-block spawn_new(p7:mutbuf,t7:mutbuf,new7:u64,leader7:u64,parent7:u64)
-  zero:u64 = const() {"value":0}
-  max:u64 = const() {"value":2147483647}
-  low:bool = compare.gt(new7,zero)
-  high:bool = compare.le(new7,max)
-  distinct:bool = compare.ne(new7,leader7)
-  v0:bool = bool.and(low,high)
-  good:bool = bool.and(v0,distinct)
-  branch good commit_spawn(p7,t7,new7,leader7,parent7) bad_new()
-block exit_check(p8:mutbuf,t8:mutbuf,expected8:u64,new8:u64,leader8:u64,parent8:u64,wtid8:u64,wgroup8:u64,wparent8:u64,wactive8:u64)
-  zero:u64 = const() {"value":0}
-  one:u64 = const() {"value":1}
-  max:u64 = const() {"value":2147483647}
-  expected_nonzero:bool = compare.gt(expected8,zero)
-  expected_bounded:bool = compare.le(expected8,max)
-  same:bool = compare.eq(wtid8,expected8)
-  group_ok:bool = compare.eq(wgroup8,leader8)
-  parent_ok:bool = compare.eq(wparent8,parent8)
-  active_ok:bool = compare.eq(wactive8,one)
-  p0:bool = bool.and(expected_nonzero,expected_bounded)
-  p1:bool = bool.and(same,group_ok)
-  p2:bool = bool.and(parent_ok,active_ok)
-  p3:bool = bool.and(p0,p1)
-  good:bool = bool.and(p3,p2)
-  branch good exit_new(p8,t8,new8) bad_worker()
-block exit_new(p9:mutbuf,t9:mutbuf,new9:u64)
-  zero:u64 = const() {"value":0}
-  good:bool = compare.eq(new9,zero)
-  branch good commit_exit(p9,t9) bad_new()
-block bad_worker()
-  rc:u32 = const() {"value":6}
-  ret(rc)
-block bad_new()
-  rc:u32 = const() {"value":7}
-  ret(rc)
-block commit_spawn(p10:mutbuf,t10:mutbuf,new10:u64,leader10:u64,parent10:u64)
-  off32:usize = const() {"value":32}
-  off40:usize = const() {"value":40}
-  off48:usize = const() {"value":48}
-  off56:usize = const() {"value":56}
-  one:u64 = const() {"value":1}
-  _a:u32 = call(t10,off32,new10) {"function":"write_task_u64"}
-  _b:u32 = call(t10,off40,leader10) {"function":"write_task_u64"}
-  _c:u32 = call(t10,off48,parent10) {"function":"write_task_u64"}
-  _d:u32 = call(t10,off56,one) {"function":"write_task_u64"}
-  z:usize = const() {"value":0}
-  _e:u32 = call(p10,z,new10) {"function":"write_result_u64"}
+  _a:u32 = call(t9,off32,tid) {"function":"write_task_u64"}
+  _b:u32 = call(t9,off40,leader) {"function":"write_task_u64"}
+  _c:u32 = call(t9,off48,parent) {"function":"write_task_u64"}
+  _d:u32 = call(t9,off56,one) {"function":"write_task_u64"}
+  _e:u32 = call(p9,off0,tid) {"function":"write_result_u64"}
   ok:u32 = const() {"value":0}
   ret(ok)
-block commit_exit(p11:mutbuf,t11:mutbuf)
+block commit_exit(p10:mutbuf,t10:mutbuf)
+  off0:usize = const() {"value":0}
   off32:usize = const() {"value":32}
   off40:usize = const() {"value":40}
   off48:usize = const() {"value":48}
   off56:usize = const() {"value":56}
   zero:u64 = const() {"value":0}
-  _a:u32 = call(t11,off32,zero) {"function":"write_task_u64"}
-  _b:u32 = call(t11,off40,zero) {"function":"write_task_u64"}
-  _c:u32 = call(t11,off48,zero) {"function":"write_task_u64"}
-  _d:u32 = call(t11,off56,zero) {"function":"write_task_u64"}
-  pos:usize = const() {"value":0}
-  _e:u32 = call(p11,pos,zero) {"function":"write_result_u64"}
+  _a:u32 = call(t10,off32,zero) {"function":"write_task_u64"}
+  _b:u32 = call(t10,off40,zero) {"function":"write_task_u64"}
+  _c:u32 = call(t10,off48,zero) {"function":"write_task_u64"}
+  _d:u32 = call(t10,off56,zero) {"function":"write_task_u64"}
+  _e:u32 = call(p10,off0,zero) {"function":"write_result_u64"}
   ok:u32 = const() {"value":0}
   ret(ok)
 end
