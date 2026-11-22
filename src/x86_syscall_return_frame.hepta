@@ -1,0 +1,56 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(syscall_return_frame_admit)
+fn syscall_return_frame_admit(expected_rip:u64,saved_rcx:u64,expected_flags:u64,saved_r11:u64,expected_rsp:u64,saved_rsp:u64) -> (u32) effects(trap) entry(start)
+block start(expected_rip:u64,saved_rcx:u64,expected_flags:u64,saved_r11:u64,expected_rsp:u64,saved_rsp:u64)
+  lo:u64 = const() {"value":4096}
+  hi:u64 = const() {"value":140737488355328}
+  riplo:bool = compare.ge(expected_rip,lo)
+  riphi:bool = compare.lt(expected_rip,hi)
+  ripok:bool = bool.and(riplo,riphi)
+  branch ripok rsp(expected_rsp,saved_rsp,expected_rip,saved_rcx,expected_flags,saved_r11,lo,hi) bad_rip()
+block bad_rip()
+  cr:u32 = const() {"value":1}
+  ret(cr)
+block rsp(expected_rsp1:u64,saved_rsp1:u64,expected_rip1:u64,saved_rcx1:u64,expected_flags1:u64,saved_r11_1:u64,lo1:u64,hi1:u64)
+  rsplo:bool = compare.ge(expected_rsp1,lo1)
+  rsphi:bool = compare.lt(expected_rsp1,hi1)
+  rspok:bool = bool.and(rsplo,rsphi)
+  branch rspok flags(expected_rip1,saved_rcx1,expected_flags1,saved_r11_1,expected_rsp1,saved_rsp1) bad_rsp()
+block bad_rsp()
+  cs:u32 = const() {"value":2}
+  ret(cs)
+block flags(expected_rip2:u64,saved_rcx2:u64,expected_flags2:u64,saved_r11_2:u64,expected_rsp2:u64,saved_rsp2:u64)
+  required:u64 = const() {"value":514}
+  forbidden:u64 = const() {"value":18446744073709548840}
+  zero:u64 = const() {"value":0}
+  kept:u64 = bit.and(expected_flags2,required)
+  unsafe:u64 = bit.and(expected_flags2,forbidden)
+  hasrequired:bool = compare.eq(kept,required)
+  noforbidden:bool = compare.eq(unsafe,zero)
+  safe:bool = bool.and(hasrequired,noforbidden)
+  branch safe rcx(expected_rip2,saved_rcx2,expected_flags2,saved_r11_2,expected_rsp2,saved_rsp2) bad_flags()
+block bad_flags()
+  cf:u32 = const() {"value":3}
+  ret(cf)
+block rcx(expected_rip3:u64,saved_rcx3:u64,expected_flags3:u64,saved_r11_3:u64,expected_rsp3:u64,saved_rsp3:u64)
+  rcxok:bool = compare.eq(expected_rip3,saved_rcx3)
+  branch rcxok r11(expected_flags3,saved_r11_3,expected_rsp3,saved_rsp3) bad_rcx()
+block bad_rcx()
+  cc:u32 = const() {"value":4}
+  ret(cc)
+block r11(expected_flags4:u64,saved_r11_4:u64,expected_rsp4:u64,saved_rsp4:u64)
+  r11ok:bool = compare.eq(expected_flags4,saved_r11_4)
+  branch r11ok saved_stack(expected_rsp4,saved_rsp4) bad_r11()
+block bad_r11()
+  c11:u32 = const() {"value":5}
+  ret(c11)
+block saved_stack(expected_rsp5:u64,saved_rsp5:u64)
+  stackok:bool = compare.eq(expected_rsp5,saved_rsp5)
+  branch stackok accepted() bad_saved_rsp()
+block bad_saved_rsp()
+  csp:u32 = const() {"value":6}
+  ret(csp)
+block accepted()
+  ok:u32 = const() {"value":0}
+  ret(ok)
+end

@@ -2696,10 +2696,54 @@ syscall_kernel_entry64:
     jne syscall_stack_corrupt64
     leaq message_syscall_stack_pass(%rip), %rsi
     call puts64
+    /* The saved values came from real SYSCALL hardware. This original
+     * native HIA verifies each captured return field before the NON-HIA
+     * bridge restores RCX, R11 and RSP. No authority over the snapshots
+     * or immunity to interrupts/re-entry is claimed. */
+#ifdef HEPTAKERNEL_TEST_SYSCALL_FRAME_RCX_STALE
+    xorq $1, syscall_saved_rcx(%rip)
+#endif
+#ifdef HEPTAKERNEL_TEST_SYSCALL_FRAME_R11_STALE
+    xorq $1, syscall_saved_r11(%rip)
+#endif
+#ifdef HEPTAKERNEL_TEST_SYSCALL_FRAME_RSP_STALE
+    xorq $16, syscall_user_rsp(%rip)
+#endif
+    movq $(ARENA_MIN+2), %rdi
+    movq syscall_saved_rcx(%rip), %rsi
+    movq $0x202, %rdx
+    movq syscall_saved_r11(%rip), %rcx
+    movq $0x602000, %r8
+    movq syscall_user_rsp(%rip), %r9
+    call syscall_return_frame_admit_f0
+#ifdef HEPTAKERNEL_TEST_SYSCALL_FRAME_RCX_STALE
+    cmpl $4, %eax
+    jne fail64
+    leaq message_syscall_frame_rcx_stale(%rip), %rsi
+    call puts64
+    jmp fail64
+#elif defined(HEPTAKERNEL_TEST_SYSCALL_FRAME_R11_STALE)
+    cmpl $5, %eax
+    jne fail64
+    leaq message_syscall_frame_r11_stale(%rip), %rsi
+    call puts64
+    jmp fail64
+#elif defined(HEPTAKERNEL_TEST_SYSCALL_FRAME_RSP_STALE)
+    cmpl $6, %eax
+    jne fail64
+    leaq message_syscall_frame_rsp_stale(%rip), %rsi
+    call puts64
+    jmp fail64
+#else
+    testl %eax, %eax
+    jne fail64
+    leaq message_syscall_frame_pass(%rip), %rsi
+    call puts64
     movq syscall_saved_rcx(%rip), %rcx
     movq syscall_saved_r11(%rip), %r11
     movq syscall_user_rsp(%rip), %rsp
     sysretq                  /* actual NON-HIA privileged return */
+#endif
     jmp fail64
 #endif
 syscall_stack_corrupt64:
@@ -6101,6 +6145,14 @@ message_syscall_stack_stale:
     .asciz "HEPTAKERNEL HIA SYSCALL KERNEL STACK STALE REJECTED\r\n"
 message_syscall_stack_corrupt:
     .asciz "HEPTAKERNEL SYSCALL USER STACK CORRUPTION DETECTED\r\n"
+message_syscall_frame_pass:
+    .asciz "HEPTAKERNEL HIA SYSCALL RETURN FRAME ADMITTED\r\n"
+message_syscall_frame_rcx_stale:
+    .asciz "HEPTAKERNEL HIA SYSCALL RETURN RCX STALE REJECTED\r\n"
+message_syscall_frame_r11_stale:
+    .asciz "HEPTAKERNEL HIA SYSCALL RETURN R11 STALE REJECTED\r\n"
+message_syscall_frame_rsp_stale:
+    .asciz "HEPTAKERNEL HIA SYSCALL RETURN RSP STALE REJECTED\r\n"
 message_us_initial:
     .asciz "HEPTAKERNEL HIA CPL3 USER FETCH BEFORE REVOKE VERIFIED\r\n"
 message_us_live:

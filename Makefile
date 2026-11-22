@@ -2311,7 +2311,7 @@ build/boot-syscall-roundtrip.o: arch/x86_64/boot.S build/boot-cases.bin
 build/boot-syscall-msr-stale.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_SYSCALL_MSR_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 
-SYSCALL_HW_SUPPORT := $(SYSRET_RING3_BOOT_SUPPORT) build/syscall-msr-boot.o build/syscall-stack-boot.o
+SYSCALL_HW_SUPPORT := $(SYSRET_RING3_BOOT_SUPPORT) build/syscall-msr-boot.o build/syscall-stack-boot.o build/syscall-return-frame-boot.o
 
 build/syscall-roundtrip-multiboot.elf: build/boot-syscall-roundtrip.o $(SYSCALL_HW_SUPPORT) arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-roundtrip.elf "$<" $(SYSCALL_HW_SUPPORT)
@@ -2359,3 +2359,47 @@ build/syscall-stack-bypass-multiboot.elf: build/boot-syscall-stack-bypass.o $(SY
 	objcopy -O elf32-i386 build/syscall-stack-bypass.elf "$@"
 test-boot: build/syscall-stack-stale-multiboot.elf build/syscall-stack-bypass-multiboot.elf
 test-x86-syscall-hw: build/syscall-stack-stale-multiboot.elf build/syscall-stack-bypass-multiboot.elf
+
+
+# Real original HIA six-word return-frame preflight used by the non-HIA
+# hardware bridge. This is NOT privilege lowering or a Linux syscall handler.
+.PHONY: test-x86-syscall-return-frame
+build/x86-syscall-return-frame.o: src/x86_syscall_return_frame.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.syscall-frame.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/x86-syscall-return-frame.so: build/x86-syscall-return-frame.o
+	ld -shared -z noexecstack -o "$@" "$<"
+build/x86-syscall-return-frame-liar.o: tests/negative/x86_syscall_return_frame_allow_all.hepta | build check-compiler
+	"$(HEPTA_COMPILER)" < "$<" > "$@"
+build/x86-syscall-return-frame-liar.so: build/x86-syscall-return-frame-liar.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-x86-syscall-return-frame: build/x86-syscall-return-frame.so build/x86-syscall-return-frame-liar.so
+	@set -eu; a=$$(mktemp build/.frame-a.XXXXXX); b=$$(mktemp build/.frame-b.XXXXXX); trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_syscall_return_frame.hepta > "$$a"; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_syscall_return_frame.hepta > "$$b"; \
+	cmp "$$a" "$$b"; cmp "$$a" build/x86-syscall-return-frame.o
+	timeout 90 $(PYTHON) tests/test_x86_syscall_return_frame.py build/x86-syscall-return-frame.so --object build/x86-syscall-return-frame.o
+	$(PYTHON) tests/test_x86_syscall_return_frame.py build/x86-syscall-return-frame-liar.so --expect-unsafe
+test: test-x86-syscall-return-frame
+
+build/syscall-return-frame-boot.o: build/x86-syscall-return-frame.o
+	objcopy --redefine-sym syscall_return_frame_admit=syscall_return_frame_admit_f0 "$<" "$@"
+
+build/boot-syscall-frame-rcx-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -DHEPTAKERNEL_TEST_SYSCALL_FRAME_RCX_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-syscall-frame-r11-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -DHEPTAKERNEL_TEST_SYSCALL_FRAME_R11_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-syscall-frame-rsp-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -DHEPTAKERNEL_TEST_SYSCALL_FRAME_RSP_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/syscall-frame-rcx-stale-multiboot.elf: build/boot-syscall-frame-rcx-stale.o $(SYSCALL_HW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-frame-rcx-stale.elf "$<" $(SYSCALL_HW_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-frame-rcx-stale.elf "$@"
+build/syscall-frame-r11-stale-multiboot.elf: build/boot-syscall-frame-r11-stale.o $(SYSCALL_HW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-frame-r11-stale.elf "$<" $(SYSCALL_HW_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-frame-r11-stale.elf "$@"
+build/syscall-frame-rsp-stale-multiboot.elf: build/boot-syscall-frame-rsp-stale.o $(SYSCALL_HW_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-frame-rsp-stale.elf "$<" $(SYSCALL_HW_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-frame-rsp-stale.elf "$@"
+test-boot: build/syscall-frame-rcx-stale-multiboot.elf build/syscall-frame-r11-stale-multiboot.elf build/syscall-frame-rsp-stale-multiboot.elf
+test-x86-syscall-hw: build/syscall-frame-rcx-stale-multiboot.elf build/syscall-frame-r11-stale-multiboot.elf build/syscall-frame-rsp-stale-multiboot.elf

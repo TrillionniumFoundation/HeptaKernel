@@ -23,6 +23,10 @@ SYSCALL_HW_MARKER = "HEPTAKERNEL NON-HIA SYSCALL SYSRETQ HARDWARE ROUNDTRIP VERI
 SYSCALL_STACK_PASS_MARKER = "HEPTAKERNEL HIA SYSCALL KERNEL STACK ADMITTED"
 SYSCALL_STACK_STALE_MARKER = "HEPTAKERNEL HIA SYSCALL KERNEL STACK STALE REJECTED"
 SYSCALL_STACK_CORRUPT_MARKER = "HEPTAKERNEL SYSCALL USER STACK CORRUPTION DETECTED"
+SYSCALL_FRAME_PASS_MARKER = "HEPTAKERNEL HIA SYSCALL RETURN FRAME ADMITTED"
+SYSCALL_FRAME_RCX_MARKER = "HEPTAKERNEL HIA SYSCALL RETURN RCX STALE REJECTED"
+SYSCALL_FRAME_R11_MARKER = "HEPTAKERNEL HIA SYSCALL RETURN R11 STALE REJECTED"
+SYSCALL_FRAME_RSP_MARKER = "HEPTAKERNEL HIA SYSCALL RETURN RSP STALE REJECTED"
 RSP0_DECOY_MARKER = "HEPTAKERNEL HIA TSS RSP0 DECOY STACK DETECTED"
 UPPER_USER_MARKER = "HEPTAKERNEL HIA LIVE UPPER USER TABLE VERIFIED"
 UPPER_USER_STALE_MARKER = "HEPTAKERNEL HIA UPPER USER TABLE STALE OLD REJECTED"
@@ -102,6 +106,14 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         stack_pass = p.stdout.count(SYSCALL_STACK_PASS_MARKER) == 1
         stack_stale = p.stdout.count(SYSCALL_STACK_STALE_MARKER) == 1
         stack_corrupt = p.stdout.count(SYSCALL_STACK_CORRUPT_MARKER) == 1
+        frame_pass = p.stdout.count(SYSCALL_FRAME_PASS_MARKER) == 1
+        frame_rcx_stale = p.stdout.count(SYSCALL_FRAME_RCX_MARKER) == 1
+        frame_r11_stale = p.stdout.count(SYSCALL_FRAME_R11_MARKER) == 1
+        frame_rsp_stale = p.stdout.count(SYSCALL_FRAME_RSP_MARKER) == 1
+        record["hia_syscall_return_frame_admitted"] = frame_pass
+        record["hia_syscall_return_frame_rcx_stale"] = frame_rcx_stale
+        record["hia_syscall_return_frame_r11_stale"] = frame_r11_stale
+        record["hia_syscall_return_frame_rsp_stale"] = frame_rsp_stale
         record["hia_syscall_stack_admitted"] = stack_pass
         record["hia_syscall_stack_stale"] = stack_stale
         record["user_stack_corrupt"] = stack_corrupt
@@ -334,7 +346,9 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
             accepted = (state_verified and user_gdt_verified and tss_verified
                         and idt_verified and map_verified and reservation_verified
                         and sysret_gdt_observed and syscall_admit_observed
-                        and syscall_hardware_observed and stack_pass and not stack_stale and not stack_corrupt and not syscall_stale_observed
+                        and syscall_hardware_observed and stack_pass and frame_pass
+                        and not frame_rcx_stale and not frame_r11_stale and not frame_rsp_stale
+                        and not stack_stale and not stack_corrupt and not syscall_stale_observed
                         and not sysret_ring3_observed and not ring3_observed
                         and not pte_verified and not route_verified
                         and p.returncode == 45 and FAIL_MARKER not in p.stdout
@@ -356,6 +370,22 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         and stack_corrupt == (mode == "syscall_stack_corrupt_rejected")
                         and not stack_pass and not syscall_stale_observed
                         and not syscall_hardware_observed and not ring3_observed
+                        and not pte_verified and not route_verified
+                        and p.returncode == 35 and FAIL_MARKER in p.stdout
+                        and PASS_MARKER not in p.stdout)
+        elif mode in ("syscall_frame_rcx_stale_rejected", "syscall_frame_r11_stale_rejected",
+                      "syscall_frame_rsp_stale_rejected"):
+            expected = ("syscall_frame_rcx_stale_rejected",
+                        "syscall_frame_r11_stale_rejected",
+                        "syscall_frame_rsp_stale_rejected")
+            observations = (frame_rcx_stale, frame_r11_stale, frame_rsp_stale)
+            accepted = (state_verified and user_gdt_verified and tss_verified
+                        and idt_verified and map_verified and reservation_verified
+                        and sysret_gdt_observed and syscall_admit_observed and stack_pass
+                        and observations == tuple(mode == m for m in expected)
+                        and not frame_pass and not stack_stale and not stack_corrupt
+                        and not syscall_hardware_observed and not syscall_stale_observed
+                        and not sysret_ring3_observed and not ring3_observed
                         and not pte_verified and not route_verified
                         and p.returncode == 35 and FAIL_MARKER in p.stdout
                         and PASS_MARKER not in p.stdout)
@@ -535,15 +565,27 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         p.stdout.count(PASS_MARKER) == 1 and FAIL_MARKER not in p.stdout)
         else:
             raise ValueError("unknown boot mode " + mode)
-        # Exhaustive marker partition: only this isolated SYSRET64 positive
-        # may report actual CPL3, and stale-old may only report refusal.
-        accepted = accepted and (sysret_gdt_observed == (mode in {"sysret_ring3_hardware", "syscall_roundtrip_hardware", "syscall_msr_stale_rejected", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected"}))
-        accepted = accepted and (syscall_admit_observed == (mode in {"syscall_roundtrip_hardware", "syscall_stack_stale_rejected", "syscall_stack_corrupt_rejected"}))
+        # All mode/marker combinations are explicitly partitioned.
+        frame_bad_modes = {"syscall_frame_rcx_stale_rejected",
+                           "syscall_frame_r11_stale_rejected",
+                           "syscall_frame_rsp_stale_rejected"}
+        frame_modes = frame_bad_modes | {"syscall_roundtrip_hardware"}
+        accepted = accepted and (sysret_gdt_observed == (mode in {
+            "sysret_ring3_hardware", "syscall_roundtrip_hardware",
+            "syscall_msr_stale_rejected", "syscall_stack_stale_rejected",
+            "syscall_stack_corrupt_rejected"} | frame_bad_modes))
+        accepted = accepted and (syscall_admit_observed == (mode in {
+            "syscall_roundtrip_hardware", "syscall_stack_stale_rejected",
+            "syscall_stack_corrupt_rejected"} | frame_bad_modes))
         accepted = accepted and (syscall_stale_observed == (mode == "syscall_msr_stale_rejected"))
         accepted = accepted and (syscall_hardware_observed == (mode == "syscall_roundtrip_hardware"))
-        accepted = accepted and (stack_pass == (mode == "syscall_roundtrip_hardware"))
+        accepted = accepted and (stack_pass == (mode in frame_modes))
         accepted = accepted and (stack_stale == (mode == "syscall_stack_stale_rejected"))
         accepted = accepted and (stack_corrupt == (mode == "syscall_stack_corrupt_rejected"))
+        accepted = accepted and (frame_pass == (mode == "syscall_roundtrip_hardware"))
+        accepted = accepted and (frame_rcx_stale == (mode == "syscall_frame_rcx_stale_rejected"))
+        accepted = accepted and (frame_r11_stale == (mode == "syscall_frame_r11_stale_rejected"))
+        accepted = accepted and (frame_rsp_stale == (mode == "syscall_frame_rsp_stale_rejected"))
         accepted = accepted and (sysret_ring3_observed == (mode == "sysret_ring3_hardware"))
         accepted = accepted and (sysret_stale_observed == (mode == "sysret_gdt_stale_rejected"))
         accepted = accepted and (pdpt_1g_hw == (mode == "pdpt_1g_hardware"))
@@ -624,6 +666,10 @@ def main():
               "native_hia_upper_user_object_sha256": digest("build/x86-upper-user.o"),
                "native_hia_upper_user_boot_sha256": digest("build/upper-user-boot.o"),
                "upper_user_stale_boot_sha256": digest("build/boot-ring3-upper-stale.o"),
+               "native_hia_syscall_return_frame_object_sha256": digest("build/x86-syscall-return-frame.o"),
+               "syscall_frame_rcx_stale_boot_sha256": digest("build/boot-syscall-frame-rcx-stale.o"),
+               "syscall_frame_r11_stale_boot_sha256": digest("build/boot-syscall-frame-r11-stale.o"),
+               "syscall_frame_rsp_stale_boot_sha256": digest("build/boot-syscall-frame-rsp-stale.o"),
                "native_hia_pde_2m_object_sha256": digest("build/x86-pde-2m.o"),
               "native_hia_pde_2m_boot_symbol_sha256": digest("build/pde-2m-boot.o"),
               "pde_2m_unmap_fault_boot_sha256": digest("build/boot-pde-2m-unmap-fault.o"),
@@ -746,6 +792,10 @@ def main():
                                        machine, memory, mode="syscall_stack_stale_rejected"))
             report["runs"].append(run(args.qemu, Path("build/syscall-stack-bypass-multiboot.elf"),
                                        machine, memory, mode="syscall_stack_corrupt_rejected"))
+            for field in ("rcx", "r11", "rsp"):
+                report["runs"].append(run(
+                    args.qemu, Path("build/syscall-frame-" + field + "-stale-multiboot.elf"),
+                    machine, memory, mode="syscall_frame_" + field + "_stale_rejected"))
             report["runs"].append(run(args.qemu, Path("build/ring3-rsp0-decoy-multiboot.elf"),
                                       machine, memory, mode="rsp0_decoy_rejected"))
         for machine, memory in (("pc", "32"), ("q35", "64")):
