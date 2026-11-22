@@ -15,6 +15,9 @@ import subprocess
 MARKERS = {
     "hw": "HEPTAKERNEL HIA DUAL PMM PHYSICAL PAGES AND TWO-ZONE EXHAUSTION VERIFIED",
     "release": "HEPTAKERNEL HIA DUAL PMM RELEASE DOUBLE FREE AND RECLAIM VERIFIED",
+    "scrub": "HEPTAKERNEL HIA DUAL PMM NATIVE SCRUB AND ZEROED RECLAIM VERIFIED",
+    "scrub-bypass": "HEPTAKERNEL HIA DUAL PMM SCRUB BYPASS DETECTED",
+    "scrub-decoy": "HEPTAKERNEL HIA DUAL PMM POST SCRUB RAM DECOY DETECTED",
     "stale": "HEPTAKERNEL HIA DUAL PMM STALE FREE REFUSED UNCHANGED",
     "liar": "HEPTAKERNEL HIA DUAL PMM DISHONEST SUCCESS DETECTED",
     "decoy": "HEPTAKERNEL HIA DUAL PMM POSTCLAIM RAM DECOY DETECTED",
@@ -45,7 +48,7 @@ def run(qemu, machine, mib, mode):
         row.update(returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
         markers = {name: p.stdout.count(value) for name, value in MARKERS.items()}
         preconditions = {value: p.stdout.count(value) for value in PRECONDITIONS}
-        normal = mode in ("hw", "release")
+        normal = mode in ("hw", "release", "scrub")
         row["marker_counts"] = markers
         row["precondition_counts"] = preconditions
         valid = (all(v == 1 for v in preconditions.values())
@@ -65,9 +68,12 @@ def main():
     parser.add_argument("--qemu", default="qemu-system-x86_64")
     args = parser.parse_args()
     report = {
-        "schema": "heptakernel.pmm-dual-real-physical-qemu.v2",
+        "schema": "heptakernel.pmm-dual-real-physical-qemu.v3",
         "native_source_sha256": sha("src/pmm_dual_claim.hepta"),
         "native_object_sha256": sha("build/pmm-dual-claim.o"),
+        "page_zero_native_source_sha256": sha("src/page_zero.hepta"),
+        "page_zero_native_object_sha256": sha("build/page-zero.o"),
+        "page_zero_renamed_boot_object_sha256": sha("build/page-zero-boot.o"),
         "renamed_boot_object_sha256": sha("build/pmm-dual-claim-boot.o"),
         "dishonest_hia_source_sha256": sha(
             "tests/negative/pmm_dual_claim_allow_all.hepta"),
@@ -75,7 +81,9 @@ def main():
         "assembly_observer_sha256": sha("arch/x86_64/boot.S"),
         "test_source_sha256": sha("tests/test_pmm_dual_claim_qemu.py"),
         "full_linux": "HOLD", "hia_privileged_backend": False,
-        "smp_atomic": False, "trusted_ownership": False, "runs": [],
+        "smp_atomic": False, "trusted_ownership": False,
+        "tlb_revoke_and_dma_quiescence_verified": False,
+        "scrub_is_single_owner_test_only": True, "runs": [],
         "status": "NOT_RUN",
     }
     try:
@@ -85,7 +93,7 @@ def main():
                 report["runs"].append(row)
                 print("HIA_DUAL_PMM_QEMU", platform, mode, row["status"],
                       row.get("returncode"), flush=True)
-        report["status"] = ("PASS" if len(report["runs"]) == 10
+        report["status"] = ("PASS" if len(report["runs"]) == 16
                             and all(x["status"] == "PASS" for x in report["runs"])
                             else "FAIL")
     except BaseException as exc:

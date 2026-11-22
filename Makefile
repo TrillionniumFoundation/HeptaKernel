@@ -2689,6 +2689,12 @@ build/boot-dual-hw.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_PMM_DUAL_HW=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 build/boot-dual-release.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_PMM_DUAL_HW=1 -DHEPTAKERNEL_TEST_PMM_DUAL_RELEASE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-dual-scrub.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PMM_DUAL_HW=1 -DHEPTAKERNEL_TEST_PMM_DUAL_RELEASE=1 -DHEPTAKERNEL_TEST_PMM_DUAL_SCRUB=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-dual-scrub-bypass.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PMM_DUAL_HW=1 -DHEPTAKERNEL_TEST_PMM_DUAL_RELEASE=1 -DHEPTAKERNEL_TEST_PMM_DUAL_SCRUB=1 -DHEPTAKERNEL_TEST_PMM_DUAL_SCRUB_BYPASS=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-dual-scrub-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_PMM_DUAL_HW=1 -DHEPTAKERNEL_TEST_PMM_DUAL_RELEASE=1 -DHEPTAKERNEL_TEST_PMM_DUAL_SCRUB=1 -DHEPTAKERNEL_TEST_PMM_DUAL_SCRUB_DECOY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 build/boot-dual-stale.o: arch/x86_64/boot.S build/boot-cases.bin
 	cc -DHEPTAKERNEL_TEST_PMM_DUAL_HW=1 -DHEPTAKERNEL_TEST_PMM_DUAL_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
 build/boot-dual-liar.o: arch/x86_64/boot.S build/boot-cases.bin
@@ -2698,12 +2704,14 @@ build/boot-dual-decoy.o: arch/x86_64/boot.S build/boot-cases.bin
 
 build/dual-hw.elf build/dual-stale.elf build/dual-decoy.elf build/dual-release.elf: build/dual-%.elf: build/boot-dual-%.o $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-boot.o
+build/dual-scrub.elf build/dual-scrub-bypass.elf build/dual-scrub-decoy.elf: build/dual-%.elf: build/boot-dual-%.o $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-boot.o build/page-zero-boot.o arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-boot.o build/page-zero-boot.o
 build/dual-liar.elf: build/boot-dual-liar.o $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-liar-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-liar-boot.o
 build/dual-%-multiboot.elf: build/dual-%.elf
 	objcopy -O elf32-i386 "$<" "$@"
 
-test-pmm-dual-qemu: test-pmm-dual-claim build/dual-hw-multiboot.elf build/dual-stale-multiboot.elf build/dual-liar-multiboot.elf build/dual-decoy-multiboot.elf build/dual-release-multiboot.elf
+test-pmm-dual-qemu: test-pmm-dual-claim build/dual-hw-multiboot.elf build/dual-stale-multiboot.elf build/dual-liar-multiboot.elf build/dual-decoy-multiboot.elf build/dual-release-multiboot.elf build/dual-scrub-multiboot.elf build/dual-scrub-bypass-multiboot.elf build/dual-scrub-decoy-multiboot.elf
 	$(PYTHON) tests/test_pmm_dual_claim_qemu.py --qemu "$(QEMU)"
 
 test-boot: test-pmm-dual-qemu

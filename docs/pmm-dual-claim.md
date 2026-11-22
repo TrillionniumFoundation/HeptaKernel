@@ -116,3 +116,30 @@ authenticated firmware ownership, that claims are atomic or crash-safe,
 that the 14 pages belong to a Linux lifecycle, or that HIA implements
 privileged instructions, SMP synchronization or a complete Linux PMM.
 The complete 17-gate Linux acceptance remains HOLD.
+
+
+## Native page-zero integration on the released QEMU frame
+
+A separate `dual-scrub` hardware image now composes **two existing and unchanged
+native HIA Core v8 objects**: `pmm_dual_claim.hepta` for release/reclaim and
+`page_zero.hepta` for the full 4 KiB byte overwrite. The independent
+non-HIA observer first confirms that a released page still contains its old
+pattern and that a second release is refused. It then passes physical RAM
+`0x501000` to the native `page_zero_f0` entry, checks the output receipt
+and disjoint guard words, and independently scans all 512 64-bit words.
+After native first-fit reclaim it checks all 512 words again *before*
+writing the new owner's test pattern. A forged-success scrub bypass and
+a post-HIA physical RAM byte mutation each have their own negative image,
+serial marker and expected nonzero QEMU debug-exit result, rather than using
+a cached HIA reply as the oracle. Both PC/32MiB and Q35/64MiB run all modes;
+the matrix grows from 10 to 16 real-QEMU cases.
+
+This is an **ordered single-owner experiment**, not an atomic
+`release -> zero -> reclaim` operation. In particular, the page is already
+marked free while scrub runs; concurrent allocation, DMA, stale mappings or
+interrupt-driven reuse could leak old contents. A production-grade protocol
+must *quarantine before scrubbing*, revoke every PTE and external DMA
+mapping, complete required TLB/IOMMU synchronization, and only then publish
+the zeroed page to free lists. None of those new Linux lifecycle obligations
+is declared complete by these QEMU experiments. All 17 full Linux
+acceptance gates remain HOLD and the 422 syscall obligations remain unchanged.
