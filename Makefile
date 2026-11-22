@@ -2442,3 +2442,25 @@ build/syscall-one-task-enosys-multiboot.elf: build/boot-syscall-one-task-enosys.
 test: test-x86-syscall-one-task
 test-boot: build/syscall-one-task-getpid-multiboot.elf build/syscall-one-task-enosys-multiboot.elf
 test-x86-syscall-hw: build/syscall-one-task-getpid-multiboot.elf build/syscall-one-task-enosys-multiboot.elf
+
+# Native HIA two-record task view: read-only bounds checked syscall results.
+.PHONY: test-x86-syscall-task-view
+build/x86-syscall-task-view.o: src/x86_syscall_task_view.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.syscall-task-view.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/x86-syscall-task-view.so: build/x86-syscall-task-view.o
+	ld -shared -z noexecstack -o "$@" "$<"
+build/x86-syscall-task-view-liar.o: tests/negative/x86_syscall_task_view_always_pid.hepta | build check-compiler
+	"$(HEPTA_COMPILER)" < "$<" > "$@"
+build/x86-syscall-task-view-liar.so: build/x86-syscall-task-view-liar.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-x86-syscall-task-view: build/x86-syscall-task-view.so build/x86-syscall-task-view-liar.so
+	@set -eu; a=$$(mktemp build/.task-view-a.XXXXXX); b=$$(mktemp build/.task-view-b.XXXXXX); trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_syscall_task_view.hepta > "$$a"; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/x86_syscall_task_view.hepta > "$$b"; \
+	cmp "$$a" "$$b"; cmp "$$a" build/x86-syscall-task-view.o
+	timeout 90 $(PYTHON) tests/test_x86_syscall_task_view.py build/x86-syscall-task-view.so --object build/x86-syscall-task-view.o
+	$(PYTHON) tests/test_x86_syscall_task_view.py build/x86-syscall-task-view-liar.so --expect-unsafe
+
+test: test-x86-syscall-task-view

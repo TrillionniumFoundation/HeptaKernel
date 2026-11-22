@@ -1,0 +1,7 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(syscall_task_view)
+fn syscall_task_view(nr:u64,slot:u64,tasks:readbuf) -> (u64) effects(trap) entry(start)
+block start(nr:u64,slot:u64,tasks:readbuf)
+  forged:u64 = const() {"value":4242}
+  ret(forged)
+end

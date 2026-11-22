@@ -1,0 +1,121 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(syscall_task_view)
+fn syscall_task_view(nr:u64,slot:u64,tasks:readbuf) -> (u64) effects(read,trap) entry(start)
+block start(nr:u64,slot:u64,tasks:readbuf)
+  getpid_nr:u64 = const() {"value":39}
+  getppid_nr:u64 = const() {"value":110}
+  gettid_nr:u64 = const() {"value":186}
+  pid_sel:bool = compare.eq(nr,getpid_nr)
+  ppid_sel:bool = compare.eq(nr,getppid_nr)
+  tid_sel:bool = compare.eq(nr,gettid_nr)
+  a0:bool = bool.or(pid_sel,ppid_sel)
+  known:bool = bool.or(a0,tid_sel)
+  branch known length_check(nr,slot,tasks) unsupported()
+block unsupported()
+  enosys:u64 = const() {"value":18446744073709551578}
+  ret(enosys)
+block length_check(nr1:u64,slot1:u64,tasks1:readbuf)
+  bytes:usize = buffer.len(tasks1)
+  exact:usize = const() {"value":64}
+  len_ok:bool = compare.eq(bytes,exact)
+  branch len_ok slot_check(nr1,slot1,tasks1) malformed()
+block malformed()
+  einval:u64 = const() {"value":18446744073709551594}
+  ret(einval)
+block slot_check(nr2:u64,slot2:u64,tasks2:readbuf)
+  one:u64 = const() {"value":1}
+  slot_ok:bool = compare.le(slot2,one)
+  branch slot_ok decode(nr2,slot2,tasks2) missing()
+block missing()
+  esrch:u64 = const() {"value":18446744073709551613}
+  ret(esrch)
+block decode(nr3:u64,slot3:u64,tasks3:readbuf)
+  stride:u64 = const() {"value":32}
+  base64:u64 = int.mul.wrap(slot3,stride)
+  base:usize = int.cast(base64) {"mode":"wrap"}
+  one_peer:u64 = const() {"value":1}
+  peeridx:u64 = bit.xor(slot3,one_peer)
+  peerbase64:u64 = int.mul.wrap(peeridx,stride)
+  peerbase:usize = int.cast(peerbase64) {"mode":"wrap"}
+  off8:usize = const() {"value":8}
+  off16:usize = const() {"value":16}
+  off24:usize = const() {"value":24}
+  base8:usize = int.add.wrap(base,off8)
+  base16:usize = int.add.wrap(base,off16)
+  base24:usize = int.add.wrap(base,off24)
+  peer8:usize = int.add.wrap(peerbase,off8)
+  peer24:usize = int.add.wrap(peerbase,off24)
+  tid:u64 = call(tasks3,base) {"function":"read_u64"}
+  tgid:u64 = call(tasks3,base8) {"function":"read_u64"}
+  ppid:u64 = call(tasks3,base16) {"function":"read_u64"}
+  active:u64 = call(tasks3,base24) {"function":"read_u64"}
+  peer_tid:u64 = call(tasks3,peerbase) {"function":"read_u64"}
+  peer_tgid:u64 = call(tasks3,peer8) {"function":"read_u64"}
+  peer_active:u64 = call(tasks3,peer24) {"function":"read_u64"}
+  jump verify(nr3,tid,tgid,ppid,active,peer_tid,peer_tgid,peer_active)
+block verify(nr4:u64,tid4:u64,tgid4:u64,ppid4:u64,active4:u64,ptid:u64,ptgid:u64,pactive:u64)
+  zero:u64 = const() {"value":0}
+  one_v:u64 = const() {"value":1}
+  maxpid:u64 = const() {"value":2147483647}
+  tid_nonzero:bool = compare.gt(tid4,zero)
+  tgid_nonzero:bool = compare.gt(tgid4,zero)
+  tid_bounded:bool = compare.le(tid4,maxpid)
+  tgid_bounded:bool = compare.le(tgid4,maxpid)
+  ppid_bounded:bool = compare.le(ppid4,maxpid)
+  active_valid:bool = compare.eq(active4,one_v)
+  range0:bool = bool.and(tid_nonzero,tgid_nonzero)
+  range1:bool = bool.and(tid_bounded,tgid_bounded)
+  range2:bool = bool.and(range0,range1)
+  range3:bool = bool.and(ppid_bounded,active_valid)
+  core_valid:bool = bool.and(range2,range3)
+  self_leader:bool = compare.eq(tid4,tgid4)
+  peer_is_leader:bool = compare.eq(ptid,tgid4)
+  peer_same_group:bool = compare.eq(ptgid,tgid4)
+  peer_live:bool = compare.eq(pactive,one_v)
+  peer_pair:bool = bool.and(peer_is_leader,peer_same_group)
+  peer_group:bool = bool.and(peer_pair,peer_live)
+  leader_ok:bool = bool.or(self_leader,peer_group)
+  duplicate_tid:bool = compare.eq(ptid,tid4)
+  duplicate_active:bool = bool.and(duplicate_tid,peer_live)
+  distinct:bool = bool.not(duplicate_active)
+  c0:bool = bool.and(core_valid,leader_ok)
+  accepted:bool = bool.and(c0,distinct)
+  branch accepted dispatch(nr4,tid4,tgid4,ppid4) missing()
+block dispatch(nr5:u64,tid5:u64,tgid5:u64,ppid5:u64)
+  getpid_code:u64 = const() {"value":39}
+  is_pid:bool = compare.eq(nr5,getpid_code)
+  branch is_pid ret_pid(tgid5) dispatch2(nr5,tid5,ppid5)
+block ret_pid(result_pid:u64)
+  ret(result_pid)
+block dispatch2(nr6:u64,tid6:u64,ppid6:u64)
+  gettid_code:u64 = const() {"value":186}
+  is_tid:bool = compare.eq(nr6,gettid_code)
+  branch is_tid ret_tid(tid6) ret_ppid(ppid6)
+block ret_tid(result_tid:u64)
+  ret(result_tid)
+block ret_ppid(result_ppid:u64)
+  ret(result_ppid)
+end
+fn read_u64(bytes:readbuf,base:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,base:usize)
+  start_zero:u64 = const() {"value":0}
+  jump loop(bytes,base,start_zero,start_zero)
+block loop(b:readbuf,at:usize,i:u64,acc:u64)
+  bound:u64 = const() {"value":8}
+  more:bool = compare.lt(i,bound)
+  branch more octet(b,at,i,acc) done(acc)
+block octet(b1:readbuf,at1:usize,i1:u64,acc1:u64)
+  idx:usize = int.cast(i1) {"mode":"wrap"}
+  ptr:usize = int.add.wrap(at1,idx)
+  oct:u8 = buffer.load(b1,ptr)
+  wide:u64 = int.cast(oct) {"mode":"wrap"}
+  eight:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(i1,eight)
+  shifted:u64 = int.shl.checked(wide,shift)
+  nextacc:u64 = bit.or(acc1,shifted)
+  unit:u64 = const() {"value":1}
+  nexti:u64 = int.add.wrap(i1,unit)
+  jump loop(b1,at1,nexti,nextacc)
+block done(value:u64)
+  ret(value)
+end
