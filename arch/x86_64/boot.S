@@ -666,6 +666,12 @@ hia_idt_next64:
     call reservation_admit64
     leaq message_reservation_pass(%rip), %rsi
     call puts64
+#if defined(HEPTAKERNEL_TEST_PMM_DUAL_HW)
+    /* Isolated QEMU physical-RAM observation of the genuine HIA one-call
+     * two-zone claim. The firmware observer and serial/port I/O are NON-HIA. */
+    call dual_claim_hardware_exercise64
+    jmp fail64
+#endif
 #if defined(HEPTAKERNEL_TEST_SHADOW_OWNER_HW) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_LIAR) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_BITMAP) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_RECHECK) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_STALE) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_FREE_LIAR) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_POST_TAIL) || defined(HEPTAKERNEL_TEST_SHADOW_OWNER_POST_BALANCED)
     /* Terminal isolated experiment: genuine HIA PMM allocation, HIA offline
      * leaf construction, HIA frame admission, then NON-HIA PDE/CR3 observer. */
@@ -4751,6 +4757,217 @@ reservation_admit64:
     jne fail64
     ret
 
+
+/* Terminal, isolated physical-RAM observation. The single-owner compact PMM
+ * records and 14-page independent oracle are NON-HIA fixtures. Only the
+ * pinned Core v8 native HIA dual_claim_f0 performs claims and state writes.
+ * Actual E820 is checked twice before any test physical page is touched.
+ * This proves neither trusted ownership provenance nor SMP atomicity. */
+#ifdef HEPTAKERNEL_TEST_PMM_DUAL_HW
+dual_claim_hardware_exercise64:
+    movq $0x500000, %rdi
+    movq $8, %rsi
+    call owner_admit64
+    movq $0x700000, %rdi
+    movq $8, %rsi
+    call owner_admit64
+    movabsq $0x8b0f5a7cd320196e, %rax
+    movq %rax, dual_claim_guard_before(%rip)
+    movq %rax, dual_claim_guard_after(%rip)
+    movq %rax, dual_claim_reply_guard_before(%rip)
+    movq %rax, dual_claim_reply_guard_after(%rip)
+    cld
+    leaq dual_claim_seed(%rip), %rsi
+    leaq dual_claim_state(%rip), %rdi
+    movl $130, %ecx
+    rep movsb
+    leaq dual_claim_seed(%rip), %rsi
+    leaq dual_claim_expected(%rip), %rdi
+    movl $130, %ecx
+    rep movsb
+
+#if defined(HEPTAKERNEL_TEST_PMM_DUAL_STALE) || defined(HEPTAKERNEL_TEST_PMM_DUAL_LIAR)
+    /* Bitmap 0x01 has one reserved page; free count 8 is forged (not 7).
+     * Fault injection precedes HIA and no physical frame may be touched. */
+    movq $8, dual_claim_state+32(%rip)
+    movq $8, dual_claim_expected+32(%rip)
+    call dual_claim_call64
+#ifdef HEPTAKERNEL_TEST_PMM_DUAL_LIAR
+    /* Compiled dishonest HIA returns 0 without changing its reply. The
+     * independent oracle expects rejection, so the liar is detected. */
+    testl %eax, %eax
+    jne fail64
+    movabsq $0xd0e1f2a3b4c59687, %rax
+    cmpq %rax, dual_claim_reply(%rip)
+    jne fail64
+    cmpq %rax, dual_claim_reply+8(%rip)
+    jne fail64
+#else
+    cmpl $4, %eax
+    jne fail64
+    cmpq $4, dual_claim_reply(%rip)
+    jne fail64
+    cmpq $0, dual_claim_reply+8(%rip)
+    jne fail64
+#endif
+    call dual_claim_compare64
+#ifdef HEPTAKERNEL_TEST_PMM_DUAL_LIAR
+    leaq message_dual_liar(%rip), %rsi
+#else
+    leaq message_dual_stale(%rip), %rsi
+#endif
+    call puts64
+    jmp fail64
+#else
+    /* Consume seven available pages in each HIA-owned bounded record.
+     * Every HIA result is compared against an independently updated state
+     * model before the observer writes its frame-specific full-page pattern. */
+    xorq %r12, %r12
+dual_claim_positive_loop:
+    movq %r12, case_index(%rip)
+    call dual_claim_call64
+    testl %eax, %eax
+    jne fail64
+    cmpq $0, dual_claim_reply(%rip)
+    jne fail64
+    call dual_claim_expected_address64
+    movq %rax, %r15
+    cmpq %r15, dual_claim_reply+8(%rip)
+    jne fail64
+    movq %r12, %r14
+    cmpq $7, %r12
+    jb dual_claim_model_a
+    subq $7, %r14
+dual_claim_model_b:
+    movq %r14, %rcx
+    addq $2, %rcx
+    movl $1, %eax
+    shll %cl, %eax
+    decl %eax
+    movb %al, dual_claim_expected+129(%rip)
+    movq $6, %rax
+    subq %r14, %rax
+    movq %rax, dual_claim_expected+97(%rip)
+    jmp dual_claim_model_done
+dual_claim_model_a:
+    movq %r14, %rcx
+    addq $2, %rcx
+    movl $1, %eax
+    shll %cl, %eax
+    decl %eax
+    movb %al, dual_claim_expected+64(%rip)
+    movq $6, %rax
+    subq %r14, %rax
+    movq %rax, dual_claim_expected+32(%rip)
+dual_claim_model_done:
+    call dual_claim_compare64
+    movq %r15, %rdi
+    movabsq $0x7a3b91e24dc6580f, %rax
+    xorq %r12, %rax
+    movl $512, %ecx
+    cld
+    rep stosq                      /* independently write all 4KiB */
+    incq %r12
+    cmpq $14, %r12
+    jb dual_claim_positive_loop
+
+    /* The two zones are full. Two repeated HIA requests must refuse
+     * exhaustion, returning 5/0 and preserving all 130 state bytes. */
+    movq $2, %r14
+dual_claim_exhaustion:
+    call dual_claim_call64
+    cmpl $5, %eax
+    jne fail64
+    cmpq $5, dual_claim_reply(%rip)
+    jne fail64
+    cmpq $0, dual_claim_reply+8(%rip)
+    jne fail64
+    call dual_claim_compare64
+    decq %r14
+    jnz dual_claim_exhaustion
+
+#ifdef HEPTAKERNEL_TEST_PMM_DUAL_DECOY
+    /* Adversarial RAM mutation after *successful* native HIA allocation;
+     * the final CPU physical-page scan must see it, not cached receipts. */
+    xorq $1, 0x501000
+#endif
+    xorq %r12, %r12
+dual_claim_ram_scan:
+    call dual_claim_expected_address64
+    movq %rax, %rdi
+    movabsq $0x7a3b91e24dc6580f, %r10
+    xorq %r12, %r10
+    movl $512, %ecx
+dual_claim_ram_word:
+    cmpq %r10, (%rdi)
+    jne dual_claim_ram_bad
+    addq $8, %rdi
+    decl %ecx
+    jnz dual_claim_ram_word
+    incq %r12
+    cmpq $14, %r12
+    jb dual_claim_ram_scan
+#ifdef HEPTAKERNEL_TEST_PMM_DUAL_DECOY
+    jmp fail64
+#else
+    leaq message_dual_pass(%rip), %rsi
+    call puts64
+    movl $0x10, %eax              /* QEMU isa-debug-exit: 33 */
+    jmp debug_exit64
+#endif
+dual_claim_ram_bad:
+#ifdef HEPTAKERNEL_TEST_PMM_DUAL_DECOY
+    leaq message_dual_decoy(%rip), %rsi
+    call puts64
+#endif
+    jmp fail64
+#endif
+
+dual_claim_call64:
+    movabsq $0xd0e1f2a3b4c59687, %rax
+    movq %rax, dual_claim_reply(%rip)
+    movq %rax, dual_claim_reply+8(%rip)
+    leaq dual_claim_empty_request(%rip), %rdi
+    xorq %rsi, %rsi
+    leaq dual_claim_reply(%rip), %rdx
+    movl $16, %ecx
+    leaq dual_claim_state(%rip), %r8
+    movl $130, %r9d
+    call dual_claim_f0
+    ret
+
+dual_claim_expected_address64:
+    movq %r12, %rax
+    cmpq $7, %rax
+    jb 1f
+    subq $7, %rax
+    shlq $12, %rax
+    addq $0x701000, %rax
+    ret
+1:
+    shlq $12, %rax
+    addq $0x501000, %rax
+    ret
+
+dual_claim_compare64:
+    cld
+    leaq dual_claim_expected(%rip), %rsi
+    leaq dual_claim_state(%rip), %rdi
+    movl $130, %ecx
+    repe cmpsb
+    jne fail64
+    movabsq $0x8b0f5a7cd320196e, %rax
+    cmpq %rax, dual_claim_guard_before(%rip)
+    jne fail64
+    cmpq %rax, dual_claim_guard_after(%rip)
+    jne fail64
+    cmpq %rax, dual_claim_reply_guard_before(%rip)
+    jne fail64
+    cmpq %rax, dual_claim_reply_guard_after(%rip)
+    jne fail64
+    ret
+#endif /* HEPTAKERNEL_TEST_PMM_DUAL_HW */
+
 /* Test-only multi-zone handoff. The policy and physical readback observer
  * remain NON-HIA; e820_f0, arena_f0 and f0 are the actual fixed HIA objects.
  * No state aliases, host syscalls, or external allocator are permitted.
@@ -6712,6 +6929,14 @@ message_cow_pte_dishonest:
     .asciz "HEPTAKERNEL HIA COW PTE DISHONEST NOOP REJECTED\r\n"
 message_cow_pte_bypass:
     .asciz "HEPTAKERNEL HIA COW PTE RESTORE BYPASS REFAULT VERIFIED\r\n"
+message_dual_pass:
+    .asciz "HEPTAKERNEL HIA DUAL PMM PHYSICAL PAGES AND TWO-ZONE EXHAUSTION VERIFIED\r\n"
+message_dual_stale:
+    .asciz "HEPTAKERNEL HIA DUAL PMM STALE FREE REFUSED UNCHANGED\r\n"
+message_dual_liar:
+    .asciz "HEPTAKERNEL HIA DUAL PMM DISHONEST SUCCESS DETECTED\r\n"
+message_dual_decoy:
+    .asciz "HEPTAKERNEL HIA DUAL PMM POSTCLAIM RAM DECOY DETECTED\r\n"
 message_pmm_bitmap_live:
     .asciz "HEPTAKERNEL HIA PMM LIVE COMPLETE BITMAP VERIFIED\r\n"
 message_pmm_bitmap_free_stale:
@@ -6916,6 +7141,21 @@ boot_cases_end:
 .endif
 
 .balign 8
+/* Non-HIA fixture. Both eight-page zones have a reserved first page.
+ * The native HIA receives the disjoint 130-byte mutable copy. */
+.balign 8
+dual_claim_seed:
+    .quad 3552580688320940353, 8, 0x500000, 1, 7
+    .zero 24
+    .byte 1
+    .quad 3552580688320940353, 8, 0x700000, 1, 7
+    .zero 24
+    .byte 1
+dual_claim_seed_end:
+.if (dual_claim_seed_end - dual_claim_seed) != 130
+.error "dual PMM fixture must have exact 130-byte layout"
+.endif
+
 arena_cases:
     /* Independent router fixture 0: op, address, pages, arenas, status/value. */
     .quad 0, 0, 0, 2
@@ -7130,6 +7370,16 @@ pf_guard_after:   .skip 8
 pf_unused:        .skip 16
 pte_nx_armed:     .skip 8
 pte_wp_armed:     .skip 8
+/* Disjoint fixture buffers and sentinels: never alias borrowed HIA slices. */
+.balign 8
+dual_claim_guard_before:       .skip 8
+dual_claim_state:              .skip 130
+dual_claim_guard_after:        .skip 8
+dual_claim_reply_guard_before: .skip 8
+dual_claim_reply:              .skip 16
+dual_claim_reply_guard_after:  .skip 8
+dual_claim_expected:           .skip 130
+dual_claim_empty_request:      .skip 1
 arena_guard_before: .skip 8
 arena_reply:       .skip 16
 arena_guard_after: .skip 8
