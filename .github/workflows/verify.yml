@@ -786,6 +786,11 @@ jobs:
             build/page-zero-unsafe.o
             build/page-zero-unsafe.so
             build/guard-pages-report.json
+            build/x86-syscall-task-view-report.json
+            build/x86-syscall-task-view.o
+            build/x86-syscall-task-view.so
+            build/syscall-task-view-tid-multiboot.elf
+            build/syscall-task-view-stale-multiboot.elf
             build/boot-report.json
             build/build-report.json
             build/closure-report.json

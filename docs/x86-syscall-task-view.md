@@ -29,3 +29,11 @@ a real Linux process subsystem, or any complete Linux ABI row. There is
 no claim of actual HIA privileged SYSCALL or SYSRETQ execution. Linux's
 fixed full acceptance remains 17/17 HOLD and all original syscall obligations
 remain in place.
+
+An isolated QEMU PC/32MiB and Q35/64MiB fixture executes a real ring-3
+SYSCALL(186), passes assembler-constructed two-record snapshots to the
+original native HIA three-buffer routine, and returns through a **non-HIA**
+SYSRETQ bridge. The CPL3 hardware exception observer verifies RAX=4243.
+A separately compiled adversarial image corrupts the leader TGID and must
+return -ESRCH in the same CPL3 RAX register. The snapshot is test-only data,
+not an authenticated kernel task or full Linux syscall implementation.
