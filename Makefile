@@ -2508,3 +2508,27 @@ test-x86-task-lifecycle: build/x86-task-lifecycle.so build/x86-task-lifecycle-li
 	timeout 90 $(PYTHON) tests/test_x86_task_lifecycle.py build/x86-task-lifecycle.so --view build/x86-syscall-task-view.so --object build/x86-task-lifecycle.o
 	$(PYTHON) tests/test_x86_task_lifecycle.py build/x86-task-lifecycle-liar.so --expect-unsafe
 test: test-x86-task-lifecycle
+
+# Genuine original HIA two-slot task writer -> independent HIA view -> real
+# PC/Q35 CPL3 SYSCALL/SYSRETQ return. Fixture identities/ownership, CRx/MSR,
+# stack transition and exception handler remain explicitly NON-HIA.
+build/syscall-task-life-boot.o: build/x86-task-lifecycle.o
+	objcopy --redefine-sym f0=syscall_task_lifecycle_f0 "$<" "$@"
+SYSCALL_TASK_LIFE_SUPPORT := $(SYSCALL_TASK_VIEW_SUPPORT) build/syscall-task-life-boot.o
+build/boot-syscall-task-life-spawn.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -DHEPTAKERNEL_TEST_SYSCALL_TASK_VIEW=1 -DHEPTAKERNEL_TEST_SYSCALL_TASK_LIFECYCLE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-syscall-task-life-retire.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -DHEPTAKERNEL_TEST_SYSCALL_TASK_VIEW=1 -DHEPTAKERNEL_TEST_SYSCALL_TASK_LIFECYCLE=1 -DHEPTAKERNEL_TEST_SYSCALL_LIFE_RETIRE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/boot-syscall-task-life-stale.o: arch/x86_64/boot.S build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP=1 -DHEPTAKERNEL_TEST_SYSCALL_TASK_VIEW=1 -DHEPTAKERNEL_TEST_SYSCALL_TASK_LIFECYCLE=1 -DHEPTAKERNEL_TEST_SYSCALL_LIFE_STALE=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+build/syscall-task-life-spawn-multiboot.elf: build/boot-syscall-task-life-spawn.o $(SYSCALL_TASK_LIFE_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-task-life-spawn.elf "$<" $(SYSCALL_TASK_LIFE_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-task-life-spawn.elf "$@"
+build/syscall-task-life-retire-multiboot.elf: build/boot-syscall-task-life-retire.o $(SYSCALL_TASK_LIFE_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-task-life-retire.elf "$<" $(SYSCALL_TASK_LIFE_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-task-life-retire.elf "$@"
+build/syscall-task-life-stale-multiboot.elf: build/boot-syscall-task-life-stale.o $(SYSCALL_TASK_LIFE_SUPPORT) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o build/syscall-task-life-stale.elf "$<" $(SYSCALL_TASK_LIFE_SUPPORT)
+	objcopy -O elf32-i386 build/syscall-task-life-stale.elf "$@"
+test-boot: build/syscall-task-life-spawn-multiboot.elf build/syscall-task-life-retire-multiboot.elf build/syscall-task-life-stale-multiboot.elf
+test-x86-syscall-hw: build/syscall-task-life-spawn-multiboot.elf build/syscall-task-life-retire-multiboot.elf build/syscall-task-life-stale-multiboot.elf

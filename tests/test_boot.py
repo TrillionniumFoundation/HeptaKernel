@@ -24,7 +24,12 @@ SYSCALL_GETPID_MARKER = "HEPTAKERNEL HIA ONE-TASK GETPID HARDWARE RESULT VERIFIE
 SYSCALL_ENOSYS_MARKER = "HEPTAKERNEL HIA ONE-TASK ENOSYS HARDWARE RESULT VERIFIED"
 TASK_VIEW_TID_MARKER = "HEPTAKERNEL HIA TASK VIEW WORKER TID HARDWARE RESULT VERIFIED"
 TASK_VIEW_STALE_MARKER = "HEPTAKERNEL HIA TASK VIEW MISSING LEADER REJECTED IN USER RAX"
-TASK_VIEW_MODES = {"syscall_task_view_tid_hardware", "syscall_task_view_leader_stale"}
+TASK_LIFE_MARKERS = {
+    "syscall_task_life_spawn_hardware": "HEPTAKERNEL HIA TASK LIFECYCLE SPAWN USER GETTID VERIFIED",
+    "syscall_task_life_retire_hardware": "HEPTAKERNEL HIA TASK LIFECYCLE RETIRE USER ESRCH VERIFIED",
+    "syscall_task_life_stale_hardware": "HEPTAKERNEL HIA TASK LIFECYCLE STALE RETIRE PRESERVED USER TID",
+}
+TASK_VIEW_MODES = {"syscall_task_view_tid_hardware", "syscall_task_view_leader_stale"} | set(TASK_LIFE_MARKERS)
 SYSCALL_STACK_PASS_MARKER = "HEPTAKERNEL HIA SYSCALL KERNEL STACK ADMITTED"
 SYSCALL_STACK_STALE_MARKER = "HEPTAKERNEL HIA SYSCALL KERNEL STACK STALE REJECTED"
 SYSCALL_STACK_CORRUPT_MARKER = "HEPTAKERNEL SYSCALL USER STACK CORRUPTION DETECTED"
@@ -112,6 +117,9 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         syscall_enosys_observed = p.stdout.count(SYSCALL_ENOSYS_MARKER) == 1
         task_tid_observed = p.stdout.count(TASK_VIEW_TID_MARKER) == 1
         task_stale_observed = p.stdout.count(TASK_VIEW_STALE_MARKER) == 1
+        task_life_observed = {key: p.stdout.count(marker) == 1
+                              for key, marker in TASK_LIFE_MARKERS.items()}
+        record["hia_task_lifecycle_hardware"] = task_life_observed
         record["hia_task_view_tid_observed"] = task_tid_observed
         record["hia_task_view_stale_observed"] = task_stale_observed
         record["hia_one_task_getpid_observed"] = syscall_getpid_observed
@@ -365,6 +373,8 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
                         and syscall_enosys_observed == (mode == "syscall_one_task_enosys_hardware")
                         and task_tid_observed == (mode == "syscall_task_view_tid_hardware")
                         and task_stale_observed == (mode == "syscall_task_view_leader_stale")
+                        and all(observed == (mode == name)
+                                for name, observed in task_life_observed.items())
                         and stack_pass and frame_pass
                         and not frame_rcx_stale and not frame_r11_stale and not frame_rsp_stale
                         and not stack_stale and not stack_corrupt and not syscall_stale_observed
@@ -610,6 +620,8 @@ def run(qemu, image, machine="pc", memory="32", mode="positive"):
         accepted = accepted and (syscall_enosys_observed == (mode == "syscall_one_task_enosys_hardware"))
         accepted = accepted and (task_tid_observed == (mode == "syscall_task_view_tid_hardware"))
         accepted = accepted and (task_stale_observed == (mode == "syscall_task_view_leader_stale"))
+        accepted = accepted and all(observed == (mode == name)
+                                    for name, observed in task_life_observed.items())
         accepted = accepted and (frame_rcx_stale == (mode == "syscall_frame_rcx_stale_rejected"))
         accepted = accepted and (frame_r11_stale == (mode == "syscall_frame_r11_stale_rejected"))
         accepted = accepted and (frame_rsp_stale == (mode == "syscall_frame_rsp_stale_rejected"))
@@ -821,6 +833,10 @@ def main():
                                       machine, memory, mode="syscall_task_view_tid_hardware"))
             report["runs"].append(run(args.qemu, Path("build/syscall-task-view-stale-multiboot.elf"),
                                       machine, memory, mode="syscall_task_view_leader_stale"))
+            for case in ("spawn", "retire", "stale"):
+                report["runs"].append(run(
+                    args.qemu, Path("build/syscall-task-life-" + case + "-multiboot.elf"),
+                    machine, memory, mode="syscall_task_life_" + case + "_hardware"))
             report["runs"].append(run(args.qemu, Path("build/syscall-msr-stale-multiboot.elf"),
                                       machine, memory, mode="syscall_msr_stale_rejected"))
             report["runs"].append(run(args.qemu, Path("build/syscall-stack-stale-multiboot.elf"),
