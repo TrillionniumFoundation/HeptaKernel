@@ -2573,6 +2573,9 @@ rsp0_ring3_exercise64:
     movl $39, %eax             /* x86-64 getpid syscall, NOT fixture magic */
 #endif
 #endif
+#ifdef HEPTAKERNEL_TEST_SYSCALL_TASK_VIEW
+    movl $186, %eax            /* actual Linux x86-64 gettid, worker record */
+#endif
     sysretq                     /* NON-HIA, actual hardware CPL0 -> CPL3 */
     jmp fail64
 #else
@@ -2597,6 +2600,17 @@ rsp0_ring3_fault64:
     movq $4242, %rdx
 #endif
     cmpq %rdx, %rax
+    jne fail64
+    cmpq %rdx, syscall_result(%rip)
+    jne fail64
+#endif
+#ifdef HEPTAKERNEL_TEST_SYSCALL_TASK_VIEW
+#ifdef HEPTAKERNEL_TEST_SYSCALL_TASK_BAD_LEADER
+    movq $-3, %rdx            /* missing live leader -> -ESRCH */
+#else
+    movq $4243, %rdx          /* worker TID differs from thread-group ID */
+#endif
+    cmpq %rdx, %rax          /* actual CPL3 RAX before any segment probe */
     jne fail64
     cmpq %rdx, syscall_result(%rip)
     jne fail64
@@ -2653,6 +2667,12 @@ rsp0_ring3_fault64:
 #else
     leaq message_syscall_one_task_getpid(%rip), %rsi
 #endif
+#elif defined(HEPTAKERNEL_TEST_SYSCALL_TASK_VIEW)
+#ifdef HEPTAKERNEL_TEST_SYSCALL_TASK_BAD_LEADER
+    leaq message_syscall_task_leader_stale(%rip), %rsi
+#else
+    leaq message_syscall_task_tid(%rip), %rsi
+#endif
 #elif defined(HEPTAKERNEL_TEST_SYSCALL_ROUNDTRIP)
     leaq message_syscall_roundtrip(%rip), %rsi
 #else
@@ -2673,7 +2693,7 @@ syscall_kernel_entry64:
     popq %rax
 #endif
     movabsq $stack_top, %rsp
-#ifdef HEPTAKERNEL_TEST_SYSCALL_ONE_TASK
+#if defined(HEPTAKERNEL_TEST_SYSCALL_ONE_TASK) || defined(HEPTAKERNEL_TEST_SYSCALL_TASK_VIEW)
     /* Actual ring3 RAX survives SYSCALL; retain before other HIA calls. */
     movq %rax, syscall_number(%rip)
 #endif
@@ -2777,11 +2797,33 @@ syscall_kernel_entry64:
     call syscall_one_task_f0
     movq %rax, syscall_result(%rip)
 #endif
+#ifdef HEPTAKERNEL_TEST_SYSCALL_TASK_VIEW
+    /* The two records are test-fixture bytes, NEVER kernel-authenticated tasks.
+     * The original HIA native function does the bounded reads and checks. */
+    leaq syscall_task_snapshot(%rip), %r8
+    movq $4242, 0(%r8)
+    movq $4242, 8(%r8)
+    movq $1, 16(%r8)
+    movq $1, 24(%r8)
+    movq $4243, 32(%r8)
+    movq $4242, 40(%r8)
+    movq $1, 48(%r8)
+    movq $1, 56(%r8)
+#ifdef HEPTAKERNEL_TEST_SYSCALL_TASK_BAD_LEADER
+    movq $9000, 8(%r8)         /* adversarial incorrect leader group */
+#endif
+    movq syscall_number(%rip), %rdi
+    movl $1, %esi              /* worker slot */
+    leaq syscall_task_snapshot(%rip), %rdx
+    movl $64, %ecx             /* exact read-only snapshot length */
+    call syscall_task_view_f0
+    movq %rax, syscall_result(%rip)
+#endif
     movq syscall_saved_rcx(%rip), %rcx
     movq syscall_saved_r11(%rip), %r11
     movq syscall_user_rsp(%rip), %rsp
-#ifdef HEPTAKERNEL_TEST_SYSCALL_ONE_TASK
-    movq syscall_result(%rip), %rax  /* actual Linux ABI return in RAX */
+#if defined(HEPTAKERNEL_TEST_SYSCALL_ONE_TASK) || defined(HEPTAKERNEL_TEST_SYSCALL_TASK_VIEW)
+    movq syscall_result(%rip), %rax  /* returned by real SYSRETQ to CPL3 */
 #endif
     sysretq                  /* actual NON-HIA privileged return */
 #endif
@@ -6184,6 +6226,10 @@ message_syscall_one_task_getpid:
     .asciz "HEPTAKERNEL HIA ONE-TASK GETPID HARDWARE RESULT VERIFIED\r\n"
 message_syscall_one_task_enosys:
     .asciz "HEPTAKERNEL HIA ONE-TASK ENOSYS HARDWARE RESULT VERIFIED\r\n"
+message_syscall_task_tid:
+    .asciz "HEPTAKERNEL HIA TASK VIEW WORKER TID HARDWARE RESULT VERIFIED\r\n"
+message_syscall_task_leader_stale:
+    .asciz "HEPTAKERNEL HIA TASK VIEW MISSING LEADER REJECTED IN USER RAX\r\n"
 message_syscall_stack_pass:
     .asciz "HEPTAKERNEL HIA SYSCALL KERNEL STACK ADMITTED\r\n"
 message_syscall_stack_stale:
@@ -6624,6 +6670,7 @@ syscall_saved_rcx: .skip 8
 syscall_saved_r11: .skip 8
 syscall_number: .skip 8
 syscall_result: .skip 8
+syscall_task_snapshot: .skip 64  /* two fixture records, not real tasks */
 tss_gdt_request:  .skip 32
 tss_gdt_reply:    .skip 16
 idt_gate_request: .skip 40
