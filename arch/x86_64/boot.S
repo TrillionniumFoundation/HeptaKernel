@@ -2812,11 +2812,19 @@ syscall_kernel_entry64:
 #ifdef HEPTAKERNEL_TEST_SYSCALL_TASK_BAD_LEADER
     movq $9000, 8(%r8)         /* adversarial incorrect leader group */
 #endif
-    movq syscall_number(%rip), %rdi
-    movl $1, %esi              /* worker slot */
-    leaq syscall_task_snapshot(%rip), %rdx
-    movl $64, %ecx             /* exact read-only snapshot length */
-    call syscall_task_view_f0
+    movq syscall_number(%rip), %rax
+    movq %rax, syscall_task_request(%rip)
+    movq $1, syscall_task_request+8(%rip)  /* slot 1: worker */
+    leaq syscall_task_request(%rip), %rdi
+    movl $16, %esi                    /* exact request buffer */
+    leaq syscall_task_reply(%rip), %rdx
+    movl $8, %ecx                     /* exact result buffer */
+    leaq syscall_task_snapshot(%rip), %r8
+    movl $64, %r9d                    /* exact read-only records */
+    call syscall_task_view_f0         /* status u32, HIA writes u64 result */
+    testl %eax, %eax
+    jne fail64
+    movq syscall_task_reply(%rip), %rax
     movq %rax, syscall_result(%rip)
 #endif
     movq syscall_saved_rcx(%rip), %rcx
@@ -6670,6 +6678,8 @@ syscall_saved_rcx: .skip 8
 syscall_saved_r11: .skip 8
 syscall_number: .skip 8
 syscall_result: .skip 8
+syscall_task_request: .skip 16
+syscall_task_reply: .skip 8
 syscall_task_snapshot: .skip 64  /* two fixture records, not real tasks */
 tss_gdt_request:  .skip 32
 tss_gdt_reply:    .skip 16
