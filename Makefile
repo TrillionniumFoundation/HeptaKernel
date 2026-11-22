@@ -2650,3 +2650,23 @@ build/boot-elf-stack-ring3-iret-rflags-bit3.o: arch/x86_64/boot.S build/boot-cas
 build/elf-stack-ring3-iret-rflags-bit3.elf: build/boot-elf-stack-ring3-iret-rflags-bit3.o $(ELF_STACK_RING3_SUPPORT) arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" "$<" $(ELF_STACK_RING3_SUPPORT)
 test-elf64-stack-ring3: test-x86-iret-user build/elf-stack-ring3-iret-stale-multiboot.elf build/elf-stack-ring3-iret-rflags-bit3-multiboot.elf
+
+
+# Genuine HIA single-owner, one-invocation first-free claim over two disjoint,
+# eight-page PMM-compatible zones. This is not SMP atomicity or general PMM.
+.PHONY: test-pmm-dual-claim
+build/pmm-dual-claim.o: src/pmm_dual_claim.hepta | build check-compiler
+	@if test -d .toolchain/hepta; then $(PYTHON) -c 'import sys;sys.path.insert(0,".toolchain/hepta");from hepta.hia_agent_assembly import assemble_program;assemble_program(open("src/pmm_dual_claim.hepta","rb").read());print("HIA Core source preflight: PASS")'; fi
+	@set -eu; tmp=$$(mktemp build/.pmm-dual.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	  env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	  test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
+build/pmm-dual-claim.so: build/pmm-dual-claim.o
+	ld -shared -z noexecstack -o "$@" "$<"
+test-pmm-dual-claim: build/pmm-dual-claim.so build/e820-allow-all.so
+	@set -eu; a=$$(mktemp build/.dual-a.XXXXXX); b=$$(mktemp build/.dual-b.XXXXXX); trap 'rm -f "$$a" "$$b"' EXIT HUP INT TERM; \
+	  env -i PATH= "$(HEPTA_COMPILER)" < src/pmm_dual_claim.hepta > "$$a"; \
+	  env -i PATH= "$(HEPTA_COMPILER)" < src/pmm_dual_claim.hepta > "$$b"; \
+	  cmp "$$a" "$$b"; cmp "$$a" build/pmm-dual-claim.o
+	timeout 90 $(PYTHON) tests/test_pmm_dual_claim.py build/pmm-dual-claim.so --object build/pmm-dual-claim.o
+	$(PYTHON) tests/test_pmm_dual_claim.py build/e820-allow-all.so --dishonest
+test: test-pmm-dual-claim
