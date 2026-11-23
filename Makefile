@@ -2794,3 +2794,6 @@ build/dual-native-claim.elf: build/boot-dual-native-claim.o $(DUAL_BOOT_SUPPORT)
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-dual-native-claim.o $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-boot.o build/pmm-scrub-claim-boot.o
 build/dual-native-claim-noop.elf: build/boot-dual-native-claim-noop.o $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-boot.o build/pmm-scrub-claim-noop-boot.o arch/x86_64/linker.ld
 	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$@" build/boot-dual-native-claim-noop.o $(DUAL_BOOT_SUPPORT) build/pmm-dual-claim-boot.o build/pmm-scrub-claim-noop-boot.o
+
+# Supplemental HIA-native cross-CPU snapshot gate; part of full make test.
+include tools/x86_shootdown.mk

@@ -1,0 +1,6 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn shootdown_admit(request:readbuf,reply:mutbuf,scratch:mutbuf) -> (u32) effects(trap) entry(start)
+block start(request:readbuf,reply:mutbuf,scratch:mutbuf)
+  always_zero:u32 = const() {"value":0}
+  ret(always_zero)
+end
