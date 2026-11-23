@@ -1,0 +1,89 @@
+name: Pinned Linux conservative Kbuild object activation
+
+on:
+  pull_request:
+    paths:
+      - 'tools/linux_kbuild_object_activation.py'
+      - 'tests/test_linux_kbuild_object_activation.py'
+      - 'docs/linux-kbuild-object-activation.md'
+      - '.github/workflows/linux-kbuild-object-activation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/linux_kbuild_object_activation.py'
+      - 'tests/test_linux_kbuild_object_activation.py'
+      - 'docs/linux-kbuild-object-activation.md'
+      - '.github/workflows/linux-kbuild-object-activation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  conservative-activation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: GNU Make differential + hostile fixture
+        run: python3 -I -B tests/test_linux_kbuild_object_activation.py
+      - name: Checkout immutable Linux Git tree
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: gregkh/linux
+          ref: 7595a62d45ee1a2297eafa5f2ef5d0a45142d84d
+          fetch-depth: 1
+          persist-credentials: false
+          path: .upstream/linux
+      - name: Produce conservative source-bound candidates
+        run: |
+          set -euo pipefail
+          test "$(git -C .upstream/linux rev-parse HEAD)" = 7595a62d45ee1a2297eafa5f2ef5d0a45142d84d
+          printf '{"schema":"heptakernel.kbuild-explicit-profile.v1","values":{}}\n' > build-empty-profile.json
+          python3 -I -B tools/linux_kbuild_object_activation.py \
+            --repo .upstream/linux --lock compatibility/linux-source-lock.json \
+            --profile build-empty-profile.json --out build/kbuild-object-activation
+      - name: Independent immutable-span readback and no closure credit
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, hashlib, json, subprocess
+          from pathlib import Path
+          root = '.upstream/linux'
+          out = Path('build/kbuild-object-activation')
+          report = json.loads((out/'report.json').read_bytes())
+          data = (out/'kbuild-object-candidates.jsonl').read_bytes()
+          assert hashlib.sha256(data).hexdigest() == report['records_sha256']
+          assert report['status'] == 'PARTIAL_LEXICAL_KBUILD_NOT_LINK_GRAPH'
+          assert report['linux_commit'] == '7595a62d45ee1a2297eafa5f2ef5d0a45142d84d'
+          assert not report['full_linux_rewrite_complete']
+          assert not report['active_objects_proven_linked']
+          assert report['full_linux_acceptance'] == 'HOLD'
+          cache = {}
+          for packed in data.splitlines():
+              item = json.loads(packed)
+              oid = item['blob_oid']
+              if oid not in cache:
+                  cache[oid] = subprocess.check_output(['git','-C',root,'cat-file','blob',oid])
+              blob = cache[oid]
+              start, end = item['start_byte'], item['end_byte']
+              assert 0 <= start < end <= len(blob)
+              assert hashlib.sha256(blob[start:end]).hexdigest() == item['raw_sha256']
+              assert base64.b64decode(item['token_b64']) is not None
+              if item['status'] == 'ACTIVE_LEXICAL_LITERAL':
+                  assert item['profile_value'] in ('y','m')
+                  assert item['conditional_state'] == 'true'
+          assert report['counts']['all_kbuild_paths'] >= report['counts']['regular_kbuild_paths']
+          print('KBUILD_OBJECT_CONSERVATIVE_INDEPENDENT_READBACK: PASS')
+          print('KBUILD_GRAPH_AND_FULL_LINUX: HOLD')
+          PY
+      - name: Retain evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-kbuild-object-candidate-obligations
+          path: build/kbuild-object-activation/
+          if-no-files-found: error
+          retention-days: 14
