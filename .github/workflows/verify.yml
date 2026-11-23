@@ -371,6 +371,17 @@ jobs:
         run: |
           make test-x86-tlb-plan HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Diagnose exact HIA shootdown syntax and Core verifier admission
+        shell: bash
+        run: |
+          PYTHONPATH=.toolchain/hepta python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from hepta.hia_agent_assembly import diagnose_assembly
+          report = diagnose_assembly(Path("src/x86_shootdown_admit.hepta").read_bytes())
+          print(json.dumps(report, sort_keys=True))
+          PY
+
       - name: Verify native HIA claimed cross-CPU shootdown ledger and dishonest control
         shell: bash
         run: |
