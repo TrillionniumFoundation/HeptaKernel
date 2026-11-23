@@ -18,7 +18,8 @@ spec.loader.exec_module(mod)
 
 
 def git(repo, *args):
-    return subprocess.check_output(["git", "-C", str(repo), *args]).strip()
+    raw = subprocess.check_output(["git", "-C", str(repo), *args])
+    return raw if args[:2] == ("cat-file", "blob") else raw.strip()
 
 
 def create(repo):
