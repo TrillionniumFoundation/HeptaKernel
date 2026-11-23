@@ -22,8 +22,8 @@ uses an empty profile: it does **not** guess which Linux config is active.
 
 The scanner recognizes literal `obj-y`, `obj-m`, `obj-n` and
 `obj-$(CONFIG_FOO)` assignment LHS and their literal `.o`/directory tokens.
-Only a strict subset of `ifeq`/`ifneq` with an explicitly known tristate is
-evaluated. Unknown selectors, unsupported guards, dynamic tokens, `define`,
+Only a strict subset of `ifeq`/`ifneq` and literal `ifdef CONFIG_X` /
+`ifndef CONFIG_X` with an explicitly known tristate is evaluated. Unknown selectors, unsupported guards, dynamic tokens, `define`,
 recipes, and includes are never silently accepted. Original Git object ID,
 source byte spans, line number, original raw-byte SHA-256, assignment operator
 and object token are retained. The independent fixture compares supported
@@ -49,13 +49,22 @@ The first-match arm logic is now evaluated without treating GNU Make's chained
 profile can activate exactly one known arm; a later arm is inactive if any
 earlier arm is known to match. If an earlier guard is undecidable, subsequent
 arms are never promoted to active merely because their own guard is true.
-An unsupported `else ifdef` / `else ifndef` remains unknown; malformed
-and repeated final `else` structures taint the complete file's activation
-claims, including earlier candidate lines.
+Supported literal `else ifdef CONFIG_X` and `else ifndef CONFIG_X` now
+participate in the same first-match evaluation. Under GNU Make, a known
+`CONFIG_X=n` is **defined** (and nonempty), just as `y` and `m` are;
+`ifdef CONFIG_X` is therefore true for all three explicit values. A CONFIG
+absent from the explicit profile remains **unknown**, not definitely undefined,
+so an unknown earlier arm cannot activate a later branch. Other variable
+names, macro expansions and unsupported condition syntax remain unresolved.
+Malformed and repeated final `else` structures taint the complete file's
+activation claims, including earlier candidate lines.
 
 `tests/test_linux_kbuild_elseif.py` independently compares all three known
 CONFIG_X profiles with actual GNU Make, tests an unknown earlier condition,
-unsupported branch syntax, duplicate `else`, malformed clauses and orphan
-`else` rejection. This narrows a subset of undecidable source lines; it still
+unknown branch syntax, duplicate `else`, malformed clauses and orphan
+`else` rejection. `tests/test_linux_kbuild_ifdef.py` adds nine explicit
+GNU Make differential profiles (three values each for two CONFIG names),
+profile-absence conservatism, source-byte checks, malformed `ifdef` rejection,
+repeated `else` denial and the negative check that `CONFIG_X=n` is still defined. This narrows a subset of undecidable source lines; it still
 does not evaluate includes, recursive variables, final Make variable values,
 Kconfig validity, link reachability or build any driver.
