@@ -77,8 +77,8 @@ def audit(repo, output, commit):
         "BLANK", "COMMENT", "LEXICAL_ASSIGNMENT",
         "OTHER_UNRESOLVED_MAKE_SYNTAX"} for x in records)
     assert sum(x["end_line"] > x["start_line"] for x in records) == 1
-    assert sum(x["status"] == "LEXICAL_ASSIGNMENT" for x in records) == 5
-    assert sum(x["status"] == "OTHER_UNRESOLVED_MAKE_SYNTAX" for x in records) == 3
+    assert sum(x["status"] == "LEXICAL_ASSIGNMENT" for x in records) == 6
+    assert sum(x["status"] == "OTHER_UNRESOLVED_MAKE_SYNTAX" for x in records) == 4
     assert sum(x["status"] == "COMMENT" for x in records) == 2
     paths_seen = set()
     for f in files:
