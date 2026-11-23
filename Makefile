@@ -2798,3 +2798,11 @@ build/dual-native-claim-noop.elf: build/boot-dual-native-claim-noop.o $(DUAL_BOO
 # Supplemental HIA-native cross-CPU snapshot gate; part of full make test.
 include tools/x86_shootdown.mk
 include tools/x86_shootdown_full_cohort.mk
+
+# Conservative pinned Kbuild activation contributes an independent fixture,
+# never credit toward Linux driver, ABI or whole-system acceptance.
+.PHONY: test-linux-kbuild-object-activation
+test-linux-kbuild-object-activation:
+	$(PYTHON) tests/test_linux_kbuild_object_activation.py
+
+test: test-linux-kbuild-object-activation
