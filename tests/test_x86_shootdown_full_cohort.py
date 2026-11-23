@@ -32,15 +32,17 @@ def oracle(data: bytes) -> int:
     if len(data) < 80:
         return 1
     root, va, epoch, prior, online, after, issuer, target, n, reserved = struct.unpack_from("<10Q", data)
-    if not 1 <= n <= 64 or len(data) != 80 + 40 * n:
+    if not 0 <= n <= 64 or len(data) != 80 + 40 * n:
         return 1
     canonical = (va >> 48) == (0xffff if va & (1 << 47) else 0)
     if (root == 0 or root & 4095 or root >= 1 << 52 or va & 4095
             or not canonical or epoch == 0 or prior >= epoch
             or online == 0 or after != online or reserved != 0
             or issuer >= 64 or not online & (1 << issuer)
-            or target == 0 or target != (online & ~(1 << issuer))):
+            or target != (online & ~(1 << issuer))):
         return 2
+    if target == 0:
+        return 6 if n == 0 else 2  # local-only is NOT remote-ack success
     seen = 0
     for cpu, ack_epoch, ack_root, flags, ack_va in struct.iter_unpack("<5Q", data[80:]):
         if cpu >= 64 or not target & (1 << cpu) or seen & (1 << cpu):
@@ -56,6 +58,11 @@ def cases():
     yield pack()
     yield pack(rows=list(reversed(base)))
     yield pack(online=MASK)
+    yield pack(online=1, issuer=0)    # local-only: status 6
+    yield pack(online=(1 << 63), issuer=63)
+    yield pack(online=1, issuer=0, rows=[(0, EPOCH, ROOT, 3, VA)])  # bogus local ack
+    yield pack(online=1, issuer=0, target=1, rows=[(0, EPOCH, ROOT, 3, VA)])
+    yield pack(online=ONLINE, rows=[])  # missing remote rows
     yield pack(online=(1 << 63) | 1, issuer=63)
     yield pack(va=high, rows=[(cpu, EPOCH, ROOT, 3, high) for cpu in (5, 63)])
     yield pack(target=1 << 5)             # original undercoverage vulnerability
@@ -128,7 +135,7 @@ def campaign(library: Path, dishonest: bool) -> None:
     native = ctypes.CDLL(str(library.resolve())).f0
     native.argtypes = [ctypes.c_void_p, ctypes.c_uint64] * 3
     native.restype = ctypes.c_uint32
-    counts = [0] * 6
+    counts = [0] * 7
     violations = 0
     n = 0
     for raw in cases():
@@ -153,12 +160,17 @@ def campaign(library: Path, dishonest: bool) -> None:
         print("dishonest HIA full-cohort ack DETECTED", violations)
         return
     assert counts[0] >= 2500 and all(x > 0 for x in counts[1:]), counts
+    assert oracle(pack(online=1, issuer=0)) == 6
+    assert oracle(pack(online=(1 << 63), issuer=63)) == 6
+    assert oracle(pack(online=ONLINE, rows=[])) == 5
     report = {
         "schema": "heptakernel.hia-x86-shootdown-full-cohort.v1",
         "status": "PASS", "cases": n, "seed": SEED, "status_counts": counts,
-        "exact_remote_cohort_from_online_mask": True, "claimed_online_and_epoch_authenticity": False, "hardware_ack_authenticated": False,
+        "exact_remote_cohort_from_online_mask": True, "local_only_status": 6,
+        "local_only_authorizes_reclamation": False,
+        "claimed_online_and_epoch_authenticity": False, "hardware_ack_authenticated": False,
         "ipi_or_invlpg_emitted": False, "smp_safety_proven": False, "frame_reclamation_authorized": False,
-        "frame_reclamation_authorized": False, "full_linux_acceptance": "HOLD",
+        "full_linux_acceptance": "HOLD",
         "source_sha256": hashlib.sha256(Path("src/x86_shootdown_full_cohort.hepta").read_bytes()).hexdigest(),
         "object_sha256": hashlib.sha256(Path("build/x86-shootdown-full-cohort.o").read_bytes()).hexdigest(),
     }
