@@ -106,7 +106,7 @@ def main():
             # Its empty CONFIG_UNKNOWN follows an actual false arm, whereas
             # the scanner correctly keeps unspecified values unresolved.
             oracle = make_objects(root, value)
-            assert wanted <= oracle, (value, wanted, oracle)
+            assert oracle - unknown == wanted, (value, sorted(oracle - unknown), sorted(wanted))
             assert not (oracle & ({"impossible.o"} | ({"second-m.o"} if value != "m" else set())))
             counts[value] = (len(rows), len(active))
         unprovided, _ = read_rows(SOURCE, {})
