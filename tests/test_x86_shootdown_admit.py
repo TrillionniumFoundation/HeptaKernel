@@ -130,8 +130,8 @@ def campaign(library: Path, dishonest: bool) -> dict:
     for raw in cases:
         expected = oracle(raw)
         source = ctypes.create_string_buffer(b"\xa7" * 32 + raw + b"\xa7" * 32)
-        reply = ctypes.create_string_buffer(b"\\xb4" * 48)
-        scratch = ctypes.create_string_buffer(b"\\xc3" * 48)
+        reply = ctypes.create_string_buffer(bytes([0xb4]) * 48)
+        scratch = ctypes.create_string_buffer(bytes([0xc3]) * 48)
         before = (bytes(source), bytes(reply), bytes(scratch))
         returned = native(ctypes.addressof(source) + 32, len(raw),
                           ctypes.addressof(reply), 48,
