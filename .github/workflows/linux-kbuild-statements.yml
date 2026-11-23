@@ -1,0 +1,120 @@
+name: Pinned Linux Kbuild source obligations
+
+on:
+  pull_request:
+    paths:
+      - 'tools/linux_kbuild_statements.py'
+      - 'tests/test_linux_kbuild_statements.py'
+      - 'docs/linux-kbuild-statements.md'
+      - '.github/workflows/linux-kbuild-statements.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/linux_kbuild_statements.py'
+      - 'tests/test_linux_kbuild_statements.py'
+      - 'docs/linux-kbuild-statements.md'
+      - '.github/workflows/linux-kbuild-statements.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-only-kbuild:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Adversarial immutable-source fixture
+        run: python3 -I -B tests/test_linux_kbuild_statements.py
+      - name: Checkout exact Linux source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: gregkh/linux
+          ref: 7595a62d45ee1a2297eafa5f2ef5d0a45142d84d
+          fetch-depth: 1
+          persist-credentials: false
+          path: .upstream/linux
+      - name: Produce Kbuild source obligations
+        run: |
+          set -euo pipefail
+          test "$(git -C .upstream/linux rev-parse HEAD)" = 7595a62d45ee1a2297eafa5f2ef5d0a45142d84d
+          python3 -I -B tools/linux_kbuild_statements.py \
+            --repo .upstream/linux \
+            --lock compatibility/linux-source-lock.json \
+            --out build/kbuild-inventory
+      - name: Independently replay entire immutable Kbuild source bytes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, hashlib, json, subprocess
+          from collections import defaultdict
+          from pathlib import Path
+          base = Path("build/kbuild-inventory")
+          report = json.loads((base / "report.json").read_bytes())
+          paths = (base / "kbuild-files.jsonl").read_bytes()
+          data = (base / "kbuild-statements.jsonl").read_bytes()
+          assert hashlib.sha256(paths).hexdigest() == report["files_sha256"]
+          assert hashlib.sha256(data).hexdigest() == report["statements_sha256"]
+          files = [json.loads(x) for x in paths.splitlines()]
+          records = [json.loads(x) for x in data.splitlines()]
+          grouped = defaultdict(list)
+          for r in records:
+              grouped[base64.b64decode(r["path_b64"])].append(r)
+          root = ".upstream/linux"
+          rev = subprocess.check_output(["git","-C",root,"rev-parse","HEAD"]).strip().decode()
+          assert report["linux_commit"] == rev
+          assert report["status"] == "SOURCE_ONLY_NOT_KBUILD_EVALUATION"
+          assert not report["full_linux_rewrite_complete"]
+          assert not report["kbuild_dependency_resolution"]
+          expected = []
+          tree = subprocess.check_output(["git","-C",root,"ls-tree",
+                                          "--full-tree","-r","-z","-l","HEAD"])
+          for item in tree.split(b"\0"):
+              if not item:
+                  continue
+              meta, sep, path = item.partition(b"\t")
+              assert sep == b"\t"
+              name = path.rsplit(b"/",1)[-1]
+              if name in (b"Makefile", b"Kbuild") or name.startswith(
+                      (b"Makefile.", b"Kbuild.")):
+                  mode, kind, oid, size = meta.split()
+                  expected.append((path, mode.decode(), kind.decode(),
+                                   oid.decode(), None if size == b"-" else int(size)))
+          observed = [(base64.b64decode(f["path_b64"]), f["mode"],
+                       f["type"], f["oid"], f["size"]) for f in files]
+          assert observed == sorted(expected, key=lambda item:item[0])
+          seen = set()
+          for f in files:
+              path = base64.b64decode(f["path_b64"])
+              assert path not in seen
+              seen.add(path)
+              rows = grouped.pop(path, [])
+              if f["mode"] not in ("100644", "100755"):
+                  assert not rows
+                  continue
+              blob = subprocess.check_output(["git","-C",root,"cat-file","blob",f["oid"]])
+              assert len(blob) == f["size"]
+              cursor = 0
+              for r in rows:
+                  assert r["blob_oid"] == f["oid"] and r["start_byte"] == cursor
+                  original = base64.b64decode(r["raw_b64"])
+                  assert blob[cursor:r["end_byte"]] == original
+                  cursor = r["end_byte"]
+              assert cursor == len(blob)
+          assert not grouped
+          assert len(files) == report["counts"]["kbuild_paths"]
+          assert len(records) == report["counts"]["statements"]
+          print("KBUILD_PINNED_SOURCE_INDEPENDENT_REPLAY: PASS",len(files),len(records))
+          print("KBUILD_DRIVER_ACTIVATION_AND_FULL_LINUX: HOLD")
+          PY
+      - name: Retain exact baseline source obligations
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-kbuild-source-obligations
+          path: build/kbuild-inventory/
+          if-no-files-found: error
+          retention-days: 14
