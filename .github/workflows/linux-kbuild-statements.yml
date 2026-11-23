@@ -73,11 +73,11 @@ jobs:
           expected = []
           tree = subprocess.check_output(["git","-C",root,"ls-tree",
                                           "--full-tree","-r","-z","-l","HEAD"])
-          for item in tree.split(b"\\0"):
+          for item in tree.split(b"\0"):
               if not item:
                   continue
-              meta, sep, path = item.partition(b"\\t")
-              assert sep == b"\\t"
+              meta, sep, path = item.partition(b"\t")
+              assert sep == b"\t"
               name = path.rsplit(b"/",1)[-1]
               if name in (b"Makefile", b"Kbuild") or name.startswith(
                       (b"Makefile.", b"Kbuild.")):
