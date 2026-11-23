@@ -41,3 +41,21 @@ source ledger from `tools/linux_kbuild_statements.py` alongside this derivative.
 
 Full Linux architecture, driver, kernel and ABI work remains open: 17 gates
 HOLD and 422 original x86-64 syscall rows not credited.
+
+## Three-valued chained `else ifeq` and `else ifneq`
+
+The first-match arm logic is now evaluated without treating GNU Make's chained
+`else ifeq` / `else ifneq` as a separate nested conditional. An explicit
+profile can activate exactly one known arm; a later arm is inactive if any
+earlier arm is known to match. If an earlier guard is undecidable, subsequent
+arms are never promoted to active merely because their own guard is true.
+An unsupported `else ifdef` / `else ifndef` remains unknown; malformed
+and repeated final `else` structures taint the complete file's activation
+claims, including earlier candidate lines.
+
+`tests/test_linux_kbuild_elseif.py` independently compares all three known
+CONFIG_X profiles with actual GNU Make, tests an unknown earlier condition,
+unsupported branch syntax, duplicate `else`, malformed clauses and orphan
+`else` rejection. This narrows a subset of undecidable source lines; it still
+does not evaluate includes, recursive variables, final Make variable values,
+Kconfig validity, link reachability or build any driver.
