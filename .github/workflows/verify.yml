@@ -380,6 +380,8 @@ jobs:
           from hepta.hia_agent_assembly import diagnose_assembly
           report = diagnose_assembly(Path("src/x86_shootdown_admit.hepta").read_bytes())
           print(json.dumps(report, sort_keys=True))
+          if not report['accepted']:
+              raise SystemExit(2)
           PY
 
       - name: Verify native HIA claimed cross-CPU shootdown ledger and dishonest control

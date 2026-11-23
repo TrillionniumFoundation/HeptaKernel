@@ -163,10 +163,10 @@ block byte(d2:readbuf,b2:usize,i2:u64,acc2:u64)
   shiftby:u64 = const() {"value":8}
   shift:u64 = int.mul.wrap(i2,shiftby)
   part:u64 = int.shl.checked(wide,shift)
-  result:u64 = bit.or(acc2,part)
+  joined_byte:u64 = bit.or(acc2,part)
   one:u64 = const() {"value":1}
   following:u64 = int.add.wrap(i2,one)
-  jump loop(d2,b2,following,result)
+  jump loop(d2,b2,following,joined_byte)
 block done(result:u64)
   ret(result)
 end
