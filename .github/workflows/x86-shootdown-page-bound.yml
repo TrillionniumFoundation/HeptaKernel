@@ -1,0 +1,73 @@
+name: HIA native shootdown page-bound preflight
+
+on:
+  push:
+    branches:
+      - automation/hia-shootdown-page-bound-20261123-t11
+  pull_request:
+    paths:
+      - src/x86_shootdown_page_bound.hepta
+      - tests/test_x86_shootdown_page_bound.py
+      - tests/negative/x86_shootdown_page_bound_allow_all.hepta
+      - tools/x86_shootdown.mk
+      - .github/workflows/x86-shootdown-page-bound.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-page-bound:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout candidate source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Checkout exact pinned Hepta source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: f33d8da316de8fdf27b504371f1a5310997ff548
+          path: .toolchain/hepta
+          persist-credentials: false
+          sparse-checkout: |
+            hepta
+            tools
+            examples/hia_bootstrap
+            docs
+      - name: Bootstrap exact HIA selfhost compiler
+        run: |
+          python3 -I -S -B tools/bootstrap_hia.py --root .toolchain/hepta --output .toolchain/compiler
+      - name: Core verifier then independent native oracle and dishonest control
+        run: |
+          PYTHONPATH=.toolchain/hepta python3 - <<'PY'
+          from pathlib import Path
+          from hepta.hia_agent_assembly import assemble_program
+          for path in ("src/x86_shootdown_page_bound.hepta",
+                       "tests/negative/x86_shootdown_page_bound_allow_all.hepta"):
+              assemble_program(Path(path).read_bytes())
+              print("HIA Core verified:", path)
+          PY
+          make test-x86-shootdown-page-bound HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+      - name: Check acceptance stays HOLD without shrinking obligations
+        run: |
+          python3 - <<'PY'
+          import json
+          data=json.load(open("compatibility/coverage.json"))
+          assert data["inventory_complete"] is False
+          assert data["baseline"]["linux_version"] == "7.3.4"
+          assert data["baseline"]["hepta_commit"] == "f33d8da316de8fdf27b504371f1a5310997ff548"
+          print("Partial component only: Linux full acceptance remains HOLD")
+          PY
+      - name: Retain exact-candidate native report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hia-shootdown-page-bound
+          path: |
+            build/x86-shootdown-page-bound-report.json
+            build/x86-shootdown-page-bound.o
+            build/x86-shootdown-page-bound-liar.o
+          if-no-files-found: warn

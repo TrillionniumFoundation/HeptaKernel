@@ -325,3 +325,11 @@ the former builds the bytes; non-HIA `boot.S` supplies the fixture and
 readback. See `docs/elf64-stack-physical-qemu.md`; no actual `execve`
 or user virtual stack mapping is claimed. All 17 gates and 422 syscall
 rows continue HOLD.
+
+A separately versioned native HIA TLB shootdown **page-bound** snapshot gate
+(`src/x86_shootdown_page_bound.hepta`) checks the claimed VA per CPU in
+addition to epoch/root/flags, detecting reuse of an unchanged per-CPU record
+under a different requested page. It does not authenticate any CPU execution,
+provide native IPI/INVLPG/atomics, or authorize frame reclamation; all
+17 Linux gates remain HOLD and all 422 syscall obligations remain in scope.
+See `docs/x86-shootdown-page-bound.md`.

@@ -389,6 +389,19 @@ jobs:
         run: |
           make test-x86-shootdown-admit HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
 
+      - name: Verify native HIA per-CPU shootdown page-identity binding and replay negative controls
+        shell: bash
+        run: |
+          PYTHONPATH=.toolchain/hepta python3 - <<'PY'
+          from pathlib import Path
+          from hepta.hia_agent_assembly import assemble_program
+          for source in ("src/x86_shootdown_page_bound.hepta",
+                         "tests/negative/x86_shootdown_page_bound_allow_all.hepta"):
+              checked = assemble_program(Path(source).read_bytes())
+              print("Verified page-bound Core functions", source, len(checked.as_dict()["functions"]))
+          PY
+          make test-x86-shootdown-page-bound HEPTA_COMPILER="$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Verify native HIA 1GiB PDPTE writes and dishonest control
         shell: bash
         run: |
