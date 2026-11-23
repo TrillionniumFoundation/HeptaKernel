@@ -54,7 +54,7 @@ def oracle(data: bytes) -> int:
 
 def campaign(library: Path, dishonest: bool) -> dict:
     native = ctypes.CDLL(str(library.resolve())).f0
-    native.argtypes = [ctypes.c_void_p, ctypes.c_uint64]
+    native.argtypes = [ctypes.c_void_p, ctypes.c_uint64] * 3
     native.restype = ctypes.c_uint32
     base_rows = [(0, EPOCH, ROOT, 3), (5, EPOCH, ROOT, 3),
                  (63, EPOCH, ROOT, 3)]
@@ -130,10 +130,14 @@ def campaign(library: Path, dishonest: bool) -> dict:
     for raw in cases:
         expected = oracle(raw)
         source = ctypes.create_string_buffer(b"\xa7" * 32 + raw + b"\xa7" * 32)
-        before = bytes(source)
-        returned = native(ctypes.addressof(source) + 32, len(raw))
-        if bytes(source) != before:
-            raise AssertionError("native HIA modified read-only supplied ledger")
+        reply = ctypes.create_string_buffer(b"\\xb4" * 48)
+        scratch = ctypes.create_string_buffer(b"\\xc3" * 48)
+        before = (bytes(source), bytes(reply), bytes(scratch))
+        returned = native(ctypes.addressof(source) + 32, len(raw),
+                          ctypes.addressof(reply), 48,
+                          ctypes.addressof(scratch), 48)
+        if (bytes(source), bytes(reply), bytes(scratch)) != before:
+            raise AssertionError("native HIA mutated supplied or unused buffers")
         if dishonest:
             if expected and returned == 0:
                 violations += 1

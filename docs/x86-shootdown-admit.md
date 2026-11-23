@@ -32,3 +32,8 @@ block only**. In particular, ledger data has no signed or hardware provenance,
 epochs can race with late CPU or page-table mutations, and the code proves
 neither actual remote TLB invalidation nor DMA/IOMMU coherence. Full 17-gate
 Linux acceptance remains HOLD, 422 syscall rows remain unchanged.
+
+The pinned native compiler's resource-bearing external f0 ABI uses the
+existing three-descriptor request/reply/scratch shape (six machine words).
+Reply and scratch are intentionally unused and must remain unchanged.
+This does not convert acknowledgement data into authenticated CPU evidence.

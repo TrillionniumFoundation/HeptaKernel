@@ -1,6 +1,6 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-fn shootdown_admit(request:readbuf) -> (u32) effects(read,trap) entry(start)
-block start(request:readbuf)
+fn shootdown_admit(request:readbuf,reply:mutbuf,scratch:mutbuf) -> (u32) effects(read,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,scratch:mutbuf)
   length:usize = buffer.len(request)
   header:usize = const() {"value":48}
   enough:bool = compare.ge(length,header)
