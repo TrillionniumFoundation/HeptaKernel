@@ -2805,5 +2805,6 @@ include tools/x86_shootdown_full_cohort.mk
 test-linux-kbuild-object-activation:
 	$(PYTHON) tests/test_linux_kbuild_object_activation.py
 	$(PYTHON) tests/test_linux_kbuild_elseif.py
+	$(PYTHON) tests/test_linux_kbuild_ifdef.py
 
 test: test-linux-kbuild-object-activation
