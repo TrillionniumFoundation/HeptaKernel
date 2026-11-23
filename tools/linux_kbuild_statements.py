@@ -88,7 +88,6 @@ def physical_lines(blob: bytes) -> list[bytes]:
 def statements(blob: bytes, entry: dict):
     physical = physical_lines(blob)
     cursor = 0
-    number = 1
     i = 0
     while i < len(physical):
         first, start = i, cursor
@@ -130,7 +129,7 @@ def statements(blob: bytes, entry: dict):
             ] if shape else [],
         }
         yield result
-    if cursor != len(blob) or number != 1:
+    if cursor != len(blob):
         raise ValueError("incomplete immutable Kbuild source byte traversal")
 
 
@@ -185,12 +184,9 @@ def build(repo: Path, lock: Path, destination: Path) -> dict:
         "full_linux_rewrite_complete": False,
         "full_linux_acceptance": "HOLD",
         "limitations": [
-            "Make variable expansion, conditionals, include semantics and
-recursive object graph evaluation are not performed.".replace("\n", " "),
-            "Assignments are lexical and their CONFIG mentions are not
-preprocessor, Kconfig or runtime reachability results.".replace("\n", " "),
-            "Regular source bytes are reproduced exactly from immutable blobs.
-Nonregular links are recorded but not dereferenced.".replace("\n", " "),
+            "Make variable expansion, conditionals, includes and recursive object graphs are not evaluated.",
+            "Assignments and CONFIG token mentions are lexical, not reachability evidence.",
+            "All regular source bytes come from immutable blobs; links are not dereferenced.",
             "The original 17 full-Linux gates and 422 syscall rows remain open.",
         ],
     }
