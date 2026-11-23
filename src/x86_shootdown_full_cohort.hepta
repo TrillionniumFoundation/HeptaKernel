@@ -1,0 +1,201 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn shootdown_full_cohort(request:readbuf,reply:mutbuf,scratch:mutbuf) -> (u32) effects(read,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,scratch:mutbuf)
+  length:usize = buffer.len(request)
+  header:usize = const() {"value":80}
+  enough:bool = compare.ge(length,header)
+  branch enough decode(request,length) bad_wire()
+block bad_wire()
+  e1:u32 = const() {"value":1}
+  ret(e1)
+block decode(r1:readbuf,length1:usize)
+  o0:usize = const() {"value":0}
+  o8:usize = const() {"value":8}
+  o16:usize = const() {"value":16}
+  o24:usize = const() {"value":24}
+  o32:usize = const() {"value":32}
+  o40:usize = const() {"value":40}
+  o48:usize = const() {"value":48}
+  o56:usize = const() {"value":56}
+  o64:usize = const() {"value":64}
+  o72:usize = const() {"value":72}
+  root1:u64 = call(r1,o0) {"function":"read_u64"}
+  va1:u64 = call(r1,o8) {"function":"read_u64"}
+  epoch1:u64 = call(r1,o16) {"function":"read_u64"}
+  prior1:u64 = call(r1,o24) {"function":"read_u64"}
+  online_before1:u64 = call(r1,o32) {"function":"read_u64"}
+  online_after1:u64 = call(r1,o40) {"function":"read_u64"}
+  issuer1:u64 = call(r1,o48) {"function":"read_u64"}
+  target1:u64 = call(r1,o56) {"function":"read_u64"}
+  count1:u64 = call(r1,o64) {"function":"read_u64"}
+  reserved1:u64 = call(r1,o72) {"function":"read_u64"}
+  jump shape(r1,length1,root1,va1,epoch1,prior1,online_before1,online_after1,issuer1,target1,count1,reserved1)
+block shape(r2:readbuf,length2:usize,root2:u64,va2:u64,epoch2:u64,prior2:u64,online_before2:u64,online_after2:u64,issuer2:u64,target2:u64,count2:u64,reserved2:u64)
+  minimum:u64 = const() {"value":1}
+  maximum:u64 = const() {"value":64}
+  stride:u64 = const() {"value":40}
+  head:u64 = const() {"value":80}
+  cmin:bool = compare.ge(count2,minimum)
+  cmax:bool = compare.le(count2,maximum)
+  countok:bool = bool.and(cmin,cmax)
+  bytes:u64 = int.mul.wrap(count2,stride)
+  total:u64 = int.add.wrap(bytes,head)
+  size:u64 = int.cast(length2) {"mode":"wrap"}
+  exact:bool = compare.eq(total,size)
+  wireok:bool = bool.and(countok,exact)
+  branch wireok profile(r2,root2,va2,epoch2,prior2,online_before2,online_after2,issuer2,target2,count2,reserved2) bad_wire()
+block profile(r3:readbuf,root3:u64,va3:u64,epoch3:u64,prior3:u64,online_before3:u64,online_after3:u64,issuer3:u64,target3:u64,count3:u64,reserved3:u64)
+  zero:u64 = const() {"value":0}
+  one:u64 = const() {"value":1}
+  lowmask:u64 = const() {"value":4095}
+  shift52:u64 = const() {"value":52}
+  shift48:u64 = const() {"value":48}
+  shift47:u64 = const() {"value":47}
+  highall:u64 = const() {"value":65535}
+  root_low:u64 = bit.and(root3,lowmask)
+  root_high:u64 = int.shr.checked(root3,shift52)
+  aligned:bool = compare.eq(root_low,zero)
+  physical:bool = compare.eq(root_high,zero)
+  nonzero:bool = compare.ne(root3,zero)
+  ra:bool = bool.and(aligned,physical)
+  rootok:bool = bool.and(ra,nonzero)
+  va_low:u64 = bit.and(va3,lowmask)
+  va_high:u64 = int.shr.checked(va3,shift48)
+  va_sign_word:u64 = int.shr.checked(va3,shift47)
+  va_sign:u64 = bit.and(va_sign_word,one)
+  va_aligned:bool = compare.eq(va_low,zero)
+  pos:bool = compare.eq(va_sign,zero)
+  pos_high:bool = compare.eq(va_high,zero)
+  neg:bool = compare.eq(va_sign,one)
+  neg_high:bool = compare.eq(va_high,highall)
+  posok:bool = bool.and(pos,pos_high)
+  negok:bool = bool.and(neg,neg_high)
+  canon:bool = bool.or(posok,negok)
+  vaok:bool = bool.and(va_aligned,canon)
+  monotonic:bool = compare.lt(prior3,epoch3)
+  onlineok:bool = compare.ne(online_before3,zero)
+  stable:bool = compare.eq(online_before3,online_after3)
+  reservedok:bool = compare.eq(reserved3,zero)
+  maxcpu:u64 = const() {"value":64}
+  issuerok:bool = compare.lt(issuer3,maxcpu)
+  pa:bool = bool.and(rootok,vaok)
+  pb:bool = bool.and(monotonic,onlineok)
+  pc:bool = bool.and(stable,reservedok)
+  pd:bool = bool.and(pa,pb)
+  pe:bool = bool.and(pd,pc)
+  complete:bool = bool.and(pe,issuerok)
+  branch complete issuer_profile(r3,root3,epoch3,online_before3,issuer3,target3,count3) bad_profile()
+block issuer_profile(issuer_request:readbuf,issuer_root:u64,issuer_epoch:u64,issuer_online:u64,issuer_cpu:u64,issuer_targets:u64,issuer_count:u64)
+  one4:u64 = const() {"value":1}
+  issuer_zero:u64 = const() {"value":0}
+  issuer_bit4:u64 = int.shl.checked(one4,issuer_cpu)
+  present4:u64 = bit.and(issuer_online,issuer_bit4)
+  notissuer4:u64 = bit.not(issuer_bit4)
+  needed4:u64 = bit.and(issuer_online,notissuer4)
+  issuer_present4:bool = compare.ne(present4,issuer_zero)
+  nonempty4:bool = compare.ne(needed4,issuer_zero)
+  exact_target4:bool = compare.eq(needed4,issuer_targets)
+  valid4:bool = bool.and(issuer_present4,nonempty4)
+  all4:bool = bool.and(valid4,exact_target4)
+  branch all4 scan_begin(issuer_request,issuer_root,issuer_epoch,issuer_targets,issuer_count) bad_profile()
+block bad_profile()
+  e2:u32 = const() {"value":2}
+  ret(e2)
+block scan_begin(r4:readbuf,root4:u64,epoch4:u64,target4:u64,count4:u64)
+  zero4:u64 = const() {"value":0}
+  jump scan(r4,root4,epoch4,target4,count4,zero4,zero4)
+block scan(r5:readbuf,root5:u64,epoch5:u64,target5:u64,count5:u64,i5:u64,seen5:u64)
+  more:bool = compare.lt(i5,count5)
+  branch more row(r5,root5,epoch5,target5,count5,i5,seen5) complete_scan(seen5,target5)
+block row(r6:readbuf,root6:u64,epoch6:u64,target6:u64,count6:u64,i6:u64,seen6:u64)
+  stride6:u64 = const() {"value":40}
+  header6:u64 = const() {"value":80}
+  off8:u64 = const() {"value":8}
+  off16:u64 = const() {"value":16}
+  off24:u64 = const() {"value":24}
+  off32:u64 = const() {"value":32}
+  a6:u64 = int.mul.wrap(i6,stride6)
+  base6:u64 = int.add.wrap(a6,header6)
+  b6:u64 = int.add.wrap(base6,off8)
+  c6:u64 = int.add.wrap(base6,off16)
+  d6:u64 = int.add.wrap(base6,off24)
+  e6:u64 = int.add.wrap(base6,off32)
+  p6:usize = int.cast(base6) {"mode":"wrap"}
+  q6:usize = int.cast(b6) {"mode":"wrap"}
+  s6:usize = int.cast(c6) {"mode":"wrap"}
+  t6:usize = int.cast(d6) {"mode":"wrap"}
+  u6:usize = int.cast(e6) {"mode":"wrap"}
+  cpu6:u64 = call(r6,p6) {"function":"read_u64"}
+  ack6:u64 = call(r6,q6) {"function":"read_u64"}
+  current_root6:u64 = call(r6,s6) {"function":"read_u64"}
+  completed6:u64 = call(r6,t6) {"function":"read_u64"}
+  page6:u64 = call(r6,u6) {"function":"read_u64"}
+  maxcpu6:u64 = const() {"value":64}
+  cpuok6:bool = compare.lt(cpu6,maxcpu6)
+  branch cpuok6 membership(r6,root6,epoch6,target6,count6,i6,seen6,cpu6,ack6,current_root6,completed6,page6) bad_row()
+block membership(r7:readbuf,root7:u64,epoch7:u64,target7:u64,count7:u64,i7:u64,seen7:u64,cpu7:u64,ack7:u64,current_root7:u64,completed7:u64,page7:u64)
+  one7:u64 = const() {"value":1}
+  zero7:u64 = const() {"value":0}
+  bit7:u64 = int.shl.checked(one7,cpu7)
+  eligible7:u64 = bit.and(bit7,target7)
+  prior7:u64 = bit.and(bit7,seen7)
+  in_target7:bool = compare.ne(eligible7,zero7)
+  unseen7:bool = compare.eq(prior7,zero7)
+  eligible:bool = bool.and(in_target7,unseen7)
+  branch eligible ack_check(r7,root7,epoch7,target7,count7,i7,seen7,bit7,ack7,current_root7,completed7,page7) bad_row()
+block bad_row()
+  e3:u32 = const() {"value":3}
+  ret(e3)
+block ack_check(r8:readbuf,root8:u64,epoch8:u64,target8:u64,count8:u64,i8:u64,seen8:u64,bit8:u64,ack8:u64,current_root8:u64,completed8:u64,page8:u64)
+  expected_completion8:u64 = const() {"value":3}
+  page_offset8:usize = const() {"value":8}
+  page_requested8:u64 = call(r8,page_offset8) {"function":"read_u64"}
+  pageok8:bool = compare.eq(page8,page_requested8)
+  epochok8:bool = compare.eq(ack8,epoch8)
+  rootok8:bool = compare.eq(current_root8,root8)
+  completedok8:bool = compare.eq(completed8,expected_completion8)
+  both8:bool = bool.and(epochok8,rootok8)
+  basevalid8:bool = bool.and(both8,completedok8)
+  valid8:bool = bool.and(basevalid8,pageok8)
+  branch valid8 next(r8,root8,epoch8,target8,count8,i8,seen8,bit8) bad_ack()
+block bad_ack()
+  e4:u32 = const() {"value":4}
+  ret(e4)
+block next(r9:readbuf,root9:u64,epoch9:u64,target9:u64,count9:u64,i9:u64,seen9:u64,bit9:u64)
+  one9:u64 = const() {"value":1}
+  j9:u64 = int.add.wrap(i9,one9)
+  new_seen9:u64 = bit.or(seen9,bit9)
+  jump scan(r9,root9,epoch9,target9,count9,j9,new_seen9)
+block complete_scan(seen10:u64,target10:u64)
+  all10:bool = compare.eq(seen10,target10)
+  branch all10 accepted() bad_missing()
+block bad_missing()
+  e5:u32 = const() {"value":5}
+  ret(e5)
+block accepted()
+  e0:u32 = const() {"value":0}
+  ret(e0)
+end
+fn read_u64(data:readbuf,base:usize) -> (u64) effects(read,trap) entry(start)
+block start(data:readbuf,base:usize)
+  zero:u64 = const() {"value":0}
+  jump loop(data,base,zero,zero)
+block loop(d1:readbuf,b1:usize,i1:u64,acc1:u64)
+  eight:u64 = const() {"value":8}
+  more:bool = compare.lt(i1,eight)
+  branch more byte(d1,b1,i1,acc1) done(acc1)
+block byte(d2:readbuf,b2:usize,i2:u64,acc2:u64)
+  index:usize = int.cast(i2) {"mode":"wrap"}
+  where:usize = int.add.wrap(b2,index)
+  octet:u8 = buffer.load(d2,where)
+  wide:u64 = int.cast(octet) {"mode":"wrap"}
+  shiftby:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(i2,shiftby)
+  part:u64 = int.shl.checked(wide,shift)
+  joined_byte:u64 = bit.or(acc2,part)
+  one:u64 = const() {"value":1}
+  following:u64 = int.add.wrap(i2,one)
+  jump loop(d2,b2,following,joined_byte)
+block done(result:u64)
+  ret(result)
+end

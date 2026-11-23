@@ -2797,3 +2797,4 @@ build/dual-native-claim-noop.elf: build/boot-dual-native-claim-noop.o $(DUAL_BOO
 
 # Supplemental HIA-native cross-CPU snapshot gate; part of full make test.
 include tools/x86_shootdown.mk
+include tools/x86_shootdown_full_cohort.mk
