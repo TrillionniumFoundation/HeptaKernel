@@ -22,6 +22,7 @@ NAME = re.compile(rb"CONFIG_[A-Z0-9_]+\Z")
 OBJ = re.compile(rb"obj-(y|m|n|\$\((CONFIG_[A-Z0-9_]+)\))\Z")
 ASSIGN = re.compile(rb"^[ \t]*([^ \t\r\n:=]+)[ \t]*([:+?]?=)[ \t]*(.*?)[ \t\r\n]*\Z", re.S)
 SIMPLE_IF = re.compile(rb"^(ifeq|ifneq)[ \t]*\([ \t]*\$\((CONFIG_[A-Z0-9_]+)\)[ \t]*,[ \t]*(y|m|n)[ \t]*\)[ \t]*$")
+SIMPLE_DEFINED = re.compile(rb"^(ifdef|ifndef)[ \t]+(CONFIG_[A-Z0-9_]+)[ \t]*$")
 CONTROL_START = re.compile(rb"^(ifeq|ifneq|ifdef|ifndef)(?=[ \t(]|$)")
 CONTROL_ELSE = re.compile(rb"^else(?=[ \t]|$)")
 CONTROL_END = re.compile(rb"^endif(?=[ \t]|$)")
@@ -105,6 +106,30 @@ def tri_or(lhs: bool | None, rhs: bool | None) -> bool | None:
     return True if lhs is True or rhs is True else None if lhs is None or rhs is None else False
 
 
+def evaluate_simple_condition(text: bytes, profile: dict[bytes, bytes]) -> tuple[bool | None, bool]:
+    """Known CONFIG values are *defined* even if they equal n.
+
+    A missing explicit profile entry is unknown, not GNU Make's default
+    undefined variable. This source-bound analysis is not an evaluated make
+    environment, so inferring absence would unsafely activate an else arm.
+    """
+    match = SIMPLE_IF.fullmatch(text)
+    if match:
+        value = profile.get(match[2])
+        result = None if value is None else value == match[3]
+        if match[1] == b"ifneq":
+            result = tri_not(result)
+        return result, True
+    defined = SIMPLE_DEFINED.fullmatch(text)
+    if defined:
+        value = profile.get(defined[2])
+        result = None if value is None else True
+        if defined[1] == b"ifndef":
+            result = tri_not(result)
+        return result, True
+    return None, False
+
+
 def analyze(blob: bytes, path: bytes, oid: bytes, profile: dict[bytes, bytes]):
     # Each frame holds (enclosing activity, whether any arm may have matched,
     # whether the final, unconditional else arm has appeared). Make's else-if
@@ -134,14 +159,8 @@ def analyze(blob: bytes, path: bytes, oid: bytes, profile: dict[bytes, bytes]):
             counts["deferred_define_lines"] += 1
             continue
         if CONTROL_START.match(text):
-            condition = SIMPLE_IF.fullmatch(text)
-            if condition:
-                value = profile.get(condition[2])
-                local = None if value is None else (value == condition[3])
-                if condition[1] == b"ifneq":
-                    local = tri_not(local)
-            else:
-                local = None
+            local, supported = evaluate_simple_condition(text, profile)
+            if not supported:
                 counts["unsupported_conditional_syntax"] += 1
             stack.append((active, local, False))
             active = tri_and(active, local)
@@ -166,14 +185,8 @@ def analyze(blob: bytes, path: bytes, oid: bytes, profile: dict[bytes, bytes]):
                     stack[-1] = (parent, True, True)
                     counts["unconditional_else_arms"] += 1
                 elif CONTROL_START.match(clause):
-                    condition = SIMPLE_IF.fullmatch(clause)
-                    if condition:
-                        value = profile.get(condition[2])
-                        local = None if value is None else value == condition[3]
-                        if condition[1] == b"ifneq":
-                            local = tri_not(local)
-                    else:
-                        local = None
+                    local, supported = evaluate_simple_condition(clause, profile)
+                    if not supported:
                         counts["unsupported_elseif_syntax"] += 1
                     active = tri_and(parent, tri_and(tri_not(taken), local))
                     stack[-1] = (parent, tri_or(taken, local), False)
@@ -314,8 +327,8 @@ def build(repo: Path, lock: Path, explicit_profile: Path, out: Path) -> dict:
         "full_linux_acceptance": "HOLD",
         "limitations": [
             "ACTIVE_LEXICAL_LITERAL denotes supported assignment-line activation only, not final variable value or linked object.",
-            "Supported else ifeq/ifneq arms use three-valued first-match semantics; unknown earlier arms never authorize later arms.",
-            "Unknown CONFIG, unsupported conditionals, includes, definitions, recursive Make and dynamic RHS remain unresolved.",
+            "Supported else ifeq/ifneq/ifdef/ifndef arms use three-valued first-match semantics; unknown earlier arms never authorize later arms.",
+            "Unknown or absent-from-profile CONFIG, unsupported conditionals, includes, definitions, recursive Make and dynamic RHS remain unresolved.",
             "The 17 full-system gates and 422 syscall rows are not credited or narrowed.",
         ],
     }
