@@ -1,5 +1,4 @@
 hia-asm.v1 hepta.hia.program.v8 selfhost_elf
-exports(shootdown_admit)
 fn shootdown_admit(request:readbuf) -> (u32) effects(read,trap) entry(start)
 block start(request:readbuf)
   length:usize = buffer.len(request)

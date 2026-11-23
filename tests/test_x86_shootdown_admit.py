@@ -53,7 +53,7 @@ def oracle(data: bytes) -> int:
 
 
 def campaign(library: Path, dishonest: bool) -> dict:
-    native = ctypes.CDLL(str(library.resolve())).shootdown_admit
+    native = ctypes.CDLL(str(library.resolve())).f0
     native.argtypes = [ctypes.c_void_p, ctypes.c_uint64]
     native.restype = ctypes.c_uint32
     base_rows = [(0, EPOCH, ROOT, 3), (5, EPOCH, ROOT, 3),
