@@ -95,8 +95,11 @@ def main():
                 active = {name for name, status in found.items()
                           if status == "ACTIVE_LEXICAL_LITERAL"}
                 assert active == WANTED, (x, y, active)
-                assert all(found[name] == "UNRESOLVED_SCOPE_OR_CONFIG"
-                           for name in UNKNOWN)
+                # An unknown first arm followed by a definitely true
+                # second arm makes the final else provably unreachable.
+                assert found["unknown-first.o"] == "UNRESOLVED_SCOPE_OR_CONFIG"
+                assert found["unknown-second.o"] == "UNRESOLVED_SCOPE_OR_CONFIG"
+                assert found["unknown-last.o"] == "INACTIVE_LEXICAL_LITERAL"
                 assert found["known-unreachable.o"] == "INACTIVE_LEXICAL_LITERAL"
                 assert found["known-unreachable-else.o"] == "INACTIVE_LEXICAL_LITERAL"
                 assert counts["unsupported_conditional_syntax"] == 0, counts
