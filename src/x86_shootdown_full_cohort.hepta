@@ -85,19 +85,19 @@ block profile(r3:readbuf,root3:u64,va3:u64,epoch3:u64,prior3:u64,online_before3:
   pe:bool = bool.and(pd,pc)
   complete:bool = bool.and(pe,issuerok)
   branch complete issuer_profile(r3,root3,epoch3,online_before3,issuer3,target3,count3) bad_profile()
-block issuer_profile(r4:readbuf,root4:u64,epoch4:u64,online4:u64,issuer4:u64,target4:u64,count4:u64)
+block issuer_profile(issuer_request:readbuf,issuer_root:u64,issuer_epoch:u64,issuer_online:u64,issuer_cpu:u64,issuer_targets:u64,issuer_count:u64)
   one4:u64 = const() {"value":1}
-  zero4:u64 = const() {"value":0}
-  issuer_bit4:u64 = int.shl.checked(one4,issuer4)
-  present4:u64 = bit.and(online4,issuer_bit4)
+  issuer_zero:u64 = const() {"value":0}
+  issuer_bit4:u64 = int.shl.checked(one4,issuer_cpu)
+  present4:u64 = bit.and(issuer_online,issuer_bit4)
   notissuer4:u64 = bit.not(issuer_bit4)
-  needed4:u64 = bit.and(online4,notissuer4)
-  issuer_present4:bool = compare.ne(present4,zero4)
-  nonempty4:bool = compare.ne(needed4,zero4)
-  exact_target4:bool = compare.eq(needed4,target4)
+  needed4:u64 = bit.and(issuer_online,notissuer4)
+  issuer_present4:bool = compare.ne(present4,issuer_zero)
+  nonempty4:bool = compare.ne(needed4,issuer_zero)
+  exact_target4:bool = compare.eq(needed4,issuer_targets)
   valid4:bool = bool.and(issuer_present4,nonempty4)
   all4:bool = bool.and(valid4,exact_target4)
-  branch all4 scan_begin(r4,root4,epoch4,target4,count4) bad_profile()
+  branch all4 scan_begin(issuer_request,issuer_root,issuer_epoch,issuer_targets,issuer_count) bad_profile()
 block bad_profile()
   e2:u32 = const() {"value":2}
   ret(e2)
