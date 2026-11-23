@@ -2804,5 +2804,6 @@ include tools/x86_shootdown_full_cohort.mk
 .PHONY: test-linux-kbuild-object-activation
 test-linux-kbuild-object-activation:
 	$(PYTHON) tests/test_linux_kbuild_object_activation.py
+	$(PYTHON) tests/test_linux_kbuild_elseif.py
 
 test: test-linux-kbuild-object-activation
