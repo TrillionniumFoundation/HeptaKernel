@@ -92,7 +92,7 @@ def main():
             rows, stats = read_rows(SOURCE, profile)
             assert stats["elseif_arms"] == 5, stats
             assert stats["unclosed_constructs"] == 0, stats
-            assert stats["unsupported_elseif_syntax"] == 1, stats
+            assert stats["unsupported_elseif_syntax"] == 0, stats  # ifdef is supported; unknown CONFIG remains unknown
             # The unknown CONFIG means none of these expressions can be
             # proven active, even if the following else-if is true.
             assert all(rows[name] != "ACTIVE_LEXICAL_LITERAL" for name in unknown)
