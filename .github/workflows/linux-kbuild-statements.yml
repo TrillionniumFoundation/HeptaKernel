@@ -70,6 +70,23 @@ jobs:
           assert report["status"] == "SOURCE_ONLY_NOT_KBUILD_EVALUATION"
           assert not report["full_linux_rewrite_complete"]
           assert not report["kbuild_dependency_resolution"]
+          expected = []
+          tree = subprocess.check_output(["git","-C",root,"ls-tree",
+                                          "--full-tree","-r","-z","-l","HEAD"])
+          for item in tree.split(b"\\0"):
+              if not item:
+                  continue
+              meta, sep, path = item.partition(b"\\t")
+              assert sep == b"\\t"
+              name = path.rsplit(b"/",1)[-1]
+              if name in (b"Makefile", b"Kbuild") or name.startswith(
+                      (b"Makefile.", b"Kbuild.")):
+                  mode, kind, oid, size = meta.split()
+                  expected.append((path, mode.decode(), kind.decode(),
+                                   oid.decode(), None if size == b"-" else int(size)))
+          observed = [(base64.b64decode(f["path_b64"]), f["mode"],
+                       f["type"], f["oid"], f["size"]) for f in files]
+          assert observed == sorted(expected, key=lambda item:item[0])
           seen = set()
           for f in files:
               path = base64.b64decode(f["path_b64"])
