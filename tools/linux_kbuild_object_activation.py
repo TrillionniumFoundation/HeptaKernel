@@ -101,7 +101,14 @@ def tri_not(value: bool | None) -> bool | None:
     return None if value is None else not value
 
 
+def tri_or(lhs: bool | None, rhs: bool | None) -> bool | None:
+    return True if lhs is True or rhs is True else None if lhs is None or rhs is None else False
+
+
 def analyze(blob: bytes, path: bytes, oid: bytes, profile: dict[bytes, bytes]):
+    # Each frame holds (enclosing activity, whether any arm may have matched,
+    # whether the final, unconditional else arm has appeared). Make's else-if
+    # chain is a *single* nesting level, not a nested if with another endif.
     stack: list[tuple[bool | None, bool | None, bool]] = []
     active: bool | None = True
     macro_depth = 0
@@ -146,14 +153,35 @@ def analyze(blob: bytes, path: bytes, oid: bytes, profile: dict[bytes, bytes]):
                 structural_fault = True
                 active = None
             else:
-                parent, local, had_else = stack[-1]
-                if had_else or text != b"else":
-                    counts["unresolved_else_clause"] += 1
-                    local = None
+                parent, taken, had_else = stack[-1]
+                clause = text[len(b"else"):].strip()
+                if had_else:
+                    counts["duplicate_or_post_else_clause"] += 1
+                    structural_fault = True
+                    active = None
+                elif not clause:
+                    # Only the fraction not matched by an earlier arm reaches
+                    # a bare else. A fully unknown prior arm stays unknown.
+                    active = tri_and(parent, tri_not(taken))
+                    stack[-1] = (parent, True, True)
+                    counts["unconditional_else_arms"] += 1
+                elif CONTROL_START.match(clause):
+                    condition = SIMPLE_IF.fullmatch(clause)
+                    if condition:
+                        value = profile.get(condition[2])
+                        local = None if value is None else value == condition[3]
+                        if condition[1] == b"ifneq":
+                            local = tri_not(local)
+                    else:
+                        local = None
+                        counts["unsupported_elseif_syntax"] += 1
+                    active = tri_and(parent, tri_and(tri_not(taken), local))
+                    stack[-1] = (parent, tri_or(taken, local), False)
+                    counts["elseif_arms"] += 1
                 else:
-                    local = tri_not(local)
-                stack[-1] = (parent, local, True)
-                active = tri_and(parent, local)
+                    counts["malformed_else_clause"] += 1
+                    structural_fault = True
+                    active = None
             continue
         if CONTROL_END.match(text):
             if text != b"endif" or not stack:
@@ -286,6 +314,7 @@ def build(repo: Path, lock: Path, explicit_profile: Path, out: Path) -> dict:
         "full_linux_acceptance": "HOLD",
         "limitations": [
             "ACTIVE_LEXICAL_LITERAL denotes supported assignment-line activation only, not final variable value or linked object.",
+            "Supported else ifeq/ifneq arms use three-valued first-match semantics; unknown earlier arms never authorize later arms.",
             "Unknown CONFIG, unsupported conditionals, includes, definitions, recursive Make and dynamic RHS remain unresolved.",
             "The 17 full-system gates and 422 syscall rows are not credited or narrowed.",
         ],
