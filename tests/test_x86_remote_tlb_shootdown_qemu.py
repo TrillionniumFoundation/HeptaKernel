@@ -45,24 +45,47 @@ def symbol(obj, name):
     return rows[0]
 
 
+def instruction_rows(asm):
+    # Parse raw instruction rows without requiring symbol annotations,
+    # a particular call mnemonic, hexadecimal prefix or tab spacing.
+    for line in asm.splitlines():
+        m = re.match(r"^\s*(?:0x)?([0-9a-fA-F]+):\s+(.*?)\s*$", line)
+        if not m:
+            continue
+        fields = m[2].split()
+        n = 0
+        while n < len(fields) and re.fullmatch(r"[0-9a-fA-F]{2}", fields[n]):
+            n += 1
+        if n and n < len(fields):
+            yield int(m[1], 16), bytes.fromhex(" ".join(fields[:n])), fields[n], fields[n+1:]
+
+
+def decoded_rows(obj):
+    return list(instruction_rows(run(["objdump", "-d", "--show-raw-insn",
+                                      "--insn-width=16", obj]).decode()))
+
+
 def implementation_ranges(obj, text):
-    # Exported SysV wrappers are emitted AFTER private HIA bodies. Resolve
-    # each wrapper's sole direct rel32 call using both objdump and raw bytes.
     names = ("f0", "f1", "f2", "f3")
+    wrappers = {name: symbol(obj, name) for name in names}
+    rows = decoded_rows(obj)
     entries = {}
-    for name in names:
-        asm = run(["objdump", "-d", "--disassemble=" + name, obj]).decode()
-        matches = re.findall(
-            r"^\s*([0-9a-f]+):\s+e8\s+(?:[0-9a-f]{2}\s+){4}call\s+([0-9a-f]+)\s+<[^>]+>",
-            asm, re.M)
-        assert len(matches) == 1, (name, matches)
-        at, target = (int(x, 16) for x in matches[0])
-        assert text[at] == 0xe8
-        assert at + 5 + int.from_bytes(text[at+1:at+5], "little", signed=True) == target
+    for name, lo in wrappers.items():
+        hi = min((x for x in wrappers.values() if x > lo), default=len(text))
+        region = [r for r in rows if lo <= r[0] < hi]
+        matches = [(at, raw, operands) for at, raw, mnemonic, operands in region
+                   if mnemonic in ("call", "callq")]
+        assert len(matches) == 1, (name, matches, region)
+        at, raw, operands = matches[0]
+        assert len(raw) == 5 and raw[0] == 0xe8 and text[at:at+5] == raw and at+5 <= hi
+        assert operands and re.fullmatch(r"(?:0x)?[0-9a-fA-F]+", operands[0]), (name, operands)
+        target = at + 5 + int.from_bytes(raw[1:], "little", signed=True)
+        assert target == int(operands[0], 16)
         entries[name] = target
-    end = min(symbol(obj, name) for name in names)
+    end = min(wrappers.values())
     starts = sorted(entries.values())
     assert len(set(starts)) == len(names) and starts[0] == 0 and starts[-1] < end
+    assert all(any(at == start for at, _, _, _ in rows) for start in starts)
     return {name: (start, next(x for x in starts + [end] if x > start))
             for name, start in entries.items()}
 
@@ -72,12 +95,25 @@ def check_opcode_owner(obj, text, ranges, owner, opcode, mnemonic):
     pos = text.index(opcode)
     lo, hi = ranges[owner]
     assert lo <= pos and pos + len(opcode) <= hi, (owner, pos, lo, hi)
-    # Require an actual decoded instruction, not bytes in an immediate.
-    dis = run(["objdump", "-d", obj]).decode()
-    prefix = r"^\s*" + format(pos, "x") + r":\s+"
-    encoded = r"\s+".join(format(x, "02x") for x in opcode)
-    assert re.search(prefix + encoded + r"\s+" + mnemonic + r"\b", dis, re.M), (owner, pos)
+    matches = [(raw, op, args) for at, raw, op, args in decoded_rows(obj) if at == pos]
+    assert len(matches) == 1, (owner, pos, matches)
+    raw, op, args = matches[0]
+    assert raw == opcode and re.match(mnemonic + r"(?:q)?\b", " ".join([op] + args)), (owner, pos, matches)
     return pos
+
+
+def check_disassembly_display_variants():
+    for line in (
+        " 1846: e8 b5 e7 ff ff call 0 <f0-0x1801>",
+        " 0x1846: e8 b5 e7 ff ff callq 0x0",
+        " 1846:\te8 b5 e7 ff ff\tcall 0x0000000000000000 <.text>",
+    ):
+        rows = list(instruction_rows(line))
+        assert len(rows) == 1
+        at, raw, op, operands = rows[0]
+        assert at == 0x1846 and raw == bytes.fromhex("e8b5e7ffff")
+        assert op in ("call", "callq") and int(operands[0], 16) == 0
+        assert at + len(raw) + int.from_bytes(raw[1:], "little", signed=True) == 0
 
 
 def link(out, name, obj, expected, macro):
@@ -130,6 +166,7 @@ def main():
     run(["as", "--64", "-o", out / "oracle.o", oracle])
     opcode = extract(out / "oracle.o", out / "oracle.text")
     assert opcode == bytes.fromhex("0f0138") and text.count(opcode) == 1
+    check_disassembly_display_variants()
     ranges = implementation_ranges(obj, text)
     pos = check_opcode_owner(obj, text, ranges, "f2", opcode, "invlpg")
     mutated = text[:pos] + b"\x90"*3 + text[pos+3:]
