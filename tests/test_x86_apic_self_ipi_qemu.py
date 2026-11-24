@@ -91,19 +91,29 @@ def main():
     text = extract(obj, out / "native.text")
     # The actual aligned MMIO write instruction is independently assembled.
     oracle = out / "oracle.S"
-    oracle.write_text(".text\n testb $3,%dl\n jz 1f\n ud2\n1:\n movl %eax,(%rdx)\n")
+    oracle.write_text(".text\n testb $3,%dl\n jz 1f\n ud2\n1:\n movq -256(%rbp),%rax\n movl %eax,(%rdx)\n")
     run(["as", "--64", "-o", out / "oracle.o", oracle])
     write = extract(out / "oracle.o", out / "oracle.text")
-    assert write == bytes.fromhex("f6c20374020f0b8902")
-    assert text.count(write) == 2
-    indices = [text.index(write), text.rindex(write)]
-    assert symbol(obj, "f0") <= indices[0] < symbol(obj, "f1") <= indices[1]
+    assert write == bytes.fromhex("f6c20374020f0b488b8500ffffff8902")
+    # Only the compiler's stack-slot displacement may differ from GNU as.
+    indices = [i+14 for i in range(len(text)-15)
+               if text[i:i+10] == write[:10] and text[i+14:i+16] == write[14:16]]
+    assert len(indices) == 2 and text.count(write[-2:]) == 2
+    def body_start(name, limit):
+        stub = symbol(obj, name)
+        code = text[stub:limit]
+        calls = [i for i in range(len(code)-7)
+                 if code[i] == 0xe8 and code[i+5:i+8] == bytes.fromhex("488b85")]
+        assert len(calls) == 1, (name, code.hex())
+        i = calls[0]
+        return stub+i+5+int.from_bytes(code[i+1:i+5], "little", signed=True)
+    f0, f1 = symbol(obj, "f0"), symbol(obj, "f1")
+    assert 0 <= body_start("f0",f1) <= indices[0] < body_start("f1",len(text)) <= indices[1] < f0 < f1
     mutants = []
     for name, pos, macro, serial in (
         ("send-nop", indices[0], "HIA_TEST_SEND_NOP", b"N"),
         ("eoi-nop", indices[1], "HIA_TEST_EOI_NOP", b"M")):
-        offset = pos + len(write)
-        mutated = text[:offset-2] + b"\x90\x90" + text[offset:]
+        mutated = text[:pos] + b"\x90\x90" + text[pos+2:]
         badraw = out / (name + ".text")
         badraw.write_bytes(mutated)
         badobj = out / (name + ".o")
