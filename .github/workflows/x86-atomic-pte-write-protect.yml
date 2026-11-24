@@ -1,0 +1,46 @@
+name: Experimental HIA atomic PTE downgrade (not Linux acceptance)
+on:
+  push:
+    branches: ['automation/x86-atomic-pte-write-protect-*']
+  pull_request:
+    paths:
+      - 'src/x86_pt_atomic_write_protect.hepta'
+      - 'tests/fixtures/x86_pt_atomic_write_protect.*'
+      - 'tests/test_x86_pt_atomic_write_protect_qemu.py'
+      - '.github/workflows/x86-atomic-pte-write-protect.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  experimental-pte:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: afa29e97aba26351d366f9ecded027e127e77427
+          persist-credentials: false
+          path: .upstream/hepta-experimental
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: sudo apt-get update && sudo apt-get install -y binutils gcc qemu-system-x86
+      - name: Rebuild exact experimental compiler independently
+        run: |
+          test "$(git -C .upstream/hepta-experimental rev-parse HEAD)" = afa29e97aba26351d366f9ecded027e127e77427
+          python -B .upstream/hepta-experimental/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/kernel-experimental"
+      - name: Execute exact HIA CAS and invalidation against real CPU page tables
+        run: python -B tests/test_x86_pt_atomic_write_protect_qemu.py --compiler-dir "$RUNNER_TEMP/kernel-experimental" --output "$RUNNER_TEMP/atomic-pte"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: atomic-pte-experiment-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/kernel-experimental/report.json
+            ${{ runner.temp }}/atomic-pte/
+          if-no-files-found: warn
+          retention-days: 7
