@@ -1,0 +1,49 @@
+name: Experimental HIA remote TLB invalidation and ACK (not Linux acceptance)
+on:
+  push:
+    branches: ['automation/x86-remote-tlb-shootdown-*']
+  pull_request:
+    paths:
+      - 'src/x86_remote_tlb_shootdown.hepta'
+      - 'tests/fixtures/x86_remote_tlb_shootdown.S'
+      - 'tests/fixtures/x86_apic_self_ipi.ld'
+      - 'tests/test_x86_remote_tlb_shootdown_qemu.py'
+      - '.github/workflows/x86-remote-tlb-shootdown.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  experimental-remote-tlb-shootdown:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: fed7aac38b86c2dfb4ed03aa9491fa93b7565dad
+          persist-credentials: false
+          path: .upstream/hepta-experimental
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: sudo apt-get update && sudo apt-get install -y binutils gcc qemu-system-x86
+      - name: Independently rebuild the exact experimental selfhost compiler
+        run: |
+          test "$(git -C .upstream/hepta-experimental rev-parse HEAD)" = fed7aac38b86c2dfb4ed03aa9491fa93b7565dad
+          python -B .upstream/hepta-experimental/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/kernel-experimental"
+      - name: Execute HIA remote TLB invalidation and ACK against independent hardware observer
+        env:
+          LC_ALL: C
+        run: python -B tests/test_x86_remote_tlb_shootdown_qemu.py --compiler-dir "$RUNNER_TEMP/kernel-experimental" --output "$RUNNER_TEMP/remote-tlb-shootdown"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: remote-tlb-shootdown-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/kernel-experimental/report.json
+            ${{ runner.temp }}/remote-tlb-shootdown/
+          if-no-files-found: warn
+          retention-days: 7
