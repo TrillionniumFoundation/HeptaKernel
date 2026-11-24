@@ -1,0 +1,50 @@
+name: Experimental HIA IDTR load, terminal user IRETQ and ordered MSR initialization (not Linux acceptance)
+on:
+  push:
+    branches: ['automation/x86-syscall-native-user-entry-*']
+  pull_request:
+    paths:
+      - 'src/x86_syscall_msr_init.hepta'
+      - 'src/x86_syscall_user_iretq.hepta'
+      - 'src/x86_syscall_idtr_load.hepta'
+      - 'tests/fixtures/x86_syscall_native_user_entry.*'
+      - 'tests/test_x86_syscall_native_user_entry_qemu.py'
+      - '.github/workflows/x86-syscall-native-user-entry.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  experimental-native-user-entry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: bd0e2bcbfca8dcae9bf95fe292502935ffa8d47b
+          persist-credentials: false
+          path: .upstream/hepta-experimental
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: sudo apt-get update && sudo apt-get install -y binutils gcc qemu-system-x86
+      - name: Independently rebuild the exact experimental selfhost compiler
+        run: |
+          test "$(git -C .upstream/hepta-experimental rev-parse HEAD)" = bd0e2bcbfca8dcae9bf95fe292502935ffa8d47b
+          python -B .upstream/hepta-experimental/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/kernel-experimental"
+      - name: Execute HIA IDTR load, user IRETQ, ordered MSRs and genuine CPL3 SYSCALL
+        env:
+          LC_ALL: C
+        run: python -B tests/test_x86_syscall_native_user_entry_qemu.py --compiler-dir "$RUNNER_TEMP/kernel-experimental" --output "$RUNNER_TEMP/native-user-entry"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-user-entry-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/kernel-experimental/report.json
+            ${{ runner.temp }}/native-user-entry/
+          if-no-files-found: warn
+          retention-days: 7

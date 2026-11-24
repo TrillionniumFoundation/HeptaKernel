@@ -1,0 +1,48 @@
+name: Experimental HIA ordered syscall MSR initialization and actual CPL3 SYSCALL (not Linux acceptance)
+on:
+  push:
+    branches: ['automation/x86-syscall-msr-init-*']
+  pull_request:
+    paths:
+      - 'src/x86_syscall_msr_init.hepta'
+      - 'tests/fixtures/x86_syscall_msr_init.*'
+      - 'tests/test_x86_syscall_msr_init_qemu.py'
+      - '.github/workflows/x86-syscall-msr-init.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  experimental-msr-init:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: 43ddfe0479f182792e17e80822ac00d75a78a4ac
+          persist-credentials: false
+          path: .upstream/hepta-experimental
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: sudo apt-get update && sudo apt-get install -y binutils gcc qemu-system-x86
+      - name: Independently rebuild the exact experimental selfhost compiler
+        run: |
+          test "$(git -C .upstream/hepta-experimental rev-parse HEAD)" = 43ddfe0479f182792e17e80822ac00d75a78a4ac
+          python -B .upstream/hepta-experimental/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/kernel-experimental"
+      - name: Execute HIA ordered syscall MSR initialization and genuine CPL3 SYSCALL
+        env:
+          LC_ALL: C
+        run: python -B tests/test_x86_syscall_msr_init_qemu.py --compiler-dir "$RUNNER_TEMP/kernel-experimental" --output "$RUNNER_TEMP/msr-init"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: msr-init-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/kernel-experimental/report.json
+            ${{ runner.temp }}/msr-init/
+          if-no-files-found: warn
+          retention-days: 7

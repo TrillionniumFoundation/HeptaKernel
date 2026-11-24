@@ -1,0 +1,7 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0)
+fn f0(v0:u64,v1:u16,v2:u64,v3:u64,v4:u16) -> () effects(privilege,trap) entry(b0)
+block b0(v0:u64,v1:u16,v2:u64,v3:u64,v4:u16)
+  _ = x86.irq.iretq_user(v0,v1,v2,v3,v4)
+  trap user
+end
