@@ -1,6 +1,7 @@
 /* NON-HIA Multiboot, AP startup and independent interrupt observer.
  * f0 (IPI send), f1 (EOI), f2 (remote invalidation) are native HIA.
- * f3 publishes PTE; f4 publishes generation-tagged ACK by native CAS. */
+ * f3 publishes PTE; f4 publishes generation-tagged ACK by native CAS.
+ * f5 consumes one completed generation on BSP, not page reclamation. */
 .set TARGET_VA,0x40000000
 .set OLD_VALUE,0x13579bdf
 .set NEW_VALUE,0x2468ace0
@@ -198,6 +199,59 @@ ready:
     jne abort
     cmpq $4,shoot_ack(%rip)
     jne abort
+    /* All malformed f5 inputs must be rejected before any CAS. */
+    leaq shoot_ack+1(%rip),%rdi
+    movl $2,%esi
+    call f5
+    cmpq $6,%rax
+    jne abort
+    leaq shoot_ack(%rip),%rdi
+    xorl %esi,%esi
+    call f5
+    cmpq $6,%rax
+    jne abort
+    leaq shoot_ack(%rip),%rdi
+    movabsq $0x8000000000000000,%rsi
+    call f5
+    cmpq $6,%rax
+    jne abort
+    xorq %rdi,%rdi
+    movl $2,%esi
+    call f5
+    cmpq $6,%rax
+    jne abort
+    movl $0x40000000,%edi
+    movl $2,%esi
+    call f5
+    cmpq $6,%rax
+    jne abort
+    cmpq $4,shoot_ack(%rip)
+    jne abort
+#ifndef HIA_TEST_CONSUME_CAS_NOP
+    /* Pending generation cannot be consumed. The early-deletion
+     * mutant must show a false success and the unchanged pending word. */
+    leaq shoot_ack(%rip),%rdi
+    movl $2,%esi
+    call f5
+#ifdef HIA_TEST_CONSUME_PENDING_NOP
+    testq %rax,%rax
+    jnz abort
+    cmpq $4,shoot_ack(%rip)
+    jne abort
+    cmpq $0x11223344,ack_guard_lo(%rip)
+    jne abort
+    cmpq $0x55667788,ack_guard_hi(%rip)
+    jne abort
+    movb $'U',%bl
+    movl $0x11,%eax
+    jmp finish
+#else
+    cmpq $9,%rax
+    jne abort
+    cmpq $4,shoot_ack(%rip)
+    jne abort
+#endif
+#endif
     /* BSP must not be able to claim remote invalidation. */
     movl $TARGET_VA,%edi
     call f2
@@ -411,6 +465,57 @@ checked_post_return:
     jne abort
 #endif
 #endif
+    /* Actual BSP consumption is separate from AP publication. No observer
+     * writes the retirement word. A zero word is terminal for this fixture;
+     * reuse needs a separate generation allocator/ownership protocol. */
+#if defined(HIA_TEST_FLUSH_NOP) || defined(HIA_TEST_ACK_MISSING) || defined(HIA_TEST_ACK_CAS_NOP)
+    leaq shoot_ack(%rip),%rdi
+    movl $2,%esi
+    call f5
+    cmpq $9,%rax
+    jne abort
+    cmpq $4,shoot_ack(%rip)
+    jne abort
+#else
+#ifndef HIA_TEST_CONSUME_CAS_NOP
+    leaq shoot_ack(%rip),%rdi
+    movl $1,%esi
+    call f5
+    cmpq $9,%rax
+    jne abort
+    leaq shoot_ack(%rip),%rdi
+    movl $3,%esi
+    call f5
+    cmpq $9,%rax
+    jne abort
+    cmpq $5,shoot_ack(%rip)
+    jne abort
+#endif
+    leaq shoot_ack(%rip),%rdi
+    movl $2,%esi
+    call f5
+    testq %rax,%rax
+    jnz abort
+#ifdef HIA_TEST_CONSUME_CAS_NOP
+    cmpq $5,shoot_ack(%rip)
+    jne abort
+    movb $'V',%bl
+#else
+    cmpq $0,shoot_ack(%rip)
+    jne abort
+    leaq shoot_ack(%rip),%rdi
+    movl $2,%esi
+    call f5
+    cmpq $9,%rax
+    jne abort
+    cmpq $0,shoot_ack(%rip)
+    jne abort
+#endif
+#endif
+    cmpq $0x11223344,ack_guard_lo(%rip)
+    jne abort
+    cmpq $0x55667788,ack_guard_hi(%rip)
+    jne abort
     /* A mistakenly self-directed interrupt must be detected on BSP. */
     testl $VBIT,0x220(%r12)
     jnz abort
@@ -550,6 +655,14 @@ ap_loop:
     movq old_pte(%rip),%rcx
     call f3
     cmpq $6,%rax
+    jne abort
+    /* AP may publish an ACK but may not perform BSP-only consumption. */
+    leaq shoot_ack(%rip),%rdi
+    movl $2,%esi
+    call f5
+    cmpq $6,%rax
+    jne abort
+    cmpq $4,shoot_ack(%rip)
     jne abort
 #ifndef HIA_TEST_ACK_MISSING
 #if !defined(HIA_TEST_FLUSH_NOP) && !defined(HIA_TEST_ACK_CAS_NOP)

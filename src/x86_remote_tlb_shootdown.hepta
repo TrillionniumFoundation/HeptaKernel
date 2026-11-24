@@ -1,5 +1,5 @@
 hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
-exports(f0,f1,f2,f3,f4)
+exports(f0,f1,f2,f3,f4,f5)
 fn f0(base:u64,expected:u64,dest:u32,vector:u32) -> (u64) effects(privilege,read,write,trap) entry(start)
 block start(base:u64,expected:u64,dest:u32,vector:u32)
   aperture:u64 = const() {"value":4276092928}
@@ -328,6 +328,58 @@ block publish(slot:u64,seq:u64)
   observed:u64 = x86.atomic.cmpxchg64(slot,pending,completed)
   same:bool = compare.eq(observed,pending)
   branch same ordered() stale()
+block ordered()
+  _ = x86.fence.mfence()
+  okay:u64 = const() {"value":0}
+  ret(okay)
+block stale()
+  stale_code:u64 = const() {"value":9}
+  ret(stale_code)
+block reject()
+  reject_code:u64 = const() {"value":6}
+  ret(reject_code)
+end
+fn f5(slot:u64,gen:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(slot:u64,gen:u64)
+  zero:u64 = const() {"value":0}
+  mask:u64 = const() {"value":7}
+  limit:u64 = const() {"value":1073741824}
+  genlimit:u64 = const() {"value":9223372036854775808}
+  bits:u64 = bit.and(slot,mask)
+  aligned:bool = compare.eq(bits,zero)
+  nonnull:bool = compare.ne(slot,zero)
+  below:bool = compare.lt(slot,limit)
+  nonzero:bool = compare.ne(gen,zero)
+  bounded:bool = compare.lt(gen,genlimit)
+  a:bool = bool.and(aligned,nonnull)
+  b:bool = bool.and(a,below)
+  c:bool = bool.and(nonzero,bounded)
+  valid:bool = bool.and(b,c)
+  branch valid live(slot,gen) reject()
+block live(ptr:u64,g:u64)
+  msr:u32 = const() {"value":27}
+  actual:u64 = x86.msr.read(msr)
+  modemask:u64 = const() {"value":18446744073709550592}
+  masked:u64 = bit.and(actual,modemask)
+  required:u64 = const() {"value":4276094976}
+  mode_ok:bool = compare.eq(masked,required)
+  branch mode_ok cpu(ptr,g) reject()
+block cpu(addr:u64,generation:u64)
+  idreg:u64 = const() {"value":4276092960}
+  id:u32 = x86.mmio.read32(idreg)
+  idmask:u32 = const() {"value":4278190080}
+  selected:u32 = bit.and(id,idmask)
+  bsp:u32 = const() {"value":0}
+  on_bsp:bool = compare.eq(selected,bsp)
+  branch on_bsp consume(addr,generation) reject()
+block consume(p:u64,seq:u64)
+  pending:u64 = int.add.wrap(seq,seq)
+  one:u64 = const() {"value":1}
+  complete:u64 = int.add.wrap(pending,one)
+  retired:u64 = const() {"value":0}
+  observed:u64 = x86.atomic.cmpxchg64(p,complete,retired)
+  matches:bool = compare.eq(observed,complete)
+  branch matches ordered() stale()
 block ordered()
   _ = x86.fence.mfence()
   okay:u64 = const() {"value":0}
