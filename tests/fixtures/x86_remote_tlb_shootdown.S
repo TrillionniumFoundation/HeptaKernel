@@ -513,6 +513,10 @@ ap_loop:
     orl 0x120(%r12),%eax
     andl $VBIT,%eax
     movq %rax,probe_pending(%rip)
+    /* Only AP after IRET can publish successful completion. */
+    movl $TARGET_VA,%eax
+    movq (%rax),%rax
+    movq %rax,post_flush_observed(%rip)
     /* AP must not be able to publish the BSP's PTE. */
     leaq shoot_pt(%rip),%rdi
     leaq old_page(%rip),%rsi
@@ -521,10 +525,7 @@ ap_loop:
     call f3
     cmpq $6,%rax
     jne abort
-    /* Only AP after IRET can publish successful completion. */
-    movl $TARGET_VA,%eax
-    movq (%rax),%rax
-    movq %rax,post_flush_observed(%rip)
+    movq post_flush_observed(%rip),%rax
 #ifndef HIA_TEST_ACK_MISSING
     cmpq $NEW_VALUE,%rax
     jne 7f
