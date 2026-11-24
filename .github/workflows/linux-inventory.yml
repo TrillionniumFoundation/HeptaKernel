@@ -6,6 +6,8 @@ on:
       - 'tools/linux_inventory.py'
       - 'tools/linux_inventory_tree_identity.py'
       - 'tests/test_linux_inventory_tree_identity.py'
+      - 'tools/linux_inventory_blob_identity.py'
+      - 'tests/test_linux_inventory_blob_identity.py'
       - 'tools/linux_uapi_tags.py'
       - 'tools/linux_uapi_ioctl_macros.py'
       - 'tools/linux_uapi_ioctl_numbers.py'
@@ -37,6 +39,8 @@ on:
       - 'tools/linux_inventory.py'
       - 'tools/linux_inventory_tree_identity.py'
       - 'tests/test_linux_inventory_tree_identity.py'
+      - 'tools/linux_inventory_blob_identity.py'
+      - 'tests/test_linux_inventory_blob_identity.py'
       - 'tools/linux_uapi_tags.py'
       - 'tools/linux_uapi_ioctl_macros.py'
       - 'tools/linux_uapi_ioctl_numbers.py'
@@ -81,6 +85,7 @@ jobs:
         run: |
           python3 -I -B tests/test_linux_inventory.py
           python3 -I -B tests/test_linux_inventory_tree_identity.py
+          python3 -I -B tests/test_linux_inventory_blob_identity.py
           python3 -I -B tests/test_device_table_spans.py
           python3 -I -B tests/test_linux_uapi_tags.py
           python3 -I -B tests/test_linux_uapi_ioctl_macros.py
@@ -116,6 +121,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 -I -B tools/linux_inventory_tree_identity.py --inventory build/linux-inventory | tee build/linux-inventory/tree-identity-report.json
+
+      - name: Rehash all pinned Git blob payloads and verify every reported size
+        run: |
+          set -euo pipefail
+          python3 -I -B tools/linux_inventory_blob_identity.py --repo .upstream/linux --inventory build/linux-inventory | tee build/linux-inventory/blob-content-identity-report.json
 
       - name: Bind native and x32 common-plus-special syscall source obligations
         shell: bash
