@@ -5,6 +5,7 @@ import argparse
 from hashlib import sha256
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 
@@ -42,6 +43,41 @@ def symbol(obj, name):
             if len(f := line.split()) >= 3 and f[-1] == name]
     assert len(rows) == 1, (obj, name, rows)
     return rows[0]
+
+
+def implementation_ranges(obj, text):
+    # Exported SysV wrappers are emitted AFTER private HIA bodies. Resolve
+    # each wrapper's sole direct rel32 call using both objdump and raw bytes.
+    names = ("f0", "f1", "f2", "f3")
+    entries = {}
+    for name in names:
+        asm = run(["objdump", "-d", "--disassemble=" + name, obj]).decode()
+        matches = re.findall(
+            r"^\s*([0-9a-f]+):\s+e8\s+(?:[0-9a-f]{2}\s+){4}call\s+([0-9a-f]+)\s+<[^>]+>",
+            asm, re.M)
+        assert len(matches) == 1, (name, matches)
+        at, target = (int(x, 16) for x in matches[0])
+        assert text[at] == 0xe8
+        assert at + 5 + int.from_bytes(text[at+1:at+5], "little", signed=True) == target
+        entries[name] = target
+    end = min(symbol(obj, name) for name in names)
+    starts = sorted(entries.values())
+    assert len(set(starts)) == len(names) and starts[0] == 0 and starts[-1] < end
+    return {name: (start, next(x for x in starts + [end] if x > start))
+            for name, start in entries.items()}
+
+
+def check_opcode_owner(obj, text, ranges, owner, opcode, mnemonic):
+    assert text.count(opcode) == 1
+    pos = text.index(opcode)
+    lo, hi = ranges[owner]
+    assert lo <= pos and pos + len(opcode) <= hi, (owner, pos, lo, hi)
+    # Require an actual decoded instruction, not bytes in an immediate.
+    dis = run(["objdump", "-d", obj]).decode()
+    prefix = r"^\s*" + format(pos, "x") + r":\s+"
+    encoded = r"\s+".join(format(x, "02x") for x in opcode)
+    assert re.search(prefix + encoded + r"\s+" + mnemonic + r"\b", dis, re.M), (owner, pos)
+    return pos
 
 
 def link(out, name, obj, expected, macro):
@@ -94,7 +130,8 @@ def main():
     run(["as", "--64", "-o", out / "oracle.o", oracle])
     opcode = extract(out / "oracle.o", out / "oracle.text")
     assert opcode == bytes.fromhex("0f0138") and text.count(opcode) == 1
-    pos = text.index(opcode)
+    ranges = implementation_ranges(obj, text)
+    pos = check_opcode_owner(obj, text, ranges, "f2", opcode, "invlpg")
     mutated = text[:pos] + b"\x90"*3 + text[pos+3:]
     badraw = out / "flush-nop.text"
     badraw.write_bytes(mutated)
@@ -108,8 +145,7 @@ def main():
     run(["as", "--64", "-o", out / "cas-oracle.o", cas_oracle])
     cas = extract(out / "cas-oracle.o", out / "cas-oracle.text")
     assert cas == bytes.fromhex("f0480fb10a") and text.count(cas) == 1
-    cas_pos = text.index(cas)
-    assert cas_pos >= symbol(obj, "f3")
+    cas_pos = check_opcode_owner(obj, text, ranges, "f3", cas, "lock\\s+cmpxchg")
     pte_text = text[:cas_pos] + b"\x90" * len(cas) + text[cas_pos+len(cas):]
     pte_raw = out / "pte-cas-nop.text"
     pte_raw.write_bytes(pte_text)
@@ -117,10 +153,12 @@ def main():
     run(["objcopy", "--update-section", ".text=" + str(pte_raw), obj, pte_obj])
     assert extract(pte_obj, out / "pte-cas-nop-readback.text") == pte_text
     assert all(symbol(obj, f) == symbol(pte_obj, f) for f in ("f0","f1","f2","f3"))
+    assert implementation_ranges(badobj, mutated) == implementation_ranges(pte_obj, pte_text) == ranges
     receipt = {"status":"FAIL", "compiler_sha256":COMPILER_SHA,
         "compiler_source_sha256":COMPILER_SOURCE_SHA,
         "subject_source_sha256":digest(source), "subject_object_sha256":digest(native),
-        "subject_text_sha256":digest(text), "observer_sha256":digest(BOOT.read_bytes()),
+        "subject_text_sha256":digest(text), "implementation_ranges":ranges,
+        "invlpg_offset":pos, "pte_cas_offset":cas_pos, "observer_sha256":digest(BOOT.read_bytes()),
         "linker_sha256":digest(LINKER.read_bytes()), "cases":[],
         "full_linux_acceptance":"HOLD", "production_toolchain_changed":False,
         "apic_authority_proved":False, "cross_cpu_ipi_proved":False,
