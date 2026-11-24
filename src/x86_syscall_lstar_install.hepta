@@ -1,0 +1,53 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0)
+fn f0(expected:u64,target:u64) -> (u64) effects(privilege,trap) entry(start)
+block start(expected:u64,target:u64)
+  high_min:u64 = const() {"value":18446603336221196288}
+  align_mask:u64 = const() {"value":15}
+  zero:u64 = const() {"value":0}
+  high:bool = compare.ge(target,high_min)
+  low:u64 = bit.and(target,align_mask)
+  aligned:bool = compare.eq(low,zero)
+  valid:bool = bool.and(high,aligned)
+  branch valid check_cpu(expected,target) bad_address()
+block check_cpu(old:u64,new:u64)
+  cr4:u64 = x86.cr4.read()
+  la57_mask:u64 = const() {"value":4096}
+  zero_mode:u64 = const() {"value":0}
+  la57:u64 = bit.and(cr4,la57_mask)
+  four_level:bool = compare.eq(la57,zero_mode)
+  efer_index:u32 = const() {"value":3221225600}
+  efer:u64 = x86.msr.read(efer_index)
+  lma_sce:u64 = const() {"value":1025}
+  lma:u64 = const() {"value":1024}
+  bits:u64 = bit.and(efer,lma_sce)
+  inactive:bool = compare.eq(bits,lma)
+  valid_mode:bool = bool.and(four_level,inactive)
+  branch valid_mode check(old,new) bad_mode()
+block check(old_check:u64,new_check:u64)
+  lstar:u32 = const() {"value":3221225602}
+  live:u64 = x86.msr.read(lstar)
+  matches:bool = compare.eq(live,old_check)
+  branch matches commit_lstar(new_check) stale()
+block commit_lstar(new_value:u64)
+  index:u32 = const() {"value":3221225602}
+  _ = x86.msr.write(index,new_value)
+  observed:u64 = x86.msr.read(index)
+  committed:bool = compare.eq(observed,new_value)
+  branch committed done() readback_error()
+block done()
+  status:u64 = const() {"value":0}
+  ret(status)
+block bad_address()
+  address_status:u64 = const() {"value":6}
+  ret(address_status)
+block bad_mode()
+  mode_status:u64 = const() {"value":8}
+  ret(mode_status)
+block stale()
+  stale_status:u64 = const() {"value":9}
+  ret(stale_status)
+block readback_error()
+  readback_status:u64 = const() {"value":10}
+  ret(readback_status)
+end
