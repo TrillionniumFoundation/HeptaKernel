@@ -66,7 +66,7 @@ def decoded_rows(obj):
 
 
 def implementation_ranges(obj, text):
-    names = ("f0", "f1", "f2", "f3")
+    names = ("f0", "f1", "f2", "f3", "f4")
     wrappers = {name: symbol(obj, name) for name in names}
     rows = decoded_rows(obj)
     entries = {}
@@ -91,9 +91,9 @@ def implementation_ranges(obj, text):
 
 
 def check_opcode_owner(obj, text, ranges, owner, opcode, mnemonic):
-    assert text.count(opcode) == 1
-    pos = text.index(opcode)
     lo, hi = ranges[owner]
+    assert text[lo:hi].count(opcode) == 1
+    pos = text.index(opcode, lo, hi)
     assert lo <= pos and pos + len(opcode) <= hi, (owner, pos, lo, hi)
     matches = [(raw, op, args) for at, raw, op, args in decoded_rows(obj) if at == pos]
     assert len(matches) == 1, (owner, pos, matches)
@@ -175,13 +175,13 @@ def main():
     badobj = out / "flush-nop.o"
     run(["objcopy", "--update-section", ".text=" + str(badraw), obj, badobj])
     assert extract(badobj, out / "flush-nop-readback.text") == mutated
-    assert all(symbol(obj, f) == symbol(badobj, f) for f in ("f0", "f1", "f2"))
+    assert all(symbol(obj, f) == symbol(badobj, f) for f in ("f0", "f1", "f2", "f3", "f4"))
     # Independently assemble the CAS opcode and require it in f3 only.
     cas_oracle = out / "cas-oracle.S"
     cas_oracle.write_text(".text\n lock cmpxchgq %rcx,(%rdx)\n")
     run(["as", "--64", "-o", out / "cas-oracle.o", cas_oracle])
     cas = extract(out / "cas-oracle.o", out / "cas-oracle.text")
-    assert cas == bytes.fromhex("f0480fb10a") and text.count(cas) == 1
+    assert cas == bytes.fromhex("f0480fb10a") and text.count(cas) == 2
     cas_pos = check_opcode_owner(obj, text, ranges, "f3", cas, "lock\\s+cmpxchg")
     pte_text = text[:cas_pos] + b"\x90" * len(cas) + text[cas_pos+len(cas):]
     pte_raw = out / "pte-cas-nop.text"
@@ -189,13 +189,25 @@ def main():
     pte_obj = out / "pte-cas-nop.o"
     run(["objcopy", "--update-section", ".text=" + str(pte_raw), obj, pte_obj])
     assert extract(pte_obj, out / "pte-cas-nop-readback.text") == pte_text
-    assert all(symbol(obj, f) == symbol(pte_obj, f) for f in ("f0","f1","f2","f3"))
+    assert all(symbol(obj, f) == symbol(pte_obj, f) for f in ("f0","f1","f2","f3","f4"))
     assert implementation_ranges(badobj, mutated) == implementation_ranges(pte_obj, pte_text) == ranges
+    ack_pos = check_opcode_owner(obj, text, ranges, "f4", cas, "lock\\s+cmpxchg")
+    assert ack_pos != cas_pos
+    ack_text = text[:ack_pos] + b"\x90" * len(cas) + text[ack_pos+len(cas):]
+    ack_raw = out / "ack-cas-nop.text"
+    ack_raw.write_bytes(ack_text)
+    ack_obj = out / "ack-cas-nop.o"
+    run(["objcopy", "--update-section", ".text=" + str(ack_raw), obj, ack_obj])
+    assert extract(ack_obj, out / "ack-cas-nop-readback.text") == ack_text
+    assert all(symbol(obj, f) == symbol(ack_obj, f) for f in ("f0","f1","f2","f3","f4"))
+    assert implementation_ranges(ack_obj, ack_text) == ranges
+    assert ack_text[cas_pos:cas_pos+len(cas)] == cas
+    assert pte_text[ack_pos:ack_pos+len(cas)] == cas
     receipt = {"status":"FAIL", "compiler_sha256":COMPILER_SHA,
         "compiler_source_sha256":COMPILER_SOURCE_SHA,
         "subject_source_sha256":digest(source), "subject_object_sha256":digest(native),
         "subject_text_sha256":digest(text), "implementation_ranges":ranges,
-        "invlpg_offset":pos, "pte_cas_offset":cas_pos, "observer_sha256":digest(BOOT.read_bytes()),
+        "invlpg_offset":pos, "pte_cas_offset":cas_pos, "ack_cas_offset":ack_pos, "observer_sha256":digest(BOOT.read_bytes()),
         "linker_sha256":digest(LINKER.read_bytes()), "cases":[],
         "full_linux_acceptance":"HOLD", "production_toolchain_changed":False,
         "apic_authority_proved":False, "cross_cpu_ipi_proved":False,
@@ -206,7 +218,8 @@ def main():
             ("native-remote-shootdown",obj,text,None,33,b"P"),
             ("invlpg-nop",badobj,mutated,"HIA_TEST_FLUSH_NOP",35,b"FR"),
             ("missing-ack",obj,text,"HIA_TEST_ACK_MISSING",35,b"K"),
-            ("pte-cas-nop",pte_obj,pte_text,"HIA_TEST_PTE_CAS_NOP",35,b"J")):
+            ("pte-cas-nop",pte_obj,pte_text,"HIA_TEST_PTE_CAS_NOP",35,b"J"),
+            ("ack-cas-nop",ack_obj,ack_text,"HIA_TEST_ACK_CAS_NOP",35,b"L")):
             image, binding = link(out, name, subject, code, macro)
             for machine in ("pc","q35"):
                 row = {"case":name,"machine":machine,**binding,"expected_rc":rc,
@@ -239,7 +252,11 @@ def main():
                        original_post_iret_stale_control_met=all(
                            r["post_iret_stale_observed"] for r in receipt["cases"]
                            if r["case"] == "invlpg-nop"),
-                       native_mapping_publication=True, native_ack_publication=False,
+                       native_mapping_publication=True, native_ack_publication=True,
+                       ack_cas_deleted_detected=True, ack_wrong_cpu_rejected=True,
+                       ack_stale_future_duplicate_rejected=True, ack_observation_failure_rejected=True,
+                       ack_generation_fixture=2, ack_pending_word=4, ack_completed_word=5,
+                       ack_resource_authority_proved=False,
                        pte_cas_deleted_detected=True, publication_authority_proved=False,
                        fixed_page_only=True, arbitrary_cohort_proved=False)
     finally:

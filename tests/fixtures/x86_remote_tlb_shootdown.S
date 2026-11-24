@@ -1,6 +1,6 @@
 /* NON-HIA Multiboot, AP startup and independent interrupt observer.
  * f0 (IPI send), f1 (EOI), f2 (remote invalidation) are native HIA.
- * f3 publishes the PTE by native CAS; ACK remains non-HIA. */
+ * f3 publishes PTE; f4 publishes generation-tagged ACK by native CAS. */
 .set TARGET_VA,0x40000000
 .set OLD_VALUE,0x13579bdf
 .set NEW_VALUE,0x2468ace0
@@ -184,6 +184,20 @@ ready:
     jne abort
     cmpq $OLD_VALUE,old_observed(%rip)
     jne abort
+    /* Pending generation 2 = 4, completed = 5. BSP only initializes. */
+    movq $4,shoot_ack(%rip)
+    movq $0x11223344,ack_guard_lo(%rip)
+    movq $0x55667788,ack_guard_hi(%rip)
+    leaq shoot_ack(%rip),%rdi
+    movl $2,%esi
+    movl $NEW_VALUE,%edx
+    movl $NEW_VALUE,%ecx
+    movl $0,%r8d
+    call f4
+    cmpq $6,%rax
+    jne abort
+    cmpq $4,shoot_ack(%rip)
+    jne abort
     /* BSP must not be able to claim remote invalidation. */
     movl $TARGET_VA,%edi
     call f2
@@ -329,6 +343,10 @@ probed:
     jne abort
     cmpq $0,handler_bad(%rip)
     jne abort
+    cmpq $0x11223344,ack_guard_lo(%rip)
+    jne abort
+    cmpq $0x55667788,ack_guard_hi(%rip)
+    jne abort
     cmpq $OLD_VALUE,pre_flush_observed(%rip)
     jne abort_pre
     cmpq $0,flush_status(%rip)
@@ -338,7 +356,7 @@ probed:
      * INVLPG. IRET or incidental replacement may subsequently evict it. */
     cmpq $OLD_VALUE,immediate_flush_observed(%rip)
     jne abort_immediate
-    cmpq $0,shoot_ack(%rip)
+    cmpq $4,shoot_ack(%rip)
     jne abort_ack
     cmpq $OLD_VALUE,post_flush_observed(%rip)
     je stale_after_return
@@ -354,15 +372,23 @@ checked_post_return:
     jne abort_immediate
     cmpq $NEW_VALUE,post_flush_observed(%rip)
     jne abort
-    cmpq $0,shoot_ack(%rip)
+    cmpq $4,shoot_ack(%rip)
     jne abort
     movb $75,%bl
+#elif defined(HIA_TEST_ACK_CAS_NOP)
+    cmpq $NEW_VALUE,immediate_flush_observed(%rip)
+    jne abort_immediate
+    cmpq $NEW_VALUE,post_flush_observed(%rip)
+    jne abort
+    cmpq $4,shoot_ack(%rip)
+    jne abort_ack
+    movb $'L',%bl
 #else
     cmpq $NEW_VALUE,immediate_flush_observed(%rip)
     jne abort_immediate
     cmpq $NEW_VALUE,post_flush_observed(%rip)
     jne abort
-    cmpq $1,shoot_ack(%rip)
+    cmpq $5,shoot_ack(%rip)
     jne abort
 #endif
 #if defined(HIA_TEST_BAD_BASE) || defined(HIA_TEST_BAD_DEST) || defined(HIA_TEST_VECTOR) || defined(HIA_TEST_STALE) || defined(HIA_TEST_DISABLED) || defined(HIA_TEST_DEST_NOP) || defined(HIA_TEST_SEND_NOP)
@@ -525,17 +551,76 @@ ap_loop:
     call f3
     cmpq $6,%rax
     jne abort
-    movq post_flush_observed(%rip),%rax
 #ifndef HIA_TEST_ACK_MISSING
-    cmpq $NEW_VALUE,%rax
-    jne 7f
-    cmpq $NEW_VALUE,immediate_flush_observed(%rip)
-    jne 7f
-    cmpq $0,flush_status(%rip)
-    jne 7f
-    mfence
-    movq $1,shoot_ack(%rip)
-7:
+#if !defined(HIA_TEST_FLUSH_NOP) && !defined(HIA_TEST_ACK_CAS_NOP)
+    /* Before publication, old/future generations, bad alignment and
+     * nonzero flush status must not complete the pending slot. */
+    leaq shoot_ack+1(%rip),%rdi
+    movl $2,%esi
+    movl $NEW_VALUE,%edx
+    movl $NEW_VALUE,%ecx
+    movl $0,%r8d
+    call f4
+    cmpq $6,%rax
+    jne abort
+    leaq shoot_ack(%rip),%rdi
+    movl $2,%esi
+    movl $NEW_VALUE,%edx
+    movl $NEW_VALUE,%ecx
+    movl $9,%r8d
+    call f4
+    cmpq $6,%rax
+    jne abort
+    leaq shoot_ack(%rip),%rdi
+    movl $1,%esi
+    movl $NEW_VALUE,%edx
+    movl $NEW_VALUE,%ecx
+    movl $0,%r8d
+    call f4
+    cmpq $9,%rax
+    jne abort
+    leaq shoot_ack(%rip),%rdi
+    movl $3,%esi
+    movl $NEW_VALUE,%edx
+    movl $NEW_VALUE,%ecx
+    movl $0,%r8d
+    call f4
+    cmpq $9,%rax
+    jne abort
+    cmpq $4,shoot_ack(%rip)
+    jne abort
+#endif
+    /* Actual independent observations; no assembly completion store. */
+    leaq shoot_ack(%rip),%rdi
+    movl $2,%esi
+    movq immediate_flush_observed(%rip),%rdx
+    movq post_flush_observed(%rip),%rcx
+    movq flush_status(%rip),%r8
+    call f4
+#ifdef HIA_TEST_FLUSH_NOP
+    cmpq $6,%rax
+    jne abort
+    cmpq $4,shoot_ack(%rip)
+    jne abort_ack
+#else
+    testq %rax,%rax
+    jnz abort
+#ifndef HIA_TEST_ACK_CAS_NOP
+    cmpq $5,shoot_ack(%rip)
+    jne abort_ack
+    /* Duplicate completion must return stale. */
+    leaq shoot_ack(%rip),%rdi
+    movl $2,%esi
+    movq immediate_flush_observed(%rip),%rdx
+    movq post_flush_observed(%rip),%rcx
+    movq flush_status(%rip),%r8
+    call f4
+    cmpq $9,%rax
+    jne abort
+    cmpq $5,shoot_ack(%rip)
+    jne abort_ack
+#endif
+#endif
 #endif
     mfence
     movq $1,probe_ack(%rip)
@@ -703,7 +788,9 @@ pre_flush_observed: .skip 8
 immediate_flush_observed: .skip 8
 post_flush_observed: .skip 8
 flush_status: .skip 8
+ack_guard_lo: .skip 8
 shoot_ack: .skip 8
+ack_guard_hi: .skip 8
 old_pte: .skip 8
 old_svr: .skip 4
 old_tpr: .skip 4

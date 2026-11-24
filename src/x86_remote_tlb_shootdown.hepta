@@ -1,5 +1,5 @@
 hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
-exports(f0,f1,f2,f3)
+exports(f0,f1,f2,f3,f4)
 fn f0(base:u64,expected:u64,dest:u32,vector:u32) -> (u64) effects(privilege,read,write,trap) entry(start)
 block start(base:u64,expected:u64,dest:u32,vector:u32)
   aperture:u64 = const() {"value":4276092928}
@@ -268,6 +268,65 @@ block cpu(ct:u64,ce:u64,cn:u64)
 block publish(addr:u64,prior:u64,replacement_value:u64)
   observed:u64 = x86.atomic.cmpxchg64(addr,prior,replacement_value)
   same:bool = compare.eq(observed,prior)
+  branch same ordered() stale()
+block ordered()
+  _ = x86.fence.mfence()
+  okay:u64 = const() {"value":0}
+  ret(okay)
+block stale()
+  stale_code:u64 = const() {"value":9}
+  ret(stale_code)
+block reject()
+  reject_code:u64 = const() {"value":6}
+  ret(reject_code)
+end
+fn f4(addr:u64,gen:u64,immval:u64,postval:u64,status:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(addr:u64,gen:u64,immval:u64,postval:u64,status:u64)
+  zero:u64 = const() {"value":0}
+  alignmask:u64 = const() {"value":7}
+  low:u64 = const() {"value":1073741824}
+  genlimit:u64 = const() {"value":9223372036854775808}
+  newval:u64 = const() {"value":610839776}
+  misaligned:u64 = bit.and(addr,alignmask)
+  aligned:bool = compare.eq(misaligned,zero)
+  nonnull:bool = compare.ne(addr,zero)
+  below:bool = compare.lt(addr,low)
+  gen_nonzero:bool = compare.ne(gen,zero)
+  gen_bounded:bool = compare.lt(gen,genlimit)
+  immediate_ok:bool = compare.eq(immval,newval)
+  after_ok:bool = compare.eq(postval,newval)
+  status_ok:bool = compare.eq(status,zero)
+  a:bool = bool.and(aligned,nonnull)
+  b:bool = bool.and(a,below)
+  c:bool = bool.and(gen_nonzero,gen_bounded)
+  d:bool = bool.and(immediate_ok,after_ok)
+  e:bool = bool.and(d,status_ok)
+  f:bool = bool.and(b,c)
+  valid:bool = bool.and(e,f)
+  branch valid live(addr,gen) reject()
+block live(ptr:u64,generation:u64)
+  index:u32 = const() {"value":27}
+  apic:u64 = x86.msr.read(index)
+  modemask:u64 = const() {"value":18446744073709550592}
+  masked:u64 = bit.and(apic,modemask)
+  required:u64 = const() {"value":4276094976}
+  mode_ok:bool = compare.eq(masked,required)
+  branch mode_ok cpu(ptr,generation) reject()
+block cpu(targetptr:u64,g:u64)
+  idreg:u64 = const() {"value":4276092960}
+  id:u32 = x86.mmio.read32(idreg)
+  idmask:u32 = const() {"value":4278190080}
+  selected:u32 = bit.and(id,idmask)
+  ap:u32 = const() {"value":16777216}
+  on_ap:bool = compare.eq(selected,ap)
+  branch on_ap publish(targetptr,g) reject()
+block publish(slot:u64,seq:u64)
+  pending:u64 = int.add.wrap(seq,seq)
+  one:u64 = const() {"value":1}
+  completed:u64 = int.add.wrap(pending,one)
+  _ = x86.fence.mfence()
+  observed:u64 = x86.atomic.cmpxchg64(slot,pending,completed)
+  same:bool = compare.eq(observed,pending)
   branch same ordered() stale()
 block ordered()
   _ = x86.fence.mfence()
