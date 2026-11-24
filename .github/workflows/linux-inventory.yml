@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'tools/linux_inventory.py'
+      - 'tools/linux_inventory_tree_identity.py'
+      - 'tests/test_linux_inventory_tree_identity.py'
       - 'tools/linux_uapi_tags.py'
       - 'tools/linux_uapi_ioctl_macros.py'
       - 'tools/linux_uapi_ioctl_numbers.py'
@@ -33,6 +35,8 @@ on:
     branches: [main]
     paths:
       - 'tools/linux_inventory.py'
+      - 'tools/linux_inventory_tree_identity.py'
+      - 'tests/test_linux_inventory_tree_identity.py'
       - 'tools/linux_uapi_tags.py'
       - 'tools/linux_uapi_ioctl_macros.py'
       - 'tools/linux_uapi_ioctl_numbers.py'
@@ -76,6 +80,7 @@ jobs:
       - name: Test inventory parser against adversarial Git fixtures
         run: |
           python3 -I -B tests/test_linux_inventory.py
+          python3 -I -B tests/test_linux_inventory_tree_identity.py
           python3 -I -B tests/test_device_table_spans.py
           python3 -I -B tests/test_linux_uapi_tags.py
           python3 -I -B tests/test_linux_uapi_ioctl_macros.py
@@ -106,6 +111,11 @@ jobs:
             --repo .upstream/linux \
             --lock compatibility/linux-source-lock.json \
             --out build/linux-inventory
+
+      - name: Reconstruct every Git tree object from inventory independently
+        run: |
+          set -euo pipefail
+          python3 -I -B tools/linux_inventory_tree_identity.py --inventory build/linux-inventory | tee build/linux-inventory/tree-identity-report.json
 
       - name: Bind native and x32 common-plus-special syscall source obligations
         shell: bash
@@ -1104,6 +1114,7 @@ jobs:
             build/linux-inventory/kconfig-arch-matrix-union.jsonl
             build/linux-inventory/kconfig-arch-matrix-report.json
             build/linux-inventory/directory-objects.jsonl
+            build/linux-inventory/tree-identity-report.json
             build/linux-inventory/uapi-paths.jsonl
             build/linux-inventory/uapi-macro-rows.jsonl
             build/linux-inventory/uapi-tag-mentions.jsonl
