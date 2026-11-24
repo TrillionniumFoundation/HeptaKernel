@@ -1,0 +1,85 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0)
+fn f0(expected:u64,target:u64,expected_efer:u64,expected_star:u64,expected_fmask:u64) -> (u64) effects(privilege,trap) entry(start)
+block start(expected:u64,target:u64,expected_efer:u64,expected_star:u64,expected_fmask:u64)
+  high_min:u64 = const() {"value":18446603336221196288}
+  align_mask:u64 = const() {"value":15}
+  zero:u64 = const() {"value":0}
+  high:bool = compare.ge(target,high_min)
+  low:u64 = bit.and(target,align_mask)
+  aligned:bool = compare.eq(low,zero)
+  valid:bool = bool.and(high,aligned)
+  branch valid cpu_check(expected,target,expected_efer,expected_star,expected_fmask) bad_address()
+block cpu_check(old:u64,new:u64,old_efer:u64,old_star:u64,old_fmask:u64)
+  cr4:u64 = x86.cr4.read()
+  la57_mask:u64 = const() {"value":4096}
+  zero_mode:u64 = const() {"value":0}
+  la57:u64 = bit.and(cr4,la57_mask)
+  four_level:bool = compare.eq(la57,zero_mode)
+  efer_index:u32 = const() {"value":3221225600}
+  efer:u64 = x86.msr.read(efer_index)
+  lma_sce:u64 = const() {"value":1025}
+  lma:u64 = const() {"value":1024}
+  bits:u64 = bit.and(efer,lma_sce)
+  inactive:bool = compare.eq(bits,lma)
+  valid_mode:bool = bool.and(four_level,inactive)
+  branch valid_mode old_check(old,new,old_efer,old_star,old_fmask,efer) bad_mode()
+block old_check(old_l:u64,new_l:u64,old_e:u64,old_s:u64,old_f:u64,live_e:u64)
+  lstar_index:u32 = const() {"value":3221225602}
+  star_index:u32 = const() {"value":3221225601}
+  fmask_index:u32 = const() {"value":3221225604}
+  live_l:u64 = x86.msr.read(lstar_index)
+  live_s:u64 = x86.msr.read(star_index)
+  live_f:u64 = x86.msr.read(fmask_index)
+  match_l:bool = compare.eq(live_l,old_l)
+  match_e:bool = compare.eq(live_e,old_e)
+  match_s:bool = compare.eq(live_s,old_s)
+  match_f:bool = compare.eq(live_f,old_f)
+  match_le:bool = bool.and(match_l,match_e)
+  match_sf:bool = bool.and(match_s,match_f)
+  all_match:bool = bool.and(match_le,match_sf)
+  branch all_match write_lstar(new_l,old_e) stale()
+block write_lstar(new_value:u64,base_efer:u64)
+  idx_l:u32 = const() {"value":3221225602}
+  _ = x86.msr.write(idx_l,new_value)
+  observed_l:u64 = x86.msr.read(idx_l)
+  ok_l:bool = compare.eq(observed_l,new_value)
+  branch ok_l write_star(base_efer) readback_error()
+block write_star(base_star_e:u64)
+  idx_s:u32 = const() {"value":3221225601}
+  new_s:u64 = const() {"value":103079215104}
+  _ = x86.msr.write(idx_s,new_s)
+  observed_s:u64 = x86.msr.read(idx_s)
+  ok_s:bool = compare.eq(observed_s,new_s)
+  branch ok_s write_fmask(base_star_e) readback_error()
+block write_fmask(base_fmask_e:u64)
+  idx_f:u32 = const() {"value":3221225604}
+  new_f:u64 = const() {"value":513}
+  _ = x86.msr.write(idx_f,new_f)
+  observed_f:u64 = x86.msr.read(idx_f)
+  ok_f:bool = compare.eq(observed_f,new_f)
+  branch ok_f enable_sce(base_fmask_e) readback_error()
+block enable_sce(base_enable_e:u64)
+  idx_e:u32 = const() {"value":3221225600}
+  sce:u64 = const() {"value":1}
+  new_e:u64 = bit.or(base_enable_e,sce)
+  _ = x86.msr.write(idx_e,new_e)
+  observed_e:u64 = x86.msr.read(idx_e)
+  ok_e:bool = compare.eq(observed_e,new_e)
+  branch ok_e done() readback_error()
+block done()
+  status:u64 = const() {"value":0}
+  ret(status)
+block bad_address()
+  address_status:u64 = const() {"value":6}
+  ret(address_status)
+block bad_mode()
+  mode_status:u64 = const() {"value":8}
+  ret(mode_status)
+block stale()
+  stale_status:u64 = const() {"value":9}
+  ret(stale_status)
+block readback_error()
+  readback_status:u64 = const() {"value":10}
+  ret(readback_status)
+end
