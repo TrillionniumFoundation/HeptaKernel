@@ -102,6 +102,21 @@ def main():
     run(["objcopy", "--update-section", ".text=" + str(badraw), obj, badobj])
     assert extract(badobj, out / "flush-nop-readback.text") == mutated
     assert all(symbol(obj, f) == symbol(badobj, f) for f in ("f0", "f1", "f2"))
+    # Independently assemble the CAS opcode and require it in f3 only.
+    cas_oracle = out / "cas-oracle.S"
+    cas_oracle.write_text(".text\n lock cmpxchgq %rcx,(%rdx)\n")
+    run(["as", "--64", "-o", out / "cas-oracle.o", cas_oracle])
+    cas = extract(out / "cas-oracle.o", out / "cas-oracle.text")
+    assert cas == bytes.fromhex("f0480fb10a") and text.count(cas) == 1
+    cas_pos = text.index(cas)
+    assert cas_pos >= symbol(obj, "f3")
+    pte_text = text[:cas_pos] + b"\x90" * len(cas) + text[cas_pos+len(cas):]
+    pte_raw = out / "pte-cas-nop.text"
+    pte_raw.write_bytes(pte_text)
+    pte_obj = out / "pte-cas-nop.o"
+    run(["objcopy", "--update-section", ".text=" + str(pte_raw), obj, pte_obj])
+    assert extract(pte_obj, out / "pte-cas-nop-readback.text") == pte_text
+    assert all(symbol(obj, f) == symbol(pte_obj, f) for f in ("f0","f1","f2","f3"))
     receipt = {"status":"FAIL", "compiler_sha256":COMPILER_SHA,
         "compiler_source_sha256":COMPILER_SOURCE_SHA,
         "subject_source_sha256":digest(source), "subject_object_sha256":digest(native),
@@ -115,7 +130,8 @@ def main():
         for name, subject, code, macro, rc, serial in (
             ("native-remote-shootdown",obj,text,None,33,b"P"),
             ("invlpg-nop",badobj,mutated,"HIA_TEST_FLUSH_NOP",35,b"FR"),
-            ("missing-ack",obj,text,"HIA_TEST_ACK_MISSING",35,b"K")):
+            ("missing-ack",obj,text,"HIA_TEST_ACK_MISSING",35,b"K"),
+            ("pte-cas-nop",pte_obj,pte_text,"HIA_TEST_PTE_CAS_NOP",35,b"J")):
             image, binding = link(out, name, subject, code, macro)
             for machine in ("pc","q35"):
                 row = {"case":name,"machine":machine,**binding,"expected_rc":rc,
@@ -148,7 +164,8 @@ def main():
                        original_post_iret_stale_control_met=all(
                            r["post_iret_stale_observed"] for r in receipt["cases"]
                            if r["case"] == "invlpg-nop"),
-                       native_mapping_publication=False, native_ack_publication=False,
+                       native_mapping_publication=True, native_ack_publication=False,
+                       pte_cas_deleted_detected=True, publication_authority_proved=False,
                        fixed_page_only=True, arbitrary_cohort_proved=False)
     finally:
         (out / "report.json").write_text(json.dumps(receipt,sort_keys=True,indent=2)+"\n")

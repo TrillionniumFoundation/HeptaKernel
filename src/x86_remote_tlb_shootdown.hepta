@@ -1,5 +1,5 @@
 hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
-exports(f0,f1,f2)
+exports(f0,f1,f2,f3)
 fn f0(base:u64,expected:u64,dest:u32,vector:u32) -> (u64) effects(privilege,read,write,trap) entry(start)
 block start(base:u64,expected:u64,dest:u32,vector:u32)
   aperture:u64 = const() {"value":4276092928}
@@ -214,4 +214,69 @@ block flush(p:u64)
 block reject()
   error:u64 = const() {"value":6}
   ret(error)
+end
+fn f3(table:u64,oldpage:u64,newpage:u64,expected:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(table:u64,oldpage:u64,newpage:u64,expected:u64)
+  mask:u64 = const() {"value":4095}
+  zero:u64 = const() {"value":0}
+  low:u64 = const() {"value":1073741824}
+  comb_a:u64 = bit.or(table,oldpage)
+  comb:u64 = bit.or(comb_a,newpage)
+  alignment:u64 = bit.and(comb,mask)
+  aligned:bool = compare.eq(alignment,zero)
+  below:bool = compare.lt(comb,low)
+  tn:bool = compare.ne(table,zero)
+  on:bool = compare.ne(oldpage,zero)
+  nn:bool = compare.ne(newpage,zero)
+  d1:bool = compare.ne(table,oldpage)
+  d2:bool = compare.ne(table,newpage)
+  d3:bool = compare.ne(oldpage,newpage)
+  a1:bool = bool.and(aligned,below)
+  a2:bool = bool.and(tn,on)
+  a3:bool = bool.and(a2,nn)
+  a4:bool = bool.and(d1,d2)
+  a5:bool = bool.and(a4,d3)
+  a6:bool = bool.and(a1,a3)
+  good:bool = bool.and(a6,a5)
+  branch good entry_check(table,oldpage,newpage,expected) reject()
+block entry_check(t:u64,o:u64,n:u64,e:u64)
+  flags:u64 = const() {"value":3}
+  accessed_flags:u64 = const() {"value":35}
+  plain:u64 = bit.or(o,flags)
+  accessed:u64 = bit.or(o,accessed_flags)
+  plain_ok:bool = compare.eq(e,plain)
+  accessed_ok:bool = compare.eq(e,accessed)
+  expected_ok:bool = bool.or(plain_ok,accessed_ok)
+  replacement:u64 = bit.or(n,flags)
+  branch expected_ok live(t,e,replacement) reject()
+block live(pt:u64,ex:u64,repl:u64)
+  msr:u32 = const() {"value":27}
+  apic:u64 = x86.msr.read(msr)
+  m:u64 = const() {"value":18446744073709550592}
+  masked:u64 = bit.and(apic,m)
+  required:u64 = const() {"value":4276094976}
+  mode_ok:bool = compare.eq(masked,required)
+  branch mode_ok cpu(pt,ex,repl) reject()
+block cpu(ct:u64,ce:u64,cn:u64)
+  idreg:u64 = const() {"value":4276092960}
+  id:u32 = x86.mmio.read32(idreg)
+  idmask:u32 = const() {"value":4278190080}
+  selected:u32 = bit.and(id,idmask)
+  bsp:u32 = const() {"value":0}
+  on_bsp:bool = compare.eq(selected,bsp)
+  branch on_bsp publish(ct,ce,cn) reject()
+block publish(addr:u64,prior:u64,replacement_value:u64)
+  observed:u64 = x86.atomic.cmpxchg64(addr,prior,replacement_value)
+  same:bool = compare.eq(observed,prior)
+  branch same ordered() stale()
+block ordered()
+  _ = x86.fence.mfence()
+  okay:u64 = const() {"value":0}
+  ret(okay)
+block stale()
+  stale_code:u64 = const() {"value":9}
+  ret(stale_code)
+block reject()
+  reject_code:u64 = const() {"value":6}
+  ret(reject_code)
 end

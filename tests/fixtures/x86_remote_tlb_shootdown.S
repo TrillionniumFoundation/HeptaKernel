@@ -1,6 +1,6 @@
 /* NON-HIA Multiboot, AP startup and independent interrupt observer.
  * f0 (IPI send), f1 (EOI), f2 (remote invalidation) are native HIA.
- * Mapping publication and ACK observer are deliberately non-HIA. */
+ * f3 publishes the PTE by native CAS; ACK remains non-HIA. */
 .set TARGET_VA,0x40000000
 .set OLD_VALUE,0x13579bdf
 .set NEW_VALUE,0x2468ace0
@@ -189,19 +189,56 @@ ready:
     call f2
     cmpq $6,%rax
     jne abort
-    /* Check old PTE (hardware may have set A), publish new leaf atomically. */
+    /* Independent old-leaf readback. Native HIA must publish replacement. */
     leaq old_page(%rip),%rax
     movq shoot_pt(%rip),%rdx
     andq $-4096,%rdx
     cmpq %rax,%rdx
     jne abort
+    movq shoot_pt(%rip),%rax
+    movq %rax,old_pte(%rip)
+    leaq shoot_pt+1(%rip),%rdi
+    leaq old_page(%rip),%rsi
+    leaq new_page(%rip),%rdx
+    movq old_pte(%rip),%rcx
+    call f3
+    cmpq $6,%rax
+    jne abort
+    movq old_pte(%rip),%rax
+    cmpq %rax,shoot_pt(%rip)
+    jne abort
+    leaq shoot_pt(%rip),%rdi
+    leaq old_page(%rip),%rsi
+    leaq new_page(%rip),%rdx
+    movq old_pte(%rip),%rcx
+    call f3
+    testq %rax,%rax
+    jnz abort
     leaq new_page(%rip),%rax
     orq $3,%rax
-    xchgq %rax,shoot_pt(%rip)
-    mfence
-    leaq old_page(%rip),%rdx
-    andq $-4096,%rax
-    cmpq %rdx,%rax
+    cmpq %rax,shoot_pt(%rip)
+#ifdef HIA_TEST_PTE_CAS_NOP
+    je abort
+    movq old_pte(%rip),%rax
+    cmpq %rax,shoot_pt(%rip)
+    jne abort
+    movb $'J',%bl
+    movl $0x11,%eax
+    jmp finish
+#else
+    jne abort
+#endif
+    /* Reusing old PTE after successful publication must return stale. */
+    leaq shoot_pt(%rip),%rdi
+    leaq old_page(%rip),%rsi
+    leaq new_page(%rip),%rdx
+    movq old_pte(%rip),%rcx
+    call f3
+    cmpq $9,%rax
+    jne abort
+    leaq new_page(%rip),%rax
+    orq $3,%rax
+    cmpq %rax,shoot_pt(%rip)
     jne abort
     cmpq $0,interrupt_count(%rip)
     jne abort
@@ -476,6 +513,14 @@ ap_loop:
     orl 0x120(%r12),%eax
     andl $VBIT,%eax
     movq %rax,probe_pending(%rip)
+    /* AP must not be able to publish the BSP's PTE. */
+    leaq shoot_pt(%rip),%rdi
+    leaq old_page(%rip),%rsi
+    leaq new_page(%rip),%rdx
+    movq old_pte(%rip),%rcx
+    call f3
+    cmpq $6,%rax
+    jne abort
     /* Only AP after IRET can publish successful completion. */
     movl $TARGET_VA,%eax
     movq (%rax),%rax
@@ -658,6 +703,7 @@ immediate_flush_observed: .skip 8
 post_flush_observed: .skip 8
 flush_status: .skip 8
 shoot_ack: .skip 8
+old_pte: .skip 8
 old_svr: .skip 4
 old_tpr: .skip 4
 old_pic1: .skip 1
