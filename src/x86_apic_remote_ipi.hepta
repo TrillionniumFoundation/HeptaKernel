@@ -1,0 +1,195 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0,f1)
+fn f0(base:u64,expected:u64,dest:u32,vector:u32) -> (u64) effects(privilege,read,write,trap) entry(start)
+block start(base:u64,expected:u64,dest:u32,vector:u32)
+  aperture:u64 = const() {"value":4276092928}
+  target:u32 = const() {"value":1}
+  reserved_vector:u32 = const() {"value":81}
+  base_ok:bool = compare.eq(base,aperture)
+  dest_ok:bool = compare.eq(dest,target)
+  vector_ok:bool = compare.eq(vector,reserved_vector)
+  shape_a:bool = bool.and(base_ok,dest_ok)
+  shape_ok:bool = bool.and(shape_a,vector_ok)
+  branch shape_ok live_msr(expected) bad_args()
+block live_msr(wanted:u64)
+  msr:u32 = const() {"value":27}
+  actual:u64 = x86.msr.read(msr)
+  same:bool = compare.eq(actual,wanted)
+  branch same mode(actual) stale()
+block mode(current:u64)
+  mode_mask:u64 = const() {"value":3072}
+  enabled_xapic:u64 = const() {"value":2048}
+  mode_bits:u64 = bit.and(current,mode_mask)
+  mode_ok:bool = compare.eq(mode_bits,enabled_xapic)
+  base_mask:u64 = const() {"value":18446744073709547520}
+  live_base:u64 = bit.and(current,base_mask)
+  required_base:u64 = const() {"value":4276092928}
+  live_base_ok:bool = compare.eq(live_base,required_base)
+  mode_and_base:bool = bool.and(mode_ok,live_base_ok)
+  branch mode_and_base sender() bad_mode()
+block sender()
+  id_address:u64 = const() {"value":4276092960}
+  id_value:u32 = x86.mmio.read32(id_address)
+  id_mask:u32 = const() {"value":4278190080}
+  id_bits:u32 = bit.and(id_value,id_mask)
+  zero:u32 = const() {"value":0}
+  bsp:bool = compare.eq(id_bits,zero)
+  svr_address:u64 = const() {"value":4276093168}
+  svr:u32 = x86.mmio.read32(svr_address)
+  enable:u32 = const() {"value":256}
+  enabled:u32 = bit.and(svr,enable)
+  software_enabled:bool = compare.eq(enabled,enable)
+  sender_ok:bool = bool.and(bsp,software_enabled)
+  budget:u64 = const() {"value":4096}
+  branch sender_ok pre_poll(budget) bad_sender()
+block pre_poll(remaining:u64)
+  icr_address:u64 = const() {"value":4276093696}
+  icr:u32 = x86.mmio.read32(icr_address)
+  busy_mask:u32 = const() {"value":4096}
+  busy:u32 = bit.and(icr,busy_mask)
+  none:u32 = const() {"value":0}
+  idle:bool = compare.eq(busy,none)
+  branch idle select_target() pre_wait(remaining)
+block pre_wait(left:u64)
+  one:u64 = const() {"value":1}
+  next:u64 = int.sub.wrap(left,one)
+  zero_left:u64 = const() {"value":0}
+  expired:bool = compare.eq(next,zero_left)
+  branch expired pre_timeout() pre_poll(next)
+block select_target()
+  hi_address:u64 = const() {"value":4276093712}
+  hi_value:u32 = const() {"value":16777216}
+  _ = x86.mmio.write32(hi_address,hi_value)
+  read_hi:u32 = x86.mmio.read32(hi_address)
+  hi_mask:u32 = const() {"value":4278190080}
+  actual_hi:u32 = bit.and(read_hi,hi_mask)
+  hi_ok:bool = compare.eq(actual_hi,hi_value)
+  branch hi_ok send() bad_target_readback()
+block send()
+  lo_address:u64 = const() {"value":4276093696}
+  lo_value:u32 = const() {"value":16465}
+  _ = x86.mmio.write32(lo_address,lo_value)
+  after_budget:u64 = const() {"value":4096}
+  jump post_poll(after_budget)
+block post_poll(after_left:u64)
+  after_address:u64 = const() {"value":4276093696}
+  after:u32 = x86.mmio.read32(after_address)
+  delivery_mask:u32 = const() {"value":4096}
+  delivery:u32 = bit.and(after,delivery_mask)
+  delivery_zero:u32 = const() {"value":0}
+  delivered:bool = compare.eq(delivery,delivery_zero)
+  branch delivered check_vector(after) post_wait(after_left)
+block post_wait(after_remaining:u64)
+  decrement:u64 = const() {"value":1}
+  after_next:u64 = int.sub.wrap(after_remaining,decrement)
+  after_zero:u64 = const() {"value":0}
+  after_expired:bool = compare.eq(after_next,after_zero)
+  branch after_expired post_timeout() post_poll(after_next)
+block check_vector(sent:u32)
+  check_mask:u32 = const() {"value":255}
+  actual_vector:u32 = bit.and(sent,check_mask)
+  correct_vector:u32 = const() {"value":81}
+  sent_ok:bool = compare.eq(actual_vector,correct_vector)
+  branch sent_ok okay() post_timeout()
+block bad_args()
+  code6:u64 = const() {"value":6}
+  ret(code6)
+block stale()
+  code9:u64 = const() {"value":9}
+  ret(code9)
+block bad_mode()
+  code8:u64 = const() {"value":8}
+  ret(code8)
+block bad_sender()
+  code10:u64 = const() {"value":10}
+  ret(code10)
+block pre_timeout()
+  code12:u64 = const() {"value":12}
+  ret(code12)
+block bad_target_readback()
+  code14:u64 = const() {"value":14}
+  ret(code14)
+block post_timeout()
+  code13:u64 = const() {"value":13}
+  ret(code13)
+block okay()
+  success:u64 = const() {"value":0}
+  ret(success)
+end
+fn f1(v0:u64,v1:u64) -> (u64) effects(privilege,read,write,trap) entry(b0)
+block b0(v0:u64,v1:u64)
+  v2:u64 = const() {"value":4276092928}
+  v3:bool = compare.eq(v0,v2)
+  branch v3 b1(v1) b6()
+block b1(v4:u64)
+  v5:u32 = const() {"value":27}
+  v6:u64 = x86.msr.read(v5)
+  v7:bool = compare.eq(v4,v6)
+  branch v7 b2(v6) b7()
+block b2(v8:u64)
+  v9:u64 = const() {"value":3072}
+  v10:u64 = bit.and(v8,v9)
+  v11:u64 = const() {"value":2048}
+  v12:bool = compare.eq(v10,v11)
+  v13:u64 = const() {"value":18446744073709547520}
+  v14:u64 = bit.and(v8,v13)
+  v15:u64 = const() {"value":4276092928}
+  v16:bool = compare.eq(v14,v15)
+  v17:bool = bool.and(v12,v16)
+  branch v17 b3() b8()
+block b3()
+  v18:u64 = const() {"value":4276093216}
+  v19:u32 = x86.mmio.read32(v18)
+  v20:u32 = const() {"value":131072}
+  v21:u32 = bit.and(v19,v20)
+  v22:bool = compare.eq(v21,v20)
+  v23:u32 = const() {"value":4294705152}
+  v24:u32 = bit.and(v19,v23)
+  v25:u64 = const() {"value":4276093232}
+  v26:u32 = x86.mmio.read32(v25)
+  v27:u64 = const() {"value":4276093248}
+  v28:u32 = x86.mmio.read32(v27)
+  v29:u64 = const() {"value":4276093264}
+  v30:u32 = x86.mmio.read32(v29)
+  v31:u64 = const() {"value":4276093280}
+  v32:u32 = x86.mmio.read32(v31)
+  v33:u64 = const() {"value":4276093296}
+  v34:u32 = x86.mmio.read32(v33)
+  v35:u32 = bit.or(v24,v26)
+  v36:u32 = bit.or(v28,v30)
+  v37:u32 = bit.or(v32,v34)
+  v38:u32 = bit.or(v35,v36)
+  v39:u32 = bit.or(v38,v37)
+  v40:u32 = const() {"value":0}
+  v41:bool = compare.eq(v39,v40)
+  v42:bool = bool.and(v22,v41)
+  branch v42 b4() b9()
+block b4()
+  v43:u64 = const() {"value":4276093104}
+  v44:u32 = const() {"value":0}
+  _ = x86.mmio.write32(v43,v44)
+  v45:u64 = const() {"value":4276093216}
+  v46:u32 = x86.mmio.read32(v45)
+  v47:u32 = const() {"value":131072}
+  v48:u32 = bit.and(v46,v47)
+  v49:bool = compare.eq(v48,v44)
+  branch v49 b5() b10()
+block b5()
+  v50:u64 = const() {"value":0}
+  ret(v50)
+block b6()
+  v51:u64 = const() {"value":6}
+  ret(v51)
+block b7()
+  v52:u64 = const() {"value":9}
+  ret(v52)
+block b8()
+  v53:u64 = const() {"value":8}
+  ret(v53)
+block b9()
+  v54:u64 = const() {"value":11}
+  ret(v54)
+block b10()
+  v55:u64 = const() {"value":13}
+  ret(v55)
+end
