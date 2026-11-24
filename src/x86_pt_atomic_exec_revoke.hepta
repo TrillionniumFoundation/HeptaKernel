@@ -1,0 +1,103 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0)
+fn f0(table:u64,va:u64,old:u64,caps:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(table:u64,va:u64,old:u64,caps:u64)
+  z:u64 = const() {"value":0}
+  align_mask:u64 = const() {"value":4095}
+  low_limit:u64 = const() {"value":1073741824}
+  table_align:u64 = bit.and(table,align_mask)
+  va_align:u64 = bit.and(va,align_mask)
+  table_aligned:bool = compare.eq(table_align,z)
+  va_aligned:bool = compare.eq(va_align,z)
+  table_nonzero:bool = compare.ne(table,z)
+  table_low:bool = compare.lt(table,low_limit)
+  va_low:bool = compare.lt(va,low_limit)
+  distinct:bool = compare.ne(table,va)
+  addr_a:bool = bool.and(table_aligned,va_aligned)
+  addr_b:bool = bool.and(table_nonzero,table_low)
+  addr_c:bool = bool.and(va_low,distinct)
+  addr_d:bool = bool.and(addr_a,addr_b)
+  addr_ok:bool = bool.and(addr_d,addr_c)
+  branch addr_ok check_caps(table,va,old,caps) bad_transition()
+block check_caps(ct:u64,cv:u64,co:u64,cc:u64)
+  cap_max:u64 = const() {"value":1023}
+  width_mask:u64 = const() {"value":255}
+  width_min:u64 = const() {"value":32}
+  width_max:u64 = const() {"value":52}
+  c_zero:u64 = const() {"value":0}
+  nxe_mask:u64 = const() {"value":256}
+  pge_mask:u64 = const() {"value":512}
+  global_mask:u64 = const() {"value":256}
+  cap_known:bool = compare.le(cc,cap_max)
+  width:u64 = bit.and(cc,width_mask)
+  width_lo:bool = compare.ge(width,width_min)
+  width_hi:bool = compare.le(width,width_max)
+  width_ok:bool = bool.and(width_lo,width_hi)
+  nxe:u64 = bit.and(cc,nxe_mask)
+  nxe_ok:bool = compare.ne(nxe,c_zero)
+  pge:u64 = bit.and(cc,pge_mask)
+  global_flag:u64 = bit.and(co,global_mask)
+  no_global:bool = compare.eq(global_flag,c_zero)
+  pge_on:bool = compare.ne(pge,c_zero)
+  global_ok:bool = bool.or(no_global,pge_on)
+  cap_a:bool = bool.and(cap_known,width_ok)
+  cap_b:bool = bool.and(nxe_ok,global_ok)
+  cap_ok:bool = bool.and(cap_a,cap_b)
+  branch cap_ok check_entry(ct,cv,co,width) bad_caps()
+block check_entry(et:u64,ev:u64,eo:u64,ew:u64)
+  e_zero:u64 = const() {"value":0}
+  e_one:u64 = const() {"value":1}
+  rw_present_mask:u64 = const() {"value":3}
+  e_nxmask:u64 = const() {"value":9223372036854775808}
+  e_reserved_mask:u64 = const() {"value":8646911284551352320}
+  e_phys_mask:u64 = const() {"value":4503599627366400}
+  e_user_mask:u64 = const() {"value":4}
+  e_global_mask:u64 = const() {"value":256}
+  e_rw_present:u64 = bit.and(eo,rw_present_mask)
+  e_rw_ok:bool = compare.eq(e_rw_present,e_one)
+  e_nx:u64 = bit.and(eo,e_nxmask)
+  e_nx_ok:bool = compare.eq(e_nx,e_zero)
+  e_reserved:u64 = bit.and(eo,e_reserved_mask)
+  e_reserved_ok:bool = compare.eq(e_reserved,e_zero)
+  e_phys:u64 = bit.and(eo,e_phys_mask)
+  e_phys_limit:u64 = int.shl.checked(e_one,ew)
+  e_phys_ok:bool = compare.lt(e_phys,e_phys_limit)
+  e_user:u64 = bit.and(eo,e_user_mask)
+  e_global:u64 = bit.and(eo,e_global_mask)
+  e_user_on:bool = compare.ne(e_user,e_zero)
+  e_global_on:bool = compare.ne(e_global,e_zero)
+  e_ug:bool = bool.and(e_user_on,e_global_on)
+  e_ug_ok:bool = bool.not(e_ug)
+  e_a:bool = bool.and(e_rw_ok,e_nx_ok)
+  e_b:bool = bool.and(e_reserved_ok,e_phys_ok)
+  e_c:bool = bool.and(e_a,e_b)
+  e_ok:bool = bool.and(e_c,e_ug_ok)
+  branch e_ok update(et,ev,eo) bad_transition()
+block update(ut:u64,uv:u64,uo:u64)
+  shift12:u64 = const() {"value":12}
+  index_mask:u64 = const() {"value":511}
+  stride:u64 = const() {"value":8}
+  nx:u64 = const() {"value":9223372036854775808}
+  shifted:u64 = int.shr.checked(uv,shift12)
+  index:u64 = bit.and(shifted,index_mask)
+  offset:u64 = int.mul.wrap(index,stride)
+  address:u64 = int.add.wrap(ut,offset)
+  replacement:u64 = bit.or(uo,nx)
+  observed:u64 = x86.atomic.cmpxchg64(address,uo,replacement)
+  matches:bool = compare.eq(observed,uo)
+  branch matches invalidate(uv) stale()
+block invalidate(iv:u64)
+  _ = x86.fence.mfence()
+  _ = x86.tlb.invlpg(iv)
+  okay:u64 = const() {"value":0}
+  ret(okay)
+block stale()
+  stale_code:u64 = const() {"value":9}
+  ret(stale_code)
+block bad_caps()
+  caps_code:u64 = const() {"value":8}
+  ret(caps_code)
+block bad_transition()
+  transition_code:u64 = const() {"value":6}
+  ret(transition_code)
+end
