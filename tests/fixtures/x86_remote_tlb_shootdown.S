@@ -293,22 +293,36 @@ probed:
     cmpq $0,handler_bad(%rip)
     jne abort
     cmpq $OLD_VALUE,pre_flush_observed(%rip)
-    jne abort
+    jne abort_pre
     cmpq $0,flush_status(%rip)
     jne abort
 #ifdef HIA_TEST_FLUSH_NOP
-    cmpq $OLD_VALUE,post_flush_observed(%rip)
-    jne abort
+    /* A stale translation must be observed immediately after the deleted
+     * INVLPG. IRET or incidental replacement may subsequently evict it. */
+    cmpq $OLD_VALUE,immediate_flush_observed(%rip)
+    jne abort_immediate
     cmpq $0,shoot_ack(%rip)
+    jne abort_ack
+    cmpq $OLD_VALUE,post_flush_observed(%rip)
+    je stale_after_return
+    cmpq $NEW_VALUE,post_flush_observed(%rip)
     jne abort
-    movb $70,%bl
+    movb $'R',%bl
+    jmp checked_post_return
+stale_after_return:
+    movb $'F',%bl
+checked_post_return:
 #elif defined(HIA_TEST_ACK_MISSING)
+    cmpq $NEW_VALUE,immediate_flush_observed(%rip)
+    jne abort_immediate
     cmpq $NEW_VALUE,post_flush_observed(%rip)
     jne abort
     cmpq $0,shoot_ack(%rip)
     jne abort
     movb $75,%bl
 #else
+    cmpq $NEW_VALUE,immediate_flush_observed(%rip)
+    jne abort_immediate
     cmpq $NEW_VALUE,post_flush_observed(%rip)
     jne abort
     cmpq $1,shoot_ack(%rip)
@@ -469,6 +483,8 @@ ap_loop:
 #ifndef HIA_TEST_ACK_MISSING
     cmpq $NEW_VALUE,%rax
     jne 7f
+    cmpq $NEW_VALUE,immediate_flush_observed(%rip)
+    jne 7f
     cmpq $0,flush_status(%rip)
     jne 7f
     mfence
@@ -523,6 +539,10 @@ ipi_handler:
     movq %rax,flush_status(%rip)
     testq %rax,%rax
     jnz handler_fail
+    /* Observe before EOI/IRET, without introducing a second invalidation. */
+    movl $TARGET_VA,%eax
+    movq (%rax),%rax
+    movq %rax,immediate_flush_observed(%rip)
     movq %r12,%rdi
     movq ap_msr(%rip),%rsi
     call f1
@@ -563,8 +583,18 @@ handler_return:
     popq %rbx
     popq %rax
     iretq
+abort_pre:
+    movb $'B',%bl
+    jmp abort_code
+abort_immediate:
+    movb $'I',%bl
+    jmp abort_code
+abort_ack:
+    movb $'C',%bl
+    jmp abort_code
 abort:
     movb $'A',%bl
+abort_code:
     movl $0x12,%eax
 finish:
     pushq %rax
@@ -624,6 +654,7 @@ probe_pending: .skip 8
 probe_ack: .skip 8
 old_observed: .skip 8
 pre_flush_observed: .skip 8
+immediate_flush_observed: .skip 8
 post_flush_observed: .skip 8
 flush_status: .skip 8
 shoot_ack: .skip 8

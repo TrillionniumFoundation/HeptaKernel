@@ -114,7 +114,7 @@ def main():
     try:
         for name, subject, code, macro, rc, serial in (
             ("native-remote-shootdown",obj,text,None,33,b"P"),
-            ("invlpg-nop",badobj,mutated,"HIA_TEST_FLUSH_NOP",35,b"F"),
+            ("invlpg-nop",badobj,mutated,"HIA_TEST_FLUSH_NOP",35,b"FR"),
             ("missing-ack",obj,text,"HIA_TEST_ACK_MISSING",35,b"K")):
             image, binding = link(out, name, subject, code, macro)
             for machine in ("pc","q35"):
@@ -130,7 +130,13 @@ def main():
                     p = subprocess.run(argv,capture_output=True,timeout=20)
                     row.update(returncode=p.returncode,serial=p.stdout.decode(errors="replace"),
                                stderr=p.stderr.decode(errors="replace")[-3000:])
-                    assert (p.returncode,p.stdout) == (rc,serial), row
+                    if name == "invlpg-nop":
+                        assert p.returncode == rc and p.stdout in (b"F", b"R"), row
+                        row["immediate_stale_observed"] = True
+                        row["post_iret_stale_observed"] = p.stdout == b"F"
+                        row["ack_withheld"] = True
+                    else:
+                        assert (p.returncode,p.stdout) == (rc,serial), row
                     row["status"]="PASS"
                 except subprocess.TimeoutExpired:
                     row["status"]="TIMEOUT"
@@ -139,6 +145,9 @@ def main():
         receipt.update(status="PASS", native_xapic_remote_ipi=True, native_xapic_eoi=True,
                        cross_cpu_ipi_proved=True, exact_fixture_vcpus=2,
                        remote_tlb_shootdown_proved=True, native_ap_bootstrap_proved=False,
+                       original_post_iret_stale_control_met=all(
+                           r["post_iret_stale_observed"] for r in receipt["cases"]
+                           if r["case"] == "invlpg-nop"),
                        native_mapping_publication=False, native_ack_publication=False,
                        fixed_page_only=True, arbitrary_cohort_proved=False)
     finally:
