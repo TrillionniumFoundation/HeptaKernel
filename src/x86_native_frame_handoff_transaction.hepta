@@ -1,0 +1,264 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0,f1,f2)
+fn f0(slot:u64,frame:u64,lo:u64,hi:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(slot:u64,frame:u64,lo:u64,hi:u64)
+  z:u64 = const() {"value":0}
+  mask:u64 = const() {"value":7}
+  limit:u64 = const() {"value":1073741824}
+  extent:u64 = const() {"value":160}
+  pair:u64 = bit.or(slot,frame)
+  bounds:u64 = bit.or(lo,hi)
+  all:u64 = bit.or(pair,bounds)
+  alignment:u64 = bit.and(all,mask)
+  aligned:bool = compare.eq(alignment,z)
+  slotnz:bool = compare.ne(slot,z)
+  lonz:bool = compare.ne(lo,z)
+  slotlow:bool = compare.lt(slot,limit)
+  hilow:bool = compare.le(hi,limit)
+  starts:bool = compare.ge(frame,lo)
+  ends:bool = compare.le(frame,hi)
+  room:u64 = int.sub.wrap(hi,frame)
+  fits:bool = compare.ge(room,extent)
+  left:bool = compare.lt(slot,lo)
+  right:bool = compare.ge(slot,hi)
+  outside:bool = bool.or(left,right)
+  a:bool = bool.and(aligned,slotnz)
+  b:bool = bool.and(lonz,slotlow)
+  c:bool = bool.and(hilow,starts)
+  d:bool = bool.and(ends,fits)
+  e:bool = bool.and(a,b)
+  f:bool = bool.and(c,d)
+  g:bool = bool.and(e,f)
+  valid:bool = bool.and(g,outside)
+  branch valid live(slot,frame) reject()
+block live(ptr:u64,value:u64)
+  msridx:u32 = const() {"value":27}
+  actual:u64 = x86.msr.read(msridx)
+  modemask:u64 = const() {"value":18446744073709550592}
+  mode:u64 = bit.and(actual,modemask)
+  required:u64 = const() {"value":4276094976}
+  modeok:bool = compare.eq(mode,required)
+  branch modeok cpu(ptr,value) reject()
+block cpu(address:u64,selected:u64)
+  idaddr:u64 = const() {"value":4276092960}
+  rawid:u32 = x86.mmio.read32(idaddr)
+  idmask:u32 = const() {"value":4278190080}
+  id:u32 = bit.and(rawid,idmask)
+  bsp:u32 = const() {"value":0}
+  isbsp:bool = compare.eq(id,bsp)
+  branch isbsp irq(address,selected) reject()
+block irq(target:u64,chosen:u64)
+  israddr:u64 = const() {"value":4276093216}
+  isr:u32 = x86.mmio.read32(israddr)
+  bitmask:u32 = const() {"value":131072}
+  bits:u32 = bit.and(isr,bitmask)
+  active:bool = compare.eq(bits,bitmask)
+  lvtaddr:u64 = const() {"value":4276093728}
+  lvt:u32 = x86.mmio.read32(lvtaddr)
+  lvtmask:u32 = const() {"value":196863}
+  lvtbits:u32 = bit.and(lvt,lvtmask)
+  periodic:u32 = const() {"value":131153}
+  periodicok:bool = compare.eq(lvtbits,periodic)
+  admitted:bool = bool.and(active,periodicok)
+  branch admitted exchange(target,chosen) inactive()
+block exchange(dest:u64,ptrval:u64)
+  zero:u64 = const() {"value":0}
+  observed:u64 = x86.atomic.cmpxchg64(dest,zero,ptrval)
+  matched:bool = compare.eq(observed,zero)
+  branch matched ordered() stale()
+block ordered()
+  _ = x86.fence.mfence()
+  ok:u64 = const() {"value":0}
+  ret(ok)
+block stale()
+  stale_code:u64 = const() {"value":9}
+  ret(stale_code)
+block reject()
+  reject_code:u64 = const() {"value":6}
+  ret(reject_code)
+block inactive()
+  inactive_code:u64 = const() {"value":11}
+  ret(inactive_code)
+end
+fn f1(slot:u64,frame:u64,lo:u64,hi:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(slot:u64,frame:u64,lo:u64,hi:u64)
+  z:u64 = const() {"value":0}
+  mask:u64 = const() {"value":7}
+  limit:u64 = const() {"value":1073741824}
+  extent:u64 = const() {"value":160}
+  pair:u64 = bit.or(slot,frame)
+  bounds:u64 = bit.or(lo,hi)
+  all:u64 = bit.or(pair,bounds)
+  alignment:u64 = bit.and(all,mask)
+  aligned:bool = compare.eq(alignment,z)
+  slotnz:bool = compare.ne(slot,z)
+  lonz:bool = compare.ne(lo,z)
+  slotlow:bool = compare.lt(slot,limit)
+  hilow:bool = compare.le(hi,limit)
+  starts:bool = compare.ge(frame,lo)
+  ends:bool = compare.le(frame,hi)
+  room:u64 = int.sub.wrap(hi,frame)
+  fits:bool = compare.ge(room,extent)
+  left:bool = compare.lt(slot,lo)
+  right:bool = compare.ge(slot,hi)
+  outside:bool = bool.or(left,right)
+  a:bool = bool.and(aligned,slotnz)
+  b:bool = bool.and(lonz,slotlow)
+  c:bool = bool.and(hilow,starts)
+  d:bool = bool.and(ends,fits)
+  e:bool = bool.and(a,b)
+  f:bool = bool.and(c,d)
+  g:bool = bool.and(e,f)
+  valid:bool = bool.and(g,outside)
+  branch valid live(slot,frame) reject()
+block live(ptr:u64,value:u64)
+  msridx:u32 = const() {"value":27}
+  actual:u64 = x86.msr.read(msridx)
+  modemask:u64 = const() {"value":18446744073709550592}
+  mode:u64 = bit.and(actual,modemask)
+  required:u64 = const() {"value":4276094976}
+  modeok:bool = compare.eq(mode,required)
+  branch modeok cpu(ptr,value) reject()
+block cpu(address:u64,selected:u64)
+  idaddr:u64 = const() {"value":4276092960}
+  rawid:u32 = x86.mmio.read32(idaddr)
+  idmask:u32 = const() {"value":4278190080}
+  id:u32 = bit.and(rawid,idmask)
+  bsp:u32 = const() {"value":0}
+  isbsp:bool = compare.eq(id,bsp)
+  branch isbsp irq(address,selected) reject()
+block irq(target:u64,chosen:u64)
+  israddr:u64 = const() {"value":4276093216}
+  isr:u32 = x86.mmio.read32(israddr)
+  bitmask:u32 = const() {"value":131072}
+  bits:u32 = bit.and(isr,bitmask)
+  active:bool = compare.eq(bits,bitmask)
+  lvtaddr:u64 = const() {"value":4276093728}
+  lvt:u32 = x86.mmio.read32(lvtaddr)
+  lvtmask:u32 = const() {"value":196863}
+  lvtbits:u32 = bit.and(lvt,lvtmask)
+  periodic:u32 = const() {"value":131153}
+  periodicok:bool = compare.eq(lvtbits,periodic)
+  admitted:bool = bool.and(active,periodicok)
+  branch admitted exchange(target,chosen) inactive()
+block exchange(dest:u64,ptrval:u64)
+  zero:u64 = const() {"value":0}
+  observed:u64 = x86.atomic.cmpxchg64(dest,ptrval,zero)
+  matched:bool = compare.eq(observed,ptrval)
+  branch matched ordered() stale()
+block ordered()
+  _ = x86.fence.mfence()
+  ok:u64 = const() {"value":0}
+  ret(ok)
+block stale()
+  stale_code:u64 = const() {"value":9}
+  ret(stale_code)
+block reject()
+  reject_code:u64 = const() {"value":6}
+  ret(reject_code)
+block inactive()
+  inactive_code:u64 = const() {"value":11}
+  ret(inactive_code)
+end
+fn f2(srcslot:u64,srcframe:u64,srctop:u64,dstslot:u64,dstframe:u64,dsttop:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(srcslot:u64,srcframe:u64,srctop:u64,dstslot:u64,dstframe:u64,dsttop:u64)
+  zero:u64 = const() {"value":0}
+  limit:u64 = const() {"value":1073741824}
+  span:u64 = const() {"value":16376}
+  mask:u64 = const() {"value":7}
+  extent:u64 = const() {"value":160}
+  s0:bool = compare.gt(srctop,span)
+  s1:bool = compare.le(srctop,limit)
+  d0:bool = compare.gt(dsttop,span)
+  d1:bool = compare.le(dsttop,limit)
+  ss0:bool = bool.and(s0,s1)
+  dd0:bool = bool.and(d0,d1)
+  topok:bool = bool.and(ss0,dd0)
+  slo:u64 = int.sub.wrap(srctop,span)
+  dlo:u64 = int.sub.wrap(dsttop,span)
+  before:bool = compare.le(srctop,dlo)
+  after:bool = compare.le(dsttop,slo)
+  separate:bool = bool.or(before,after)
+  ssnz:bool = compare.ne(srcslot,zero)
+  dsnz:bool = compare.ne(dstslot,zero)
+  ssl:bool = compare.lt(srcslot,limit)
+  dsl:bool = compare.lt(dstslot,limit)
+  disjoint:bool = compare.ne(srcslot,dstslot)
+  pair0:u64 = bit.or(srcslot,dstslot)
+  pair1:u64 = bit.or(srcframe,dstframe)
+  pair2:u64 = bit.or(srctop,dsttop)
+  pair3:u64 = bit.or(pair0,pair1)
+  pair4:u64 = bit.or(pair3,pair2)
+  rem:u64 = bit.and(pair4,mask)
+  aligned:bool = compare.eq(rem,zero)
+  x0:bool = compare.lt(srcslot,slo)
+  x1:bool = compare.ge(srcslot,srctop)
+  x2:bool = compare.lt(srcslot,dlo)
+  x3:bool = compare.ge(srcslot,dsttop)
+  x4:bool = compare.lt(dstslot,slo)
+  x5:bool = compare.ge(dstslot,srctop)
+  x6:bool = compare.lt(dstslot,dlo)
+  x7:bool = compare.ge(dstslot,dsttop)
+  xo0:bool = bool.or(x0,x1)
+  xo1:bool = bool.or(x2,x3)
+  xo2:bool = bool.or(x4,x5)
+  xo3:bool = bool.or(x6,x7)
+  xo4:bool = bool.and(xo0,xo1)
+  xo5:bool = bool.and(xo2,xo3)
+  outs:bool = bool.and(xo4,xo5)
+  sf0:bool = compare.ge(srcframe,slo)
+  sf1:bool = compare.le(srcframe,srctop)
+  df0:bool = compare.ge(dstframe,dlo)
+  df1:bool = compare.le(dstframe,dsttop)
+  sr:u64 = int.sub.wrap(srctop,srcframe)
+  dr:u64 = int.sub.wrap(dsttop,dstframe)
+  sf2:bool = compare.ge(sr,extent)
+  df2:bool = compare.ge(dr,extent)
+  sf3:bool = bool.and(sf0,sf1)
+  df3:bool = bool.and(df0,df1)
+  sf4:bool = bool.and(sf3,sf2)
+  df4:bool = bool.and(df3,df2)
+  fit:bool = bool.and(sf4,df4)
+  n0:bool = bool.and(ssnz,dsnz)
+  n1:bool = bool.and(ssl,dsl)
+  n2:bool = bool.and(n0,n1)
+  n3:bool = bool.and(disjoint,aligned)
+  n4:bool = bool.and(n2,n3)
+  n5:bool = bool.and(topok,separate)
+  n6:bool = bool.and(outs,fit)
+  n7:bool = bool.and(n4,n5)
+  valid:bool = bool.and(n6,n7)
+  branch valid park(srcslot,srcframe,srctop,dstslot,dstframe,dsttop) reject()
+block park(ps:u64,pf:u64,pt:u64,cs:u64,cf:u64,ct:u64)
+  sz:u64 = const() {"value":16376}
+  pl:u64 = int.sub.wrap(pt,sz)
+  parked:u64 = call(ps,pf,pl,pt) {"function":"f0"}
+  pz:u64 = const() {"value":0}
+  pok:bool = compare.eq(parked,pz)
+  branch pok unpark(ps,pf,pt,cs,cf,ct) failed(parked)
+block unpark(rs:u64,rf:u64,rt:u64,us:u64,uf:u64,ut:u64)
+  width:u64 = const() {"value":16376}
+  ul:u64 = int.sub.wrap(ut,width)
+  taken:u64 = call(us,uf,ul,ut) {"function":"f1"}
+  uz:u64 = const() {"value":0}
+  uok:bool = compare.eq(taken,uz)
+  branch uok done() rollback(rs,rf,rt,taken)
+block rollback(bs:u64,bf:u64,bt:u64,cause:u64)
+  depth:u64 = const() {"value":16376}
+  bl:u64 = int.sub.wrap(bt,depth)
+  undone:u64 = call(bs,bf,bl,bt) {"function":"f1"}
+  bz:u64 = const() {"value":0}
+  bok:bool = compare.eq(undone,bz)
+  branch bok failed(cause) poisoned()
+block done()
+  good:u64 = const() {"value":0}
+  ret(good)
+block reject()
+  bad:u64 = const() {"value":6}
+  ret(bad)
+block failed(status:u64)
+  ret(status)
+block poisoned()
+  fatal:u64 = const() {"value":13}
+  ret(fatal)
+end
