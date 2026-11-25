@@ -1,0 +1,533 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0,f1,f2,f3,f4,f5)
+fn f0(v0:u64,v1:u64,v2:u32,v3:u32) -> (u64) effects(privilege,read,write,trap) entry(b0)
+block b0(v0:u64,v1:u64,v2:u32,v3:u32)
+  v4:u64 = const() {"value":4276092928}
+  v5:bool = compare.eq(v0,v4)
+  branch v5 b1(v1,v2,v3) b10()
+block b1(v6:u64,v7:u32,v8:u32)
+  v9:u32 = const() {"value":27}
+  v10:u64 = x86.msr.read(v9)
+  v11:bool = compare.eq(v6,v10)
+  branch v11 b2(v10,v7,v8) b11()
+block b2(v12:u64,v13:u32,v14:u32)
+  v15:u64 = const() {"value":3072}
+  v16:u64 = bit.and(v12,v15)
+  v17:u64 = const() {"value":2048}
+  v18:bool = compare.eq(v16,v17)
+  v19:u64 = const() {"value":18446744073709547520}
+  v20:u64 = bit.and(v12,v19)
+  v21:u64 = const() {"value":4276092928}
+  v22:bool = compare.eq(v20,v21)
+  v23:bool = bool.and(v18,v22)
+  branch v23 b3(v13,v14) b12()
+block b3(v24:u32,v25:u32)
+  v26:u64 = const() {"value":4276093168}
+  v27:u32 = x86.mmio.read32(v26)
+  v28:u32 = const() {"value":256}
+  v29:u32 = bit.and(v27,v28)
+  v30:u32 = const() {"value":256}
+  v31:bool = compare.eq(v29,v30)
+  v32:u64 = const() {"value":4276093056}
+  v33:u32 = x86.mmio.read32(v32)
+  v34:u32 = const() {"value":255}
+  v35:u32 = bit.and(v33,v34)
+  v36:u32 = const() {"value":80}
+  v37:bool = compare.lt(v35,v36)
+  v38:bool = bool.and(v31,v37)
+  branch v38 b4(v24,v25) b13()
+block b4(v39:u32,v40:u32)
+  v41:u64 = const() {"value":4276093728}
+  v42:u32 = x86.mmio.read32(v41)
+  v43:u64 = const() {"value":4276093920}
+  v44:u32 = x86.mmio.read32(v43)
+  v45:bool = compare.eq(v42,v39)
+  v46:bool = compare.eq(v44,v40)
+  v47:bool = bool.and(v45,v46)
+  branch v47 b5(v42,v44) b14()
+block b5(v48:u32,v49:u32)
+  v50:u32 = const() {"value":0}
+  v51:u32 = const() {"value":65617}
+  v52:bool = compare.eq(v48,v51)
+  v53:bool = compare.eq(v49,v50)
+  v54:bool = bool.and(v52,v53)
+  v55:u64 = const() {"value":4276093824}
+  v56:u32 = x86.mmio.read32(v55)
+  v57:bool = compare.eq(v56,v50)
+  v58:u64 = const() {"value":4276093840}
+  v59:u32 = x86.mmio.read32(v58)
+  v60:bool = compare.eq(v59,v50)
+  v61:bool = bool.and(v57,v60)
+  v62:bool = bool.and(v54,v61)
+  branch v62 b6() b15()
+block b6()
+  v63:u64 = const() {"value":4276093472}
+  v64:u32 = x86.mmio.read32(v63)
+  v65:u64 = const() {"value":4276093216}
+  v66:u32 = x86.mmio.read32(v65)
+  v67:u32 = bit.or(v64,v66)
+  v68:u32 = const() {"value":131072}
+  v69:u32 = bit.and(v67,v68)
+  v70:u32 = const() {"value":0}
+  v71:bool = compare.eq(v69,v70)
+  branch v71 b7() b16()
+block b7()
+  v72:u32 = const() {"value":3}
+  v73:u64 = const() {"value":4276093920}
+  _ = x86.mmio.write32(v73,v72)
+  v74:u64 = const() {"value":4276093920}
+  v75:u32 = x86.mmio.read32(v74)
+  v76:bool = compare.eq(v75,v72)
+  branch v76 b9() b17()
+block b9()
+  v82:u32 = const() {"value":4294967295}
+  v83:u64 = const() {"value":4276093824}
+  _ = x86.mmio.write32(v83,v82)
+  v84:u64 = const() {"value":4276093824}
+  v85:u32 = x86.mmio.read32(v84)
+  v86:bool = compare.eq(v85,v82)
+  branch v86 b20() b19()
+block b10()
+  v87:u64 = const() {"value":6}
+  ret(v87)
+block b11()
+  v88:u64 = const() {"value":9}
+  ret(v88)
+block b12()
+  v89:u64 = const() {"value":8}
+  ret(v89)
+block b13()
+  v90:u64 = const() {"value":10}
+  ret(v90)
+block b14()
+  v91:u64 = const() {"value":11}
+  ret(v91)
+block b15()
+  v92:u64 = const() {"value":12}
+  ret(v92)
+block b16()
+  v93:u64 = const() {"value":16}
+  ret(v93)
+block b17()
+  v94:u64 = const() {"value":13}
+  ret(v94)
+block b19()
+  v96:u64 = const() {"value":15}
+  ret(v96)
+block b20()
+  v97:u64 = const() {"value":0}
+  ret(v97)
+end
+fn f1(v0:u64,v1:u64) -> (u32) effects(privilege,read,write,trap) entry(b0)
+block b0(v0:u64,v1:u64)
+  v2:u64 = const() {"value":4276092928}
+  v3:bool = compare.eq(v0,v2)
+  branch v3 b1(v1) b6()
+block b1(v4:u64)
+  v5:u32 = const() {"value":27}
+  v6:u64 = x86.msr.read(v5)
+  v7:bool = compare.eq(v4,v6)
+  branch v7 b2(v6) b6()
+block b2(v8:u64)
+  v9:u64 = const() {"value":18446744073709550592}
+  v10:u64 = bit.and(v8,v9)
+  v11:u64 = const() {"value":4276094976}
+  v12:bool = compare.eq(v10,v11)
+  branch v12 b3() b6()
+block b3()
+  v13:u64 = const() {"value":4276093728}
+  v14:u32 = x86.mmio.read32(v13)
+  v15:u32 = const() {"value":65617}
+  v16:bool = compare.eq(v14,v15)
+  v17:u64 = const() {"value":4276093920}
+  v18:u32 = x86.mmio.read32(v17)
+  v19:u32 = const() {"value":3}
+  v20:bool = compare.eq(v18,v19)
+  v21:u64 = const() {"value":4276093824}
+  v22:u32 = x86.mmio.read32(v21)
+  v23:u32 = const() {"value":4294967295}
+  v24:bool = compare.eq(v22,v23)
+  v25:bool = bool.and(v16,v20)
+  v26:bool = bool.and(v25,v24)
+  branch v26 b4() b6()
+block b4()
+  v27:u64 = const() {"value":4276093840}
+  v28:u32 = x86.mmio.read32(v27)
+  v29:u32 = const() {"value":0}
+  v30:u32 = const() {"value":4294967295}
+  v31:bool = compare.ne(v28,v29)
+  v32:bool = compare.lt(v28,v30)
+  v33:bool = bool.and(v31,v32)
+  v34:u32 = int.sub.wrap(v30,v28)
+  branch v33 b5(v34) b6()
+block b5(v35:u32)
+  v36:u64 = const() {"value":4276093824}
+  v37:u32 = const() {"value":0}
+  _ = x86.mmio.write32(v36,v37)
+  v38:u32 = x86.mmio.read32(v36)
+  v39:u64 = const() {"value":4276093840}
+  v40:u32 = x86.mmio.read32(v39)
+  v41:bool = compare.eq(v38,v37)
+  v42:bool = compare.eq(v40,v37)
+  v43:bool = bool.and(v41,v42)
+  branch v43 b7(v35) b6()
+block b6()
+  v44:u32 = const() {"value":0}
+  ret(v44)
+block b7(v45:u32)
+  ret(v45)
+end
+fn f2(short:u32,long:u32,ticks:u32) -> (u32) effects(trap) entry(b0)
+block b0(short:u32,long:u32,ticks:u32)
+  z:u32 = const() {"value":0}
+  t12:u32 = const() {"value":12000}
+  t24:u32 = const() {"value":24000}
+  a:bool = compare.ne(short,z)
+  b:bool = compare.ne(long,z)
+  c:bool = compare.eq(ticks,t12)
+  d:bool = compare.eq(ticks,t24)
+  e:bool = bool.and(a,b)
+  f:bool = bool.or(c,d)
+  ok:bool = bool.and(e,f)
+  branch ok ratio(short,long,ticks) reject()
+block ratio(s:u32,l:u32,t:u32)
+  sw:u64 = int.cast(s) {"mode":"wrap"}
+  lw:u64 = int.cast(l) {"mode":"wrap"}
+  two:u64 = const() {"value":2}
+  three:u64 = const() {"value":3}
+  five:u64 = const() {"value":5}
+  left:u64 = int.mul.wrap(sw,three)
+  right:u64 = int.mul.wrap(sw,five)
+  middle:u64 = int.mul.wrap(lw,two)
+  lo:bool = compare.ge(middle,left)
+  hi:bool = compare.le(middle,right)
+  proportional:bool = bool.and(lo,hi)
+  branch proportional estimate(sw,lw,t) reject()
+block estimate(s2:u64,l2:u64,requested:u32)
+  twice:u64 = int.add.wrap(s2,s2)
+  sum:u64 = int.add.wrap(twice,l2)
+  short_ticks:u32 = const() {"value":12000}
+  short_period:bool = compare.eq(requested,short_ticks)
+  branch short_period half(sum) full(sum)
+block half(h:u64)
+  round2:u64 = const() {"value":2}
+  rounded_short:u64 = int.add.wrap(h,round2)
+  count_short:u64 = int.shr.checked(rounded_short,round2)
+  jump bounds(count_short)
+block full(n:u64)
+  round1:u64 = const() {"value":1}
+  rounded_long:u64 = int.add.wrap(n,round1)
+  count_long:u64 = int.shr.checked(rounded_long,round1)
+  jump bounds(count_long)
+block bounds(count:u64)
+  minimum:u64 = const() {"value":1024}
+  maximum:u64 = const() {"value":2147483647}
+  big_enough:bool = compare.ge(count,minimum)
+  small_enough:bool = compare.le(count,maximum)
+  admitted:bool = bool.and(big_enough,small_enough)
+  branch admitted result(count) reject()
+block result(accepted:u64)
+  narrow:u32 = int.cast(accepted) {"mode":"wrap"}
+  ret(narrow)
+block reject()
+  invalid:u32 = const() {"value":0}
+  ret(invalid)
+end
+fn f3(base:u64,msr:u64,short:u32,long:u32,ticks:u32) -> (u64) effects(privilege,read,write,trap) entry(b0)
+block b0(base:u64,msr:u64,short:u32,long:u32,ticks:u32)
+  count:u32 = call(short,long,ticks) {"function":"f2"}
+  zero:u32 = const() {"value":0}
+  okay:bool = compare.ne(count,zero)
+  branch okay arm(base,msr,count) reject()
+block arm(addr:u64,wanted:u64,n:u32)
+  lvt:u32 = const() {"value":65617}
+  div:u32 = const() {"value":0}
+  status:u64 = call(addr,wanted,lvt,div,n) {"function":"f6"}
+  success:u64 = const() {"value":0}
+  armed:bool = compare.eq(status,success)
+  branch armed done(n) failed(status)
+block done(actual_count:u32)
+  widened:u64 = int.cast(actual_count) {"mode":"wrap"}
+  ret(widened)
+block failed(error:u64)
+  ret(error)
+block reject()
+  invalid:u64 = const() {"value":0}
+  ret(invalid)
+end
+fn f4(v0:u64,v1:u64) -> (u64) effects(privilege,read,write,trap) entry(b0)
+block b0(v0:u64,v1:u64)
+  v2:u64 = const() {"value":4276092928}
+  v3:bool = compare.eq(v0,v2)
+  branch v3 b1(v1) b6()
+block b1(v4:u64)
+  v5:u32 = const() {"value":27}
+  v6:u64 = x86.msr.read(v5)
+  v7:bool = compare.eq(v4,v6)
+  branch v7 b2(v6) b7()
+block b2(v8:u64)
+  v9:u64 = const() {"value":3072}
+  v10:u64 = bit.and(v8,v9)
+  v11:u64 = const() {"value":2048}
+  v12:bool = compare.eq(v10,v11)
+  v13:u64 = const() {"value":18446744073709547520}
+  v14:u64 = bit.and(v8,v13)
+  v15:u64 = const() {"value":4276092928}
+  v16:bool = compare.eq(v14,v15)
+  v17:bool = bool.and(v12,v16)
+  branch v17 b3() b8()
+block b3()
+  v18:u64 = const() {"value":4276093216}
+  v19:u32 = x86.mmio.read32(v18)
+  v20:u32 = const() {"value":131072}
+  v21:u32 = bit.and(v19,v20)
+  v22:bool = compare.eq(v21,v20)
+  v23:u32 = const() {"value":4294705152}
+  v24:u32 = bit.and(v19,v23)
+  v25:u64 = const() {"value":4276093232}
+  v26:u32 = x86.mmio.read32(v25)
+  v27:u64 = const() {"value":4276093248}
+  v28:u32 = x86.mmio.read32(v27)
+  v29:u64 = const() {"value":4276093264}
+  v30:u32 = x86.mmio.read32(v29)
+  v31:u64 = const() {"value":4276093280}
+  v32:u32 = x86.mmio.read32(v31)
+  v33:u64 = const() {"value":4276093296}
+  v34:u32 = x86.mmio.read32(v33)
+  v35:u32 = bit.or(v24,v26)
+  v36:u32 = bit.or(v28,v30)
+  v37:u32 = bit.or(v32,v34)
+  v38:u32 = bit.or(v35,v36)
+  v39:u32 = bit.or(v38,v37)
+  v40:u32 = const() {"value":0}
+  v41:bool = compare.eq(v39,v40)
+  v42:bool = bool.and(v22,v41)
+  branch v42 b4() b9()
+block b4()
+  v43:u64 = const() {"value":4276093104}
+  v44:u32 = const() {"value":0}
+  _ = x86.mmio.write32(v43,v44)
+  v45:u64 = const() {"value":4276093216}
+  v46:u32 = x86.mmio.read32(v45)
+  v47:u32 = const() {"value":131072}
+  v48:u32 = bit.and(v46,v47)
+  v49:bool = compare.eq(v48,v44)
+  branch v49 b5() b10()
+block b5()
+  v50:u64 = const() {"value":0}
+  ret(v50)
+block b6()
+  v51:u64 = const() {"value":6}
+  ret(v51)
+block b7()
+  v52:u64 = const() {"value":9}
+  ret(v52)
+block b8()
+  v53:u64 = const() {"value":8}
+  ret(v53)
+block b9()
+  v54:u64 = const() {"value":11}
+  ret(v54)
+block b10()
+  v55:u64 = const() {"value":13}
+  ret(v55)
+end
+fn f5(v0:u64,v1:u64,stopcount:u32) -> (u64) effects(privilege,read,write,trap) entry(b0)
+block b0(v0:u64,v1:u64,sc0:u32)
+  v2:u64 = const() {"value":4276092928}
+  v3:bool = compare.eq(v0,v2)
+  stop_min:u32 = const() {"value":1024}
+  stop_max:u32 = const() {"value":2147483647}
+  stop_lo:bool = compare.ge(sc0,stop_min)
+  stop_hi:bool = compare.le(sc0,stop_max)
+  stop_range:bool = bool.and(stop_lo,stop_hi)
+  stop_valid:bool = bool.and(v3,stop_range)
+  branch stop_valid b1(v1,sc0) b7()
+block b1(v4:u64,sc1:u32)
+  v5:u32 = const() {"value":27}
+  v6:u64 = x86.msr.read(v5)
+  v7:bool = compare.eq(v4,v6)
+  branch v7 b2(v6,sc1) b8()
+block b2(v8:u64,sc2:u32)
+  v9:u64 = const() {"value":18446744073709550592}
+  v10:u64 = bit.and(v8,v9)
+  v11:u64 = const() {"value":4276094976}
+  v12:bool = compare.eq(v10,v11)
+  branch v12 b3(sc2) b7()
+block b3(sc3:u32)
+  v13:u64 = const() {"value":4276093728}
+  v14:u32 = x86.mmio.read32(v13)
+  v15:u32 = const() {"value":131153}
+  v16:bool = compare.eq(v14,v15)
+  v17:u64 = const() {"value":4276093920}
+  v18:u32 = x86.mmio.read32(v17)
+  v19:u32 = const() {"value":3}
+  v20:bool = compare.eq(v18,v19)
+  v21:u64 = const() {"value":4276093824}
+  v22:u32 = x86.mmio.read32(v21)
+  v24:bool = compare.eq(v22,sc3)
+  v25:bool = bool.and(v16,v20)
+  v26:bool = bool.and(v25,v24)
+  branch v26 b4() b8()
+block b4()
+  v27:u64 = const() {"value":4276093728}
+  v28:u32 = const() {"value":196689}
+  _ = x86.mmio.write32(v27,v28)
+  v29:u32 = x86.mmio.read32(v27)
+  v30:bool = compare.eq(v29,v28)
+  branch v30 b5() b9()
+block b5()
+  v31:u64 = const() {"value":4276093824}
+  v32:u32 = const() {"value":0}
+  _ = x86.mmio.write32(v31,v32)
+  v33:u32 = x86.mmio.read32(v31)
+  v34:u64 = const() {"value":4276093840}
+  v35:u32 = x86.mmio.read32(v34)
+  v36:bool = compare.eq(v33,v32)
+  v37:bool = compare.eq(v35,v32)
+  v38:bool = bool.and(v36,v37)
+  branch v38 b6() b10()
+block b6()
+  v39:u64 = const() {"value":0}
+  ret(v39)
+block b7()
+  v40:u64 = const() {"value":6}
+  ret(v40)
+block b8()
+  v41:u64 = const() {"value":9}
+  ret(v41)
+block b9()
+  v42:u64 = const() {"value":13}
+  ret(v42)
+block b10()
+  v43:u64 = const() {"value":15}
+  ret(v43)
+end
+fn f6(v0:u64,v1:u64,v2:u32,v3:u32,armcount:u32) -> (u64) effects(privilege,read,write,trap) entry(b0)
+block b0(v0:u64,v1:u64,v2:u32,v3:u32,ac0:u32)
+  v4:u64 = const() {"value":4276092928}
+  v5:bool = compare.eq(v0,v4)
+  branch v5 b1(v1,v2,v3,ac0) b10()
+block b1(v6:u64,v7:u32,v8:u32,ac1:u32)
+  v9:u32 = const() {"value":27}
+  v10:u64 = x86.msr.read(v9)
+  v11:bool = compare.eq(v6,v10)
+  branch v11 b2(v10,v7,v8,ac1) b11()
+block b2(v12:u64,v13:u32,v14:u32,ac2:u32)
+  v15:u64 = const() {"value":3072}
+  v16:u64 = bit.and(v12,v15)
+  v17:u64 = const() {"value":2048}
+  v18:bool = compare.eq(v16,v17)
+  v19:u64 = const() {"value":18446744073709547520}
+  v20:u64 = bit.and(v12,v19)
+  v21:u64 = const() {"value":4276092928}
+  v22:bool = compare.eq(v20,v21)
+  v23:bool = bool.and(v18,v22)
+  branch v23 b3(v13,v14,ac2) b12()
+block b3(v24:u32,v25:u32,ac3:u32)
+  v26:u64 = const() {"value":4276093168}
+  v27:u32 = x86.mmio.read32(v26)
+  v28:u32 = const() {"value":256}
+  v29:u32 = bit.and(v27,v28)
+  v30:u32 = const() {"value":256}
+  v31:bool = compare.eq(v29,v30)
+  v32:u64 = const() {"value":4276093056}
+  v33:u32 = x86.mmio.read32(v32)
+  v34:u32 = const() {"value":255}
+  v35:u32 = bit.and(v33,v34)
+  v36:u32 = const() {"value":80}
+  v37:bool = compare.lt(v35,v36)
+  v38:bool = bool.and(v31,v37)
+  branch v38 b4(v24,v25,ac3) b13()
+block b4(v39:u32,v40:u32,ac4:u32)
+  v41:u64 = const() {"value":4276093728}
+  v42:u32 = x86.mmio.read32(v41)
+  v43:u64 = const() {"value":4276093920}
+  v44:u32 = x86.mmio.read32(v43)
+  v45:bool = compare.eq(v42,v39)
+  v46:bool = compare.eq(v44,v40)
+  v47:bool = bool.and(v45,v46)
+  branch v47 b5(v42,v44,ac4) b14()
+block b5(v48:u32,v49:u32,ac5:u32)
+  v50:u32 = const() {"value":0}
+  v51:u32 = const() {"value":65617}
+  v52:bool = compare.eq(v48,v51)
+  v53:bool = compare.eq(v49,v50)
+  v54:bool = bool.and(v52,v53)
+  v55:u64 = const() {"value":4276093824}
+  v56:u32 = x86.mmio.read32(v55)
+  v57:bool = compare.eq(v56,v50)
+  v58:u64 = const() {"value":4276093840}
+  v59:u32 = x86.mmio.read32(v58)
+  v60:bool = compare.eq(v59,v50)
+  v61:bool = bool.and(v57,v60)
+  v62:bool = bool.and(v54,v61)
+  branch v62 b6(ac5) b15()
+block b6(ac6:u32)
+  v63:u64 = const() {"value":4276093472}
+  v64:u32 = x86.mmio.read32(v63)
+  v65:u64 = const() {"value":4276093216}
+  v66:u32 = x86.mmio.read32(v65)
+  v67:u32 = bit.or(v64,v66)
+  v68:u32 = const() {"value":131072}
+  v69:u32 = bit.and(v67,v68)
+  v70:u32 = const() {"value":0}
+  v71:bool = compare.eq(v69,v70)
+  branch v71 b7(ac6) b16()
+block b7(ac7:u32)
+  v72:u32 = const() {"value":3}
+  v73:u64 = const() {"value":4276093920}
+  _ = x86.mmio.write32(v73,v72)
+  v74:u64 = const() {"value":4276093920}
+  v75:u32 = x86.mmio.read32(v74)
+  v76:bool = compare.eq(v75,v72)
+  branch v76 b8(ac7) b17()
+block b8(ac8:u32)
+  v77:u32 = const() {"value":131153}
+  v78:u64 = const() {"value":4276093728}
+  _ = x86.mmio.write32(v78,v77)
+  v79:u64 = const() {"value":4276093728}
+  v80:u32 = x86.mmio.read32(v79)
+  v81:bool = compare.eq(v80,v77)
+  branch v81 b9(ac8) b18()
+block b9(ac9:u32)
+  v83:u64 = const() {"value":4276093824}
+  _ = x86.mmio.write32(v83,ac9)
+  v84:u64 = const() {"value":4276093824}
+  v85:u32 = x86.mmio.read32(v84)
+  v86:bool = compare.eq(v85,ac9)
+  branch v86 b20() b19()
+block b10()
+  v87:u64 = const() {"value":6}
+  ret(v87)
+block b11()
+  v88:u64 = const() {"value":9}
+  ret(v88)
+block b12()
+  v89:u64 = const() {"value":8}
+  ret(v89)
+block b13()
+  v90:u64 = const() {"value":10}
+  ret(v90)
+block b14()
+  v91:u64 = const() {"value":11}
+  ret(v91)
+block b15()
+  v92:u64 = const() {"value":12}
+  ret(v92)
+block b16()
+  v93:u64 = const() {"value":16}
+  ret(v93)
+block b17()
+  v94:u64 = const() {"value":13}
+  ret(v94)
+block b18()
+  v95:u64 = const() {"value":14}
+  ret(v95)
+block b19()
+  v96:u64 = const() {"value":15}
+  ret(v96)
+block b20()
+  v97:u64 = const() {"value":0}
+  ret(v97)
+end
