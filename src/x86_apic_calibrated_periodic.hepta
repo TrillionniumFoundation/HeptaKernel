@@ -332,7 +332,7 @@ block b10()
   v55:u64 = const() {"value":13}
   ret(v55)
 end
-fn f5(v0:u64,v1:u64,stopcount:u32) -> (u64) effects(privilege,read,write,trap) entry(b0)
+fn f5(v0:u64,v1:u64,sc0:u32) -> (u64) effects(privilege,read,write,trap) entry(b0)
 block b0(v0:u64,v1:u64,sc0:u32)
   v2:u64 = const() {"value":4276092928}
   v3:bool = compare.eq(v0,v2)
@@ -403,7 +403,7 @@ block b10()
   v43:u64 = const() {"value":15}
   ret(v43)
 end
-fn f6(v0:u64,v1:u64,v2:u32,v3:u32,armcount:u32) -> (u64) effects(privilege,read,write,trap) entry(b0)
+fn f6(v0:u64,v1:u64,v2:u32,v3:u32,ac0:u32) -> (u64) effects(privilege,read,write,trap) entry(b0)
 block b0(v0:u64,v1:u64,v2:u32,v3:u32,ac0:u32)
   v4:u64 = const() {"value":4276092928}
   v5:bool = compare.eq(v0,v4)

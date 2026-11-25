@@ -260,7 +260,7 @@ def main():
         assert SOURCE.read_bytes() == source and obj.read_bytes() == native and digest(compiler.read_bytes()) == COMPILER_SHA
         receipt.update(status="PASS", masked_apic_calibration=True, native_sample_and_stop=True,
                        independent_pit_two_windows=True, calibrated_periodic_timer_proved=True,
-                       dynamic_count_native=True, native_timer_mask_and_stop=True,
+                       dynamic_count_native=True, periodic_timer_proved=True, native_timer_mask_and_stop=True,
                        post_stop_pit_window_no_interrupts=True, scheduler_clock_proved=False)
     finally:
         (out / "report.json").write_text(json.dumps(receipt,sort_keys=True,indent=2)+"\n")
