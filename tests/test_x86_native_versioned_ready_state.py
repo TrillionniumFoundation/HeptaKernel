@@ -24,10 +24,10 @@ def oracle(live, old, n, task, desired):
     gen, mask = old >> 32, old & U32
     if mask >> n or gen == U32:
         return 6, live
-    if bool(mask & (1 << task)) == bool(desired):
-        return 7, live
     if live != old:
         return 9, live
+    if bool(mask & (1 << task)) == bool(desired):
+        return 7, live
     newmask = (mask | (1 << task)) if desired else (mask & ~(1 << task))
     return 0, ((gen + 1) << 32) | newmask
 
@@ -51,6 +51,13 @@ def worker(library):
     check((1<<32)|(1<<31),(1<<32)|(1<<31),32,31,0)
     check(2<<32,0,32,31,1)
     check(U32<<32,U32<<32,32,0,1)
+    # A no-op is a statement about the live state, not an old snapshot.
+    check(1,0,32,0,0)
+    check((1<<32)|1,0,32,0,0)
+    check(1<<32,1,32,0,1)
+    check((1<<32)|1,1,32,0,1)
+    check(0,0,32,0,0)
+    check(1,1,32,0,1)
     for n in range(1,9):
         for mask in range(1<<n):
             old = (17<<32)|mask
@@ -156,6 +163,7 @@ def main():
         ("no-generation-advance",b'increment:u64 = const() {"value":1}',b'increment:u64 = const() {"value":0}'),
         ("no-clear",b'toggled:u64 = bit.xor(bitmap,marker)',b'toggled:u64 = bit.or(bitmap,marker)'),
         ("ignore-stale",b'matched:bool = compare.eq(observed,previous)',b'matched:bool = compare.eq(previous,previous)'),
+        ("ignore-stale-duplicate",b'dupmatched:bool = compare.eq(duplive,dupold)',b'dupmatched:bool = compare.eq(dupold,dupold)'),
     ):
         assert source.count(old)==1
         mutant_obj,mutant=build(name,source.replace(old,new))
@@ -164,7 +172,7 @@ def main():
         (out/(name+".stderr")).write_text(r.stderr)
         assert r.returncode==1 and "AssertionError" in r.stderr,(name,r.returncode,r.stderr)
         controls[name]="DETECTED"
-    report=dict(compiler_sha256=COMPILER_SHA,compiler_source_sha256=COMPILER_SOURCE_SHA,source_sha256=digest(source),object_sha256=digest(obj.read_bytes()),execution=json.loads(result.stdout),negative_controls=controls,packed_generation_bits=32,packed_ready_bits=32,live_irq_dispatch_proved=False,resource_authority_proved=False,full_linux_acceptance="HOLD")
+    report=dict(compiler_sha256=COMPILER_SHA,compiler_source_sha256=COMPILER_SOURCE_SHA,source_sha256=digest(source),object_sha256=digest(obj.read_bytes()),execution=json.loads(result.stdout),negative_controls=controls,packed_generation_bits=32,packed_ready_bits=32,live_duplicate_validation=True,live_irq_dispatch_proved=False,resource_authority_proved=False,full_linux_acceptance="HOLD")
     (out/"report.json").write_text(json.dumps(report,indent=2)+"\n")
     print(json.dumps(report))
 
