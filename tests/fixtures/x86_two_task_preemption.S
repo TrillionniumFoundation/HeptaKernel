@@ -282,6 +282,7 @@ long64:
     movq $0x11223344,tick_guard_lo(%rip)
     movq $0x55667788,tick_guard_hi(%rip)
 
+#endif
     /* Independent observer bridge: actual two kernel stack contexts. */
     leaq schedule_word(%rip),%rdi
     movl $2,%esi
