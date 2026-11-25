@@ -1,0 +1,44 @@
+name: Experimental native ready bitmap selector (not Linux acceptance)
+on:
+  push:
+    branches: ['automation/x86-native-ready-bitmap-*']
+  pull_request:
+    paths:
+      - 'src/x86_native_ready_bitmap.hepta'
+      - 'tests/test_x86_native_ready_bitmap.py'
+      - '.github/workflows/x86-native-ready-bitmap.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-ready-bitmap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: 25c165ba7c80e3e1124acd4efb083c637fbb275a
+          persist-credentials: false
+          path: .upstream/hepta-experimental
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: sudo apt-get update && sudo apt-get install -y binutils gcc qemu-system-x86
+      - name: Rebuild exact experimental native compiler
+        run: |
+          test "$(git -C .upstream/hepta-experimental rev-parse HEAD)" = 25c165ba7c80e3e1124acd4efb083c637fbb275a
+          python -B .upstream/hepta-experimental/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/kernel-experimental"
+      - name: Native selector and independent oracle
+        run: python -B tests/test_x86_native_ready_bitmap.py --compiler-dir "$RUNNER_TEMP/kernel-experimental" --output "$RUNNER_TEMP/ready-bitmap"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ready-bitmap-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/kernel-experimental/report.json
+            ${{ runner.temp }}/ready-bitmap/
+          retention-days: 7
