@@ -1,0 +1,5 @@
+# Experimental periodic xAPIC timer and native stop
+
+Descendant of #181 exact d1df959094a67541cfb72793057acee14662af0c. Original one-shot source, 26 hardware cases and workflow retained. Separate native HIA subject programs periodic LVT mode (vector 0x51), divider 16 and initial count 1048576. Native f1 EOI is inherited. New native f2 checks live MSR and expected active LVT/divider/count, masks periodic LVT, reads back, zeros initial count, checks both initial and current count. Independent observer interrupts a foreground busy loop at least three times; checks real ISR and EOI; verifies stale MSR refusal; proves no further delivery across a PIT channel-2 mode-0 reference window after stop. Six MMIO-store deletion controls (divider, LVT, count, EOI, stop mask, stop count), eight arm refusal scenarios and positive case, PC/Q35: 30 planned cases. No PASS before exact CI.
+
+PIT reference here establishes post-stop quiet window only, not frequency calibration. No native IRQ entry/IRET, scheduler context switch, full timer restoration, resource ownership or complete Linux acceptance. Original 17 HOLD and 422 syscall obligations retained; production lock unchanged.
