@@ -1,0 +1,49 @@
+name: Experimental native HIA PIT channel 2 reference windows (not Linux acceptance)
+on:
+  push:
+    branches: ['automation/x86-pit-channel2-*']
+  pull_request:
+    paths:
+      - 'src/x86_pit_channel2.hepta'
+      - 'tests/fixtures/x86_pit_channel2.*'
+      - 'tests/fixtures/x86_pit_channel2.ld'
+      - 'tests/test_x86_pit_channel2_qemu.py'
+      - '.github/workflows/x86-pit-channel2.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  experimental-pit-channel2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: fed7aac38b86c2dfb4ed03aa9491fa93b7565dad
+          persist-credentials: false
+          path: .upstream/hepta-experimental
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: sudo apt-get update && sudo apt-get install -y binutils gcc qemu-system-x86
+      - name: Independently rebuild the exact experimental selfhost compiler
+        run: |
+          test "$(git -C .upstream/hepta-experimental rev-parse HEAD)" = fed7aac38b86c2dfb4ed03aa9491fa93b7565dad
+          python -B .upstream/hepta-experimental/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/kernel-experimental"
+      - name: Execute native PIT programming and independent APIC count observer
+        env:
+          LC_ALL: C
+        run: python -B tests/test_x86_pit_channel2_qemu.py --compiler-dir "$RUNNER_TEMP/kernel-experimental" --output "$RUNNER_TEMP/pit-channel2"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pit-channel2-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/kernel-experimental/report.json
+            ${{ runner.temp }}/pit-channel2/
+          if-no-files-found: warn
+          retention-days: 7
