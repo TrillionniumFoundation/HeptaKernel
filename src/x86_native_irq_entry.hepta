@@ -1,0 +1,7 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0)
+fn f0() -> () effects(privilege,read,write,trap) entry(b0)
+block b0()
+  _ = x86.irq.dispatch_kernel_frame()
+  trap user
+end
