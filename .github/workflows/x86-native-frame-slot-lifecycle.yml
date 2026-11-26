@@ -1,0 +1,54 @@
+name: Experimental native parked-frame publication and consumption during actual two-task preemption (not Linux acceptance)
+on:
+  push:
+    branches: ['automation/x86-native-frame-slot-lifecycle-*']
+  pull_request:
+    paths:
+      - 'src/x86_native_frame_slot_lifecycle.hepta'
+      - 'src/x86_native_kernel_frame.hepta'
+      - 'src/x86_native_irq_entry.hepta'
+      - 'src/x86_two_task_preemption.hepta'
+      - 'src/x86_apic_calibrated_periodic.hepta'
+      - 'src/x86_pit_channel2.hepta'
+      - 'tests/fixtures/x86_native_frame_slot_lifecycle.*'
+      - 'tests/fixtures/x86_apic_one_shot_timer.ld'
+      - 'tests/test_x86_native_frame_slot_lifecycle_qemu.py'
+      - '.github/workflows/x86-native-frame-slot-lifecycle.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  experimental-native-frame-slot-lifecycle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: 25c165ba7c80e3e1124acd4efb083c637fbb275a
+          persist-credentials: false
+          path: .upstream/hepta-experimental
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: sudo apt-get update && sudo apt-get install -y binutils gcc qemu-system-x86
+      - name: Independently rebuild the exact experimental selfhost compiler
+        run: |
+          test "$(git -C .upstream/hepta-experimental rev-parse HEAD)" = 25c165ba7c80e3e1124acd4efb083c637fbb275a
+          python -B .upstream/hepta-experimental/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/kernel-experimental"
+      - name: Execute actual preemption through raw native IRQ entry and restoration
+        env:
+          LC_ALL: C
+        run: python -B tests/test_x86_native_frame_slot_lifecycle_qemu.py --compiler-dir "$RUNNER_TEMP/kernel-experimental" --output "$RUNNER_TEMP/native-frame-slot-lifecycle"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-frame-slot-lifecycle-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/kernel-experimental/report.json
+            ${{ runner.temp }}/native-frame-slot-lifecycle/
+          if-no-files-found: warn
+          retention-days: 7
