@@ -113,8 +113,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: frame-content-${{ github.sha }}
+          name: stack-bounded-${{ github.sha }}
           path: |
             ${{ runner.temp }}/kernel-experimental/report.json
             ${{ runner.temp }}/idle-rollback/
+            ${{ runner.temp }}/stack-bounded/
           retention-days: 7
