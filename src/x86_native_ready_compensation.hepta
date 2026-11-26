@@ -1,0 +1,72 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0)
+fn f0(slot:u64,before:u64,count:u64,depart:u64,chosen:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(slot:u64,before:u64,count:u64,depart:u64,chosen:u64)
+  z:u64 = const() {"value":0}
+  seven:u64 = const() {"value":7}
+  limit:u64 = const() {"value":140737488355328}
+  maxn:u64 = const() {"value":32}
+  low:u64 = bit.and(slot,seven)
+  aligned:bool = compare.eq(low,z)
+  nonnull:bool = compare.ne(slot,z)
+  canonical:bool = compare.lt(slot,limit)
+  nonempty:bool = compare.ne(count,z)
+  bounded:bool = compare.le(count,maxn)
+  departok:bool = compare.lt(depart,count)
+  chosenok:bool = compare.lt(chosen,count)
+  distinct:bool = compare.ne(depart,chosen)
+  a:bool = bool.and(aligned,nonnull)
+  b:bool = bool.and(canonical,nonempty)
+  c:bool = bool.and(bounded,departok)
+  d:bool = bool.and(chosenok,distinct)
+  e:bool = bool.and(a,b)
+  f:bool = bool.and(c,d)
+  valid:bool = bool.and(e,f)
+  branch valid decode(slot,before,count,depart,chosen) invalid()
+block decode(ptr:u64,old:u64,n:u64,dep:u64,sel:u64)
+  mask:u64 = const() {"value":4294967295}
+  shift:u64 = const() {"value":32}
+  maxbase:u64 = const() {"value":4294967293}
+  g:u64 = int.shr.checked(old,shift)
+  bits:u64 = bit.and(old,mask)
+  upper:u64 = int.shr.checked(bits,n)
+  dz:u64 = const() {"value":0}
+  one:u64 = const() {"value":1}
+  depbit:u64 = int.shl.checked(one,dep)
+  selbit:u64 = int.shl.checked(one,sel)
+  depval:u64 = bit.and(bits,depbit)
+  selval:u64 = bit.and(bits,selbit)
+  room:bool = compare.le(g,maxbase)
+  clean:bool = compare.eq(upper,dz)
+  absent:bool = compare.eq(depval,dz)
+  present:bool = compare.eq(selval,selbit)
+  d0:bool = bool.and(room,clean)
+  d1:bool = bool.and(absent,present)
+  good:bool = bool.and(d0,d1)
+  branch good compensate(ptr,bits,g,depbit,selbit) invalid()
+block compensate(addr:u64,bitmap:u64,gen:u64,outbit:u64,inbit:u64)
+  removed:u64 = bit.xor(bitmap,inbit)
+  swapped:u64 = bit.or(removed,outbit)
+  unit:u64 = const() {"value":1}
+  two:u64 = const() {"value":2}
+  sh:u64 = const() {"value":32}
+  aftergen:u64 = int.add.wrap(gen,unit)
+  rollbackgen:u64 = int.add.wrap(gen,two)
+  afterhigh:u64 = int.shl.checked(aftergen,sh)
+  rollbackhigh:u64 = int.shl.checked(rollbackgen,sh)
+  afterword:u64 = bit.or(afterhigh,swapped)
+  rollbackword:u64 = bit.or(rollbackhigh,bitmap)
+  seen:u64 = x86.atomic.cmpxchg64(addr,afterword,rollbackword)
+  match:bool = compare.eq(seen,afterword)
+  branch match success() stale()
+block success()
+  _ = x86.fence.mfence()
+  ok:u64 = const() {"value":0}
+  ret(ok)
+block invalid()
+  bad:u64 = const() {"value":65}
+  ret(bad)
+block stale()
+  retry:u64 = const() {"value":66}
+  ret(retry)
+end
