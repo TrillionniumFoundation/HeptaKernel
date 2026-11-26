@@ -1,0 +1,7 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0)
+fn f0(v0:u64) -> () effects(privilege,read,trap) entry(b0)
+block b0(v0:u64)
+  _ = x86.irq.restore_kernel_frame(v0)
+  trap user
+end
