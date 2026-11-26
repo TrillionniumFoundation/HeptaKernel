@@ -1,7 +1,7 @@
 name: Native independent scheduler stack
 on:
   push:
-    branches: ['automation/x86-native-stack-bounded-*']
+    branches: ['automation/x86-native-scheduler-stack-*']
   pull_request:
     paths:
       - 'src/x86_native_idle_compensation.hepta'
