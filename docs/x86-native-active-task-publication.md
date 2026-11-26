@@ -1,0 +1,7 @@
+# Conditional native active-task publication
+
+Parent #198 exact 4d06b2c90ff24b8d823c57e76e90938b67c51960, independent push/PR 24/24 and 3477 arithmetic; all inherited files and workflows remain. New native f3 validates address shape, distinct aligned owner/park/take slots outside the departing 160-byte frame, old owner 0 or 1, live BSP xAPIC and active periodic ISR. Two identity CAS operations check actual parked pointer and empty target slot. Only then does the final CAS publish old owner xor 1; stale owner, missing parked frame or busy consumed slot refuses. The independent observer reads actual owner and refuses to return a new task on any mismatch.
+
+The original active store in the positive preemption path is replaced with the HIA call. Each of four successful switches also attempts stale old owner and duplicate publication. Separate PC/Q35 missing-park, busy-target and final-CAS deletion controls check no publication; original #198 controls retained (legacy direct park/consume controls continue separately). New 30 cases planned; no PASS until exact CI.
+
+This is restricted fixed single BSP, trusted caller pointers and non-nested IRQ. Identity CAS checks are not a multiword lock-free transaction; active publication failure after completed slot handoff is fail-stop, not general recovery. No general scheduling, authority, arbitrary contexts, SIMD or Linux closure claims. Original gates, 422 obligations and production lock unchanged.
