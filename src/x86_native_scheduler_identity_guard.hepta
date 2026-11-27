@@ -1,0 +1,213 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0)
+fn f1(parent:u64,child:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(begin)
+block begin(parent:u64,child:u64)
+  present:u64 = const() {"value":3}
+  accessed:u64 = const() {"value":35}
+  want:u64 = bit.or(child,accessed)
+  alt:u64 = bit.or(child,present)
+  obs:u64 = x86.atomic.cmpxchg64(parent,want,want)
+  eqa:bool = compare.eq(obs,want)
+  eqb:bool = compare.eq(obs,alt)
+  eq:bool = bool.or(eqa,eqb)
+  branch eq yes() no()
+block yes()
+  ok:u64 = const() {"value":0}
+  ret(ok)
+block no()
+  err:u64 = const() {"value":6}
+  ret(err)
+end
+fn f2(v6_ct:u64,v6_cv:u64,v6_co:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(check)
+block check(v6_ct:u64,v6_cv:u64,v6_co:u64)
+  v6_access:u64 = const() {"value":3}
+  v6_accessed:u64 = const() {"value":35}
+  v6_dirty:u64 = const() {"value":99}
+  v6_a1:u64 = bit.or(v6_cv,v6_access)
+  v6_a2:u64 = bit.or(v6_cv,v6_accessed)
+  v6_a3:u64 = bit.or(v6_cv,v6_dirty)
+  v6_ok1:bool = compare.eq(v6_co,v6_a1)
+  v6_ok2:bool = compare.eq(v6_co,v6_a2)
+  v6_ok3:bool = compare.eq(v6_co,v6_a3)
+  v6_or1:bool = bool.or(v6_ok1,v6_ok2)
+  v6_ok:bool = bool.or(v6_or1,v6_ok3)
+  branch v6_ok update(v6_ct,v6_cv,v6_co) bad()
+block update(v7_ut:u64,v7_uv:u64,v7_uo:u64)
+  v7_shift:u64 = const() {"value":12}
+  v7_stride:u64 = const() {"value":8}
+  v7_idx:u64 = int.shr.checked(v7_uv,v7_shift)
+  v7_offset:u64 = int.mul.wrap(v7_idx,v7_stride)
+  v7_ptr:u64 = int.add.wrap(v7_ut,v7_offset)
+  v7_zero:u64 = const() {"value":0}
+  v7_observed:u64 = x86.atomic.cmpxchg64(v7_ptr,v7_uo,v7_zero)
+  v7_match:bool = compare.eq(v7_observed,v7_uo)
+  branch v7_match invalidate(v7_uv) stale()
+block invalidate(v8_iv:u64)
+  _ = x86.fence.mfence()
+  _ = x86.tlb.invlpg(v8_iv)
+  v8_success:u64 = const() {"value":0}
+  ret(v8_success)
+block stale()
+  v9_stale_code:u64 = const() {"value":9}
+  ret(v9_stale_code)
+block bad()
+  v10_bad_code:u64 = const() {"value":6}
+  ret(v10_bad_code)
+end
+fn f3(root:u64,l3:u64,l2:u64,table:u64,va:u64) -> (u64) effects() entry(start)
+block start(root:u64,l3:u64,l2:u64,table:u64,va:u64)
+  z:u64 = const() {"value":0}
+  page:u64 = const() {"value":4096}
+  mask:u64 = const() {"value":4095}
+  limit:u64 = const() {"value":2097152}
+  a0:u64 = bit.and(root,mask)
+  aligned0:bool = compare.eq(a0,z)
+  low0:bool = compare.ge(root,page)
+  high0:bool = compare.lt(root,limit)
+  range0:bool = bool.and(low0,high0)
+  valid0:bool = bool.and(aligned0,range0)
+  a1:u64 = bit.and(l3,mask)
+  aligned1:bool = compare.eq(a1,z)
+  low1:bool = compare.ge(l3,page)
+  high1:bool = compare.lt(l3,limit)
+  range1:bool = bool.and(low1,high1)
+  valid1:bool = bool.and(aligned1,range1)
+  a2:u64 = bit.and(l2,mask)
+  aligned2:bool = compare.eq(a2,z)
+  low2:bool = compare.ge(l2,page)
+  high2:bool = compare.lt(l2,limit)
+  range2:bool = bool.and(low2,high2)
+  valid2:bool = bool.and(aligned2,range2)
+  a3:u64 = bit.and(table,mask)
+  aligned3:bool = compare.eq(a3,z)
+  low3:bool = compare.ge(table,page)
+  high3:bool = compare.lt(table,limit)
+  range3:bool = bool.and(low3,high3)
+  valid3:bool = bool.and(aligned3,range3)
+  a4:u64 = bit.and(va,mask)
+  aligned4:bool = compare.eq(a4,z)
+  low4:bool = compare.ge(va,page)
+  high4:bool = compare.lt(va,limit)
+  range4:bool = bool.and(low4,high4)
+  valid4:bool = bool.and(aligned4,range4)
+  d10:bool = compare.ne(l3,root)
+  d20:bool = compare.ne(l2,root)
+  d21:bool = compare.ne(l2,l3)
+  d30:bool = compare.ne(table,root)
+  d31:bool = compare.ne(table,l3)
+  d32:bool = compare.ne(table,l2)
+  d40:bool = compare.ne(va,root)
+  d41:bool = compare.ne(va,l3)
+  d42:bool = compare.ne(va,l2)
+  d43:bool = compare.ne(va,table)
+  combine0:bool = bool.and(valid0,valid1)
+  combine1:bool = bool.and(combine0,valid2)
+  combine2:bool = bool.and(combine1,valid3)
+  combine3:bool = bool.and(combine2,valid4)
+  combine4:bool = bool.and(combine3,d10)
+  combine5:bool = bool.and(combine4,d20)
+  combine6:bool = bool.and(combine5,d21)
+  combine7:bool = bool.and(combine6,d30)
+  combine8:bool = bool.and(combine7,d31)
+  combine9:bool = bool.and(combine8,d32)
+  combine10:bool = bool.and(combine9,d40)
+  combine11:bool = bool.and(combine10,d41)
+  combine12:bool = bool.and(combine11,d42)
+  combine13:bool = bool.and(combine12,d43)
+  branch combine13 valid() bad()
+block valid()
+  ok:u64 = const() {"value":0}
+  ret(ok)
+block bad()
+  err:u64 = const() {"value":6}
+  ret(err)
+end
+fn f4(st:u64,sv:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(scan)
+block scan(st:u64,sv:u64)
+  si:u64 = const() {"value":0}
+  jump loop(st,sv,si)
+block loop(ltab:u64,lguard:u64,li:u64)
+  lmax:u64 = const() {"value":512}
+  ldone:bool = compare.eq(li,lmax)
+  branch ldone success() check(ltab,lguard,li)
+block check(ctab:u64,cguard:u64,ci:u64)
+  cpage:u64 = const() {"value":4096}
+  cphys:u64 = int.mul.wrap(ci,cpage)
+  cskip:bool = compare.eq(cphys,cguard)
+  branch cskip next(ctab,cguard,ci) verify(ctab,cguard,ci,cphys)
+block verify(vtab:u64,vguard:u64,vi:u64,vphys:u64)
+  vstride:u64 = const() {"value":8}
+  voff:u64 = int.mul.wrap(vi,vstride)
+  vptr:u64 = int.add.wrap(vtab,voff)
+  vf:u64 = const() {"value":3}
+  va:u64 = const() {"value":35}
+  vd:u64 = const() {"value":99}
+  vwant:u64 = bit.or(vphys,vf)
+  vaccess:u64 = bit.or(vphys,va)
+  vdirty:u64 = bit.or(vphys,vd)
+  vobs:u64 = x86.atomic.cmpxchg64(vptr,vwant,vwant)
+  vgood0:bool = compare.eq(vobs,vwant)
+  vgood1:bool = compare.eq(vobs,vaccess)
+  vgood2:bool = compare.eq(vobs,vdirty)
+  vor:bool = bool.or(vgood0,vgood1)
+  vgood:bool = bool.or(vor,vgood2)
+  branch vgood next(vtab,vguard,vi) bad()
+block next(ntab:u64,nguard:u64,ni:u64)
+  none:u64 = const() {"value":1}
+  nnext:u64 = int.add.wrap(ni,none)
+  jump loop(ntab,nguard,nnext)
+block success()
+  sok:u64 = const() {"value":0}
+  ret(sok)
+block bad()
+  berr:u64 = const() {"value":6}
+  ret(berr)
+end
+fn f0(root:u64,l3:u64,l2:u64,table:u64,va:u64,old:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(root:u64,l3:u64,l2:u64,table:u64,va:u64,old:u64)
+  s:u64 = call(root,l3,l2,table,va) {"function":"f3"}
+  z:u64 = const() {"value":0}
+  valid:bool = compare.eq(s,z)
+  branch valid live(root,l3,l2,table,va,old) bad()
+block live(ar:u64,al3:u64,al2:u64,at:u64,av:u64,ao:u64)
+  cr3:u64 = x86.cr3.read()
+  cr4:u64 = x86.cr4.read()
+  cr0:u64 = x86.cr0.read()
+  cm4:u64 = const() {"value":135168}
+  cm0:u64 = const() {"value":2147549184}
+  cz:u64 = const() {"value":0}
+  b4:u64 = bit.and(cr4,cm4)
+  b0:u64 = bit.and(cr0,cm0)
+  rt:bool = compare.eq(cr3,ar)
+  md:bool = compare.eq(b4,cz)
+  wp:bool = compare.eq(b0,cm0)
+  x:bool = bool.and(rt,md)
+  y:bool = bool.and(x,wp)
+  branch y walk(ar,al3,al2,at,av,ao) bad()
+block walk(wr:u64,w3:u64,w2:u64,wt:u64,wv:u64,wo:u64)
+  s3:u64 = call(wr,w3) {"function":"f1"}
+  z3:u64 = const() {"value":0}
+  good3:bool = compare.eq(s3,z3)
+  branch good3 walk2(w3,w2,wt,wv,wo) bad()
+block walk2(v3:u64,v2:u64,vt:u64,vv:u64,vo:u64)
+  s2:u64 = call(v3,v2) {"function":"f1"}
+  z2:u64 = const() {"value":0}
+  good2:bool = compare.eq(s2,z2)
+  branch good2 walk1(v2,vt,vv,vo) bad()
+block walk1(u2:u64,tt:u64,tv:u64,to:u64)
+  s1:u64 = call(u2,tt) {"function":"f1"}
+  z1:u64 = const() {"value":0}
+  good1:bool = compare.eq(s1,z1)
+  branch good1 scanlow(tt,tv,to) bad()
+block scanlow(stab:u64,sva:u64,sold:u64)
+  ss:u64 = call(stab,sva) {"function":"f4"}
+  sz:u64 = const() {"value":0}
+  sg:bool = compare.eq(ss,sz)
+  branch sg leaf(stab,sva,sold) bad()
+block leaf(lt:u64,lv:u64,lo:u64)
+  result:u64 = call(lt,lv,lo) {"function":"f2"}
+  ret(result)
+block bad()
+  fail:u64 = const() {"value":6}
+  ret(fail)
+end
