@@ -1,0 +1,980 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0)
+fn f2(slot:u64,frame:u64,lo:u64,hi:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(slot:u64,frame:u64,lo:u64,hi:u64)
+  z:u64 = const() {"value":0}
+  mask:u64 = const() {"value":7}
+  limit:u64 = const() {"value":1073741824}
+  extent:u64 = const() {"value":160}
+  pair:u64 = bit.or(slot,frame)
+  bounds:u64 = bit.or(lo,hi)
+  all:u64 = bit.or(pair,bounds)
+  alignment:u64 = bit.and(all,mask)
+  aligned:bool = compare.eq(alignment,z)
+  slotnz:bool = compare.ne(slot,z)
+  lonz:bool = compare.ne(lo,z)
+  slotlow:bool = compare.lt(slot,limit)
+  hilow:bool = compare.le(hi,limit)
+  starts:bool = compare.ge(frame,lo)
+  ends:bool = compare.le(frame,hi)
+  room:u64 = int.sub.wrap(hi,frame)
+  fits:bool = compare.ge(room,extent)
+  left:bool = compare.lt(slot,lo)
+  right:bool = compare.ge(slot,hi)
+  outside:bool = bool.or(left,right)
+  a:bool = bool.and(aligned,slotnz)
+  b:bool = bool.and(lonz,slotlow)
+  c:bool = bool.and(hilow,starts)
+  d:bool = bool.and(ends,fits)
+  e:bool = bool.and(a,b)
+  f:bool = bool.and(c,d)
+  g:bool = bool.and(e,f)
+  valid:bool = bool.and(g,outside)
+  branch valid live(slot,frame) reject()
+block live(ptr:u64,value:u64)
+  msridx:u32 = const() {"value":27}
+  actual:u64 = x86.msr.read(msridx)
+  modemask:u64 = const() {"value":18446744073709550592}
+  mode:u64 = bit.and(actual,modemask)
+  required:u64 = const() {"value":4276094976}
+  modeok:bool = compare.eq(mode,required)
+  branch modeok cpu(ptr,value) reject()
+block cpu(address:u64,selected:u64)
+  idaddr:u64 = const() {"value":4276092960}
+  rawid:u32 = x86.mmio.read32(idaddr)
+  idmask:u32 = const() {"value":4278190080}
+  id:u32 = bit.and(rawid,idmask)
+  bsp:u32 = const() {"value":0}
+  isbsp:bool = compare.eq(id,bsp)
+  branch isbsp irq(address,selected) reject()
+block irq(target:u64,chosen:u64)
+  israddr:u64 = const() {"value":4276093216}
+  isr:u32 = x86.mmio.read32(israddr)
+  bitmask:u32 = const() {"value":131072}
+  bits:u32 = bit.and(isr,bitmask)
+  active:bool = compare.eq(bits,bitmask)
+  lvtaddr:u64 = const() {"value":4276093728}
+  lvt:u32 = x86.mmio.read32(lvtaddr)
+  lvtmask:u32 = const() {"value":196863}
+  lvtbits:u32 = bit.and(lvt,lvtmask)
+  periodic:u32 = const() {"value":131153}
+  periodicok:bool = compare.eq(lvtbits,periodic)
+  admitted:bool = bool.and(active,periodicok)
+  branch admitted exchange(target,chosen) inactive()
+block exchange(dest:u64,ptrval:u64)
+  zero:u64 = const() {"value":0}
+  observed:u64 = x86.atomic.cmpxchg64(dest,zero,ptrval)
+  matched:bool = compare.eq(observed,zero)
+  branch matched ordered() stale()
+block ordered()
+  _ = x86.fence.mfence()
+  ok:u64 = const() {"value":0}
+  ret(ok)
+block stale()
+  stale_code:u64 = const() {"value":9}
+  ret(stale_code)
+block reject()
+  reject_code:u64 = const() {"value":6}
+  ret(reject_code)
+block inactive()
+  inactive_code:u64 = const() {"value":11}
+  ret(inactive_code)
+end
+fn f3(slot:u64,frame:u64,lo:u64,hi:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(slot:u64,frame:u64,lo:u64,hi:u64)
+  z:u64 = const() {"value":0}
+  mask:u64 = const() {"value":7}
+  limit:u64 = const() {"value":1073741824}
+  extent:u64 = const() {"value":160}
+  pair:u64 = bit.or(slot,frame)
+  bounds:u64 = bit.or(lo,hi)
+  all:u64 = bit.or(pair,bounds)
+  alignment:u64 = bit.and(all,mask)
+  aligned:bool = compare.eq(alignment,z)
+  slotnz:bool = compare.ne(slot,z)
+  lonz:bool = compare.ne(lo,z)
+  slotlow:bool = compare.lt(slot,limit)
+  hilow:bool = compare.le(hi,limit)
+  starts:bool = compare.ge(frame,lo)
+  ends:bool = compare.le(frame,hi)
+  room:u64 = int.sub.wrap(hi,frame)
+  fits:bool = compare.ge(room,extent)
+  left:bool = compare.lt(slot,lo)
+  right:bool = compare.ge(slot,hi)
+  outside:bool = bool.or(left,right)
+  a:bool = bool.and(aligned,slotnz)
+  b:bool = bool.and(lonz,slotlow)
+  c:bool = bool.and(hilow,starts)
+  d:bool = bool.and(ends,fits)
+  e:bool = bool.and(a,b)
+  f:bool = bool.and(c,d)
+  g:bool = bool.and(e,f)
+  valid:bool = bool.and(g,outside)
+  branch valid live(slot,frame) reject()
+block live(ptr:u64,value:u64)
+  msridx:u32 = const() {"value":27}
+  actual:u64 = x86.msr.read(msridx)
+  modemask:u64 = const() {"value":18446744073709550592}
+  mode:u64 = bit.and(actual,modemask)
+  required:u64 = const() {"value":4276094976}
+  modeok:bool = compare.eq(mode,required)
+  branch modeok cpu(ptr,value) reject()
+block cpu(address:u64,selected:u64)
+  idaddr:u64 = const() {"value":4276092960}
+  rawid:u32 = x86.mmio.read32(idaddr)
+  idmask:u32 = const() {"value":4278190080}
+  id:u32 = bit.and(rawid,idmask)
+  bsp:u32 = const() {"value":0}
+  isbsp:bool = compare.eq(id,bsp)
+  branch isbsp irq(address,selected) reject()
+block irq(target:u64,chosen:u64)
+  israddr:u64 = const() {"value":4276093216}
+  isr:u32 = x86.mmio.read32(israddr)
+  bitmask:u32 = const() {"value":131072}
+  bits:u32 = bit.and(isr,bitmask)
+  active:bool = compare.eq(bits,bitmask)
+  lvtaddr:u64 = const() {"value":4276093728}
+  lvt:u32 = x86.mmio.read32(lvtaddr)
+  lvtmask:u32 = const() {"value":196863}
+  lvtbits:u32 = bit.and(lvt,lvtmask)
+  periodic:u32 = const() {"value":131153}
+  periodicok:bool = compare.eq(lvtbits,periodic)
+  admitted:bool = bool.and(active,periodicok)
+  branch admitted exchange(target,chosen) inactive()
+block exchange(dest:u64,ptrval:u64)
+  zero:u64 = const() {"value":0}
+  observed:u64 = x86.atomic.cmpxchg64(dest,ptrval,zero)
+  matched:bool = compare.eq(observed,ptrval)
+  branch matched ordered() stale()
+block ordered()
+  _ = x86.fence.mfence()
+  ok:u64 = const() {"value":0}
+  ret(ok)
+block stale()
+  stale_code:u64 = const() {"value":9}
+  ret(stale_code)
+block reject()
+  reject_code:u64 = const() {"value":6}
+  ret(reject_code)
+block inactive()
+  inactive_code:u64 = const() {"value":11}
+  ret(inactive_code)
+end
+fn f4(srcslot:u64,srcframe:u64,srctop:u64,dstslot:u64,dstframe:u64,dsttop:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(srcslot:u64,srcframe:u64,srctop:u64,dstslot:u64,dstframe:u64,dsttop:u64)
+  zero:u64 = const() {"value":0}
+  limit:u64 = const() {"value":1073741824}
+  span:u64 = const() {"value":16376}
+  mask:u64 = const() {"value":7}
+  extent:u64 = const() {"value":160}
+  s0:bool = compare.gt(srctop,span)
+  s1:bool = compare.le(srctop,limit)
+  d0:bool = compare.gt(dsttop,span)
+  d1:bool = compare.le(dsttop,limit)
+  ss0:bool = bool.and(s0,s1)
+  dd0:bool = bool.and(d0,d1)
+  topok:bool = bool.and(ss0,dd0)
+  slo:u64 = int.sub.wrap(srctop,span)
+  dlo:u64 = int.sub.wrap(dsttop,span)
+  before:bool = compare.le(srctop,dlo)
+  after:bool = compare.le(dsttop,slo)
+  separate:bool = bool.or(before,after)
+  ssnz:bool = compare.ne(srcslot,zero)
+  dsnz:bool = compare.ne(dstslot,zero)
+  ssl:bool = compare.lt(srcslot,limit)
+  dsl:bool = compare.lt(dstslot,limit)
+  disjoint:bool = compare.ne(srcslot,dstslot)
+  pair0:u64 = bit.or(srcslot,dstslot)
+  pair1:u64 = bit.or(srcframe,dstframe)
+  pair2:u64 = bit.or(srctop,dsttop)
+  pair3:u64 = bit.or(pair0,pair1)
+  pair4:u64 = bit.or(pair3,pair2)
+  rem:u64 = bit.and(pair4,mask)
+  aligned:bool = compare.eq(rem,zero)
+  x0:bool = compare.lt(srcslot,slo)
+  x1:bool = compare.ge(srcslot,srctop)
+  x2:bool = compare.lt(srcslot,dlo)
+  x3:bool = compare.ge(srcslot,dsttop)
+  x4:bool = compare.lt(dstslot,slo)
+  x5:bool = compare.ge(dstslot,srctop)
+  x6:bool = compare.lt(dstslot,dlo)
+  x7:bool = compare.ge(dstslot,dsttop)
+  xo0:bool = bool.or(x0,x1)
+  xo1:bool = bool.or(x2,x3)
+  xo2:bool = bool.or(x4,x5)
+  xo3:bool = bool.or(x6,x7)
+  xo4:bool = bool.and(xo0,xo1)
+  xo5:bool = bool.and(xo2,xo3)
+  outs:bool = bool.and(xo4,xo5)
+  sf0:bool = compare.ge(srcframe,slo)
+  sf1:bool = compare.le(srcframe,srctop)
+  df0:bool = compare.ge(dstframe,dlo)
+  df1:bool = compare.le(dstframe,dsttop)
+  sr:u64 = int.sub.wrap(srctop,srcframe)
+  dr:u64 = int.sub.wrap(dsttop,dstframe)
+  sf2:bool = compare.ge(sr,extent)
+  df2:bool = compare.ge(dr,extent)
+  sf3:bool = bool.and(sf0,sf1)
+  df3:bool = bool.and(df0,df1)
+  sf4:bool = bool.and(sf3,sf2)
+  df4:bool = bool.and(df3,df2)
+  fit:bool = bool.and(sf4,df4)
+  n0:bool = bool.and(ssnz,dsnz)
+  n1:bool = bool.and(ssl,dsl)
+  n2:bool = bool.and(n0,n1)
+  n3:bool = bool.and(disjoint,aligned)
+  n4:bool = bool.and(n2,n3)
+  n5:bool = bool.and(topok,separate)
+  n6:bool = bool.and(outs,fit)
+  n7:bool = bool.and(n4,n5)
+  valid:bool = bool.and(n6,n7)
+  branch valid park(srcslot,srcframe,srctop,dstslot,dstframe,dsttop) reject()
+block park(ps:u64,pf:u64,pt:u64,cs:u64,cf:u64,ct:u64)
+  sz:u64 = const() {"value":16376}
+  pl:u64 = int.sub.wrap(pt,sz)
+  parked:u64 = call(ps,pf,pl,pt) {"function":"f2"}
+  pz:u64 = const() {"value":0}
+  pok:bool = compare.eq(parked,pz)
+  branch pok unpark(ps,pf,pt,cs,cf,ct) failed(parked)
+block unpark(rs:u64,rf:u64,rt:u64,us:u64,uf:u64,ut:u64)
+  width:u64 = const() {"value":16376}
+  ul:u64 = int.sub.wrap(ut,width)
+  taken:u64 = call(us,uf,ul,ut) {"function":"f3"}
+  uz:u64 = const() {"value":0}
+  uok:bool = compare.eq(taken,uz)
+  branch uok done() rollback(rs,rf,rt,taken)
+block rollback(bs:u64,bf:u64,bt:u64,cause:u64)
+  depth:u64 = const() {"value":16376}
+  bl:u64 = int.sub.wrap(bt,depth)
+  undone:u64 = call(bs,bf,bl,bt) {"function":"f3"}
+  bz:u64 = const() {"value":0}
+  bok:bool = compare.eq(undone,bz)
+  branch bok failed(cause) poisoned()
+block done()
+  good:u64 = const() {"value":0}
+  ret(good)
+block reject()
+  bad:u64 = const() {"value":6}
+  ret(bad)
+block failed(status:u64)
+  ret(status)
+block poisoned()
+  fatal:u64 = const() {"value":13}
+  ret(fatal)
+end
+fn f1(table:u64,count:u64,index:u64,frame:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(table:u64,count:u64,index:u64,frame:u64)
+  z:u64 = const() {"value":0}
+  mask:u64 = const() {"value":7}
+  maxn:u64 = const() {"value":32}
+  limit:u64 = const() {"value":1073741824}
+  flimit:u64 = const() {"value":1073741664}
+  pair:u64 = bit.or(table,frame)
+  low:u64 = bit.and(pair,mask)
+  aligned:bool = compare.eq(low,z)
+  tnz:bool = compare.ne(table,z)
+  fnz:bool = compare.ne(frame,z)
+  tl:bool = compare.lt(table,limit)
+  fl:bool = compare.le(frame,flimit)
+  nnz:bool = compare.ne(count,z)
+  nb:bool = compare.le(count,maxn)
+  ix:bool = compare.lt(index,count)
+  a:bool = bool.and(tnz,fnz)
+  b:bool = bool.and(tl,fl)
+  c:bool = bool.and(nnz,nb)
+  d:bool = bool.and(a,b)
+  e:bool = bool.and(c,ix)
+  f:bool = bool.and(d,e)
+  good:bool = bool.and(f,aligned)
+  branch good extent(table,count,index,frame) reject()
+block extent(t:u64,n:u64,i:u64,fr:u64)
+  shift:u64 = const() {"value":3}
+  bytes:u64 = int.shl.checked(n,shift)
+  endaddr:u64 = int.add.wrap(t,bytes)
+  limit2:u64 = const() {"value":1073741824}
+  full:bool = compare.le(endaddr,limit2)
+  sz:u64 = const() {"value":160}
+  fend:u64 = int.add.wrap(fr,sz)
+  before:bool = compare.le(endaddr,fr)
+  after:bool = compare.ge(t,fend)
+  disjoint:bool = bool.or(before,after)
+  valid:bool = bool.and(full,disjoint)
+  branch valid resolve(t,i,fr) reject()
+block resolve(base:u64,idx:u64,expected:u64)
+  three:u64 = const() {"value":3}
+  offset:u64 = int.shl.checked(idx,three)
+  slot:u64 = int.add.wrap(base,offset)
+  actual:u64 = x86.atomic.cmpxchg64(slot,expected,expected)
+  match:bool = compare.eq(actual,expected)
+  branch match chosen(slot) reject()
+block chosen(result:u64)
+  ret(result)
+block reject()
+  zero:u64 = const() {"value":0}
+  ret(zero)
+end
+fn f6(table:u64,topology:u64,source:u64,stop:u64,target:u64,ttop:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(table:u64,topology:u64,source:u64,stop:u64,target:u64,ttop:u64)
+  z:u64 = const() {"value":0}
+  one:u64 = const() {"value":1}
+  seven:u64 = const() {"value":7}
+  mask:u64 = const() {"value":63}
+  ids:u64 = const() {"value":31}
+  six:u64 = const() {"value":6}
+  eleven:u64 = const() {"value":11}
+  maxpack:u64 = const() {"value":65535}
+  maxn:u64 = const() {"value":32}
+  lim:u64 = const() {"value":1073741824}
+  span:u64 = const() {"value":16376}
+  n:u64 = bit.and(topology,mask)
+  depraw:u64 = int.shr.checked(topology,six)
+  dep:u64 = bit.and(depraw,ids)
+  selraw:u64 = int.shr.checked(topology,eleven)
+  sel:u64 = bit.and(selraw,ids)
+  packok:bool = compare.le(topology,maxpack)
+  nlow:bool = compare.gt(n,one)
+  nhigh:bool = compare.le(n,maxn)
+  dok:bool = compare.lt(dep,n)
+  sok:bool = compare.lt(sel,n)
+  distinct:bool = compare.ne(dep,sel)
+  tal:u64 = bit.and(table,seven)
+  align:bool = compare.eq(tal,z)
+  tnz:bool = compare.ne(table,z)
+  tbl:bool = compare.lt(table,lim)
+  sl:bool = compare.gt(stop,span)
+  sh:bool = compare.le(stop,lim)
+  tl:bool = compare.gt(ttop,span)
+  th:bool = compare.le(ttop,lim)
+  a:bool = bool.and(nlow,nhigh)
+  b:bool = bool.and(dok,sok)
+  c:bool = bool.and(packok,distinct)
+  d:bool = bool.and(align,tnz)
+  e:bool = bool.and(sl,sh)
+  f:bool = bool.and(tl,th)
+  g:bool = bool.and(a,b)
+  j:bool = bool.and(c,d)
+  k:bool = bool.and(e,f)
+  m:bool = bool.and(g,j)
+  p:bool = bool.and(k,tbl)
+  good:bool = bool.and(m,p)
+  branch good extent(table,n,dep,sel,source,stop,target,ttop) invalid()
+block extent(et:u64,en:u64,ed:u64,es:u64,ef:u64,eh:u64,eg:u64,ej:u64)
+  three:u64 = const() {"value":3}
+  width:u64 = int.shl.checked(en,three)
+  endaddr:u64 = int.add.wrap(et,width)
+  limit:u64 = const() {"value":1073741824}
+  depth:u64 = const() {"value":16376}
+  slo:u64 = int.sub.wrap(eh,depth)
+  tlo:u64 = int.sub.wrap(ej,depth)
+  full:bool = compare.le(endaddr,limit)
+  sb:bool = compare.le(endaddr,slo)
+  sa:bool = compare.ge(et,eh)
+  tb:bool = compare.le(endaddr,tlo)
+  ta:bool = compare.ge(et,ej)
+  sdis:bool = bool.or(sb,sa)
+  tdis:bool = bool.or(tb,ta)
+  sep:bool = bool.and(sdis,tdis)
+  ok:bool = bool.and(sep,full)
+  branch ok resolve(et,en,ed,es,ef,eh,eg,ej) invalid()
+block resolve(rt:u64,rn:u64,rd:u64,rs:u64,rf:u64,rh:u64,rg:u64,rj:u64)
+  slot:u64 = call(rt,rn,rs,rg) {"function":"f1"}
+  rz:u64 = const() {"value":0}
+  found:bool = compare.ne(slot,rz)
+  branch found transfer(rt,rd,slot,rf,rh,rg,rj) stale()
+block transfer(xt:u64,xd:u64,xslot:u64,xf:u64,xh:u64,xg:u64,xj:u64)
+  shift:u64 = const() {"value":3}
+  off:u64 = int.shl.checked(xd,shift)
+  srcslot:u64 = int.add.wrap(xt,off)
+  result:u64 = call(srcslot,xf,xh,xslot,xg,xj) {"function":"f4"}
+  ret(result)
+block invalid()
+  bad:u64 = const() {"value":6}
+  ret(bad)
+block stale()
+  retry:u64 = const() {"value":9}
+  ret(retry)
+end
+fn f7(owner:u64,prior:u64,table:u64,count:u64,frame:u64,selected:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(owner:u64,prior:u64,table:u64,count:u64,frame:u64,selected:u64)
+  z:u64 = const() {"value":0}
+  mask:u64 = const() {"value":7}
+  limit:u64 = const() {"value":1073741824}
+  flimit:u64 = const() {"value":1073741664}
+  maxn:u64 = const() {"value":32}
+  maxgen:u64 = const() {"value":18446744073709551584}
+  oldmask:u64 = const() {"value":31}
+  oldid:u64 = bit.and(prior,oldmask)
+  pair:u64 = bit.or(owner,table)
+  all:u64 = bit.or(pair,frame)
+  low:u64 = bit.and(all,mask)
+  aligned:bool = compare.eq(low,z)
+  a0:bool = compare.ne(owner,z)
+  a1:bool = compare.ne(table,z)
+  a2:bool = compare.ne(frame,z)
+  b0:bool = compare.lt(owner,limit)
+  b1:bool = compare.lt(table,limit)
+  b2:bool = compare.le(frame,flimit)
+  c0:bool = compare.ne(count,z)
+  c1:bool = compare.le(count,maxn)
+  c2:bool = compare.lt(oldid,count)
+  c3:bool = compare.lt(selected,count)
+  c4:bool = compare.ne(oldid,selected)
+  c5:bool = compare.lt(prior,maxgen)
+  d0:bool = bool.and(a0,a1)
+  d1:bool = bool.and(a2,b0)
+  d2:bool = bool.and(b1,b2)
+  d3:bool = bool.and(c0,c1)
+  d4:bool = bool.and(c2,c3)
+  d5:bool = bool.and(c4,c5)
+  e0:bool = bool.and(d0,d1)
+  e1:bool = bool.and(d2,d3)
+  e2:bool = bool.and(d4,d5)
+  e3:bool = bool.and(e0,e1)
+  e4:bool = bool.and(e2,aligned)
+  good:bool = bool.and(e3,e4)
+  branch good extent(owner,prior,table,count,frame,selected) reject()
+block extent(eo:u64,ep:u64,et:u64,en:u64,ef:u64,es:u64)
+  three:u64 = const() {"value":3}
+  bytes:u64 = int.shl.checked(en,three)
+  tend:u64 = int.add.wrap(et,bytes)
+  bound:u64 = const() {"value":1073741824}
+  full:bool = compare.le(tend,bound)
+  sz:u64 = const() {"value":160}
+  fend:u64 = int.add.wrap(ef,sz)
+  tblbefore:bool = compare.le(tend,ef)
+  tblafter:bool = compare.ge(et,fend)
+  tblok:bool = bool.or(tblbefore,tblafter)
+  obefore:bool = compare.lt(eo,et)
+  oafter:bool = compare.ge(eo,tend)
+  ook:bool = bool.or(obefore,oafter)
+  fbefore:bool = compare.lt(eo,ef)
+  fafter:bool = compare.ge(eo,fend)
+  fok:bool = bool.or(fbefore,fafter)
+  ex0:bool = bool.and(full,tblok)
+  ex1:bool = bool.and(ook,fok)
+  exok:bool = bool.and(ex0,ex1)
+  branch exok resolve(eo,ep,et,ef,es) reject()
+block resolve(ro:u64,rp:u64,rt:u64,rf:u64,rs:u64)
+  rshift:u64 = const() {"value":3}
+  roldmask:u64 = const() {"value":31}
+  ri:u64 = bit.and(rp,roldmask)
+  poff:u64 = int.shl.checked(ri,rshift)
+  toff:u64 = int.shl.checked(rs,rshift)
+  parked:u64 = int.add.wrap(rt,poff)
+  taken:u64 = int.add.wrap(rt,toff)
+  jump live(ro,rp,parked,rf,taken,rs)
+block live(o:u64,old:u64,p:u64,f:u64,t:u64,lnext:u64)
+  idx:u32 = const() {"value":27}
+  actual:u64 = x86.msr.read(idx)
+  modemask:u64 = const() {"value":18446744073709550592}
+  mode:u64 = bit.and(actual,modemask)
+  required:u64 = const() {"value":4276094976}
+  modeok:bool = compare.eq(mode,required)
+  branch modeok cpu(o,old,p,f,t,lnext) reject()
+block cpu(cowner:u64,cold:u64,cpark:u64,cframe:u64,ctake:u64,cnext:u64)
+  idaddr:u64 = const() {"value":4276092960}
+  rawid:u32 = x86.mmio.read32(idaddr)
+  idmask:u32 = const() {"value":4278190080}
+  apicid:u32 = bit.and(rawid,idmask)
+  bsp:u32 = const() {"value":0}
+  isbsp:bool = compare.eq(apicid,bsp)
+  branch isbsp irq(cowner,cold,cpark,cframe,ctake,cnext) reject()
+block irq(io:u64,ip:u64,ips:u64,ifr:u64,its:u64,inext:u64)
+  israddr:u64 = const() {"value":4276093216}
+  isr:u32 = x86.mmio.read32(israddr)
+  bitmask:u32 = const() {"value":131072}
+  bits:u32 = bit.and(isr,bitmask)
+  active:bool = compare.eq(bits,bitmask)
+  lvtaddr:u64 = const() {"value":4276093728}
+  lvt:u32 = x86.mmio.read32(lvtaddr)
+  lvtmask:u32 = const() {"value":196863}
+  lvbits:u32 = bit.and(lvt,lvtmask)
+  periodic:u32 = const() {"value":131153}
+  periodicok:bool = compare.eq(lvbits,periodic)
+  admitted:bool = bool.and(active,periodicok)
+  branch admitted check_park(io,ip,ips,ifr,its,inext) inactive()
+block check_park(po:u64,pp:u64,ps:u64,pf:u64,ts:u64,pnext:u64)
+  _ = x86.fence.mfence()
+  found:u64 = x86.atomic.cmpxchg64(ps,pf,pf)
+  same:bool = compare.eq(found,pf)
+  branch same check_take(po,pp,ts,pnext) stale()
+block check_take(to:u64,tp:u64,slot:u64,tnext:u64)
+  tz:u64 = const() {"value":0}
+  observed:u64 = x86.atomic.cmpxchg64(slot,tz,tz)
+  empty:bool = compare.eq(observed,tz)
+  branch empty publish(to,tp,tnext) stale()
+block publish(dest:u64,expected:u64,unext:u64)
+  current:u64 = x86.atomic.cmpxchg64(dest,expected,expected)
+  match:bool = compare.eq(current,expected)
+  branch match ordered() stale()
+block ordered()
+  _ = x86.fence.mfence()
+  ok:u64 = const() {"value":0}
+  ret(ok)
+block reject()
+  bad:u64 = const() {"value":6}
+  ret(bad)
+block inactive()
+  no_irq:u64 = const() {"value":11}
+  ret(no_irq)
+block stale()
+  refused:u64 = const() {"value":9}
+  ret(refused)
+end
+fn f8(owner:u64,tops:u64) -> (u64) effects(trap) entry(start)
+block start(owner:u64,tops:u64)
+  mask:u64 = const() {"value":4294967295}
+  shift:u64 = const() {"value":32}
+  span:u64 = const() {"value":16376}
+  lim:u64 = const() {"value":1073741824}
+  seven:u64 = const() {"value":7}
+  z:u64 = const() {"value":0}
+  a:u64 = bit.and(tops,mask)
+  b:u64 = int.shr.checked(tops,shift)
+  al:u64 = int.sub.wrap(a,span)
+  bl:u64 = int.sub.wrap(b,span)
+  a0:bool = compare.gt(a,span)
+  a1:bool = compare.le(a,lim)
+  b0:bool = compare.gt(b,span)
+  b1:bool = compare.le(b,lim)
+  a2:bool = compare.lt(owner,al)
+  a3:bool = compare.ge(owner,a)
+  b2:bool = compare.lt(owner,bl)
+  b3:bool = compare.ge(owner,b)
+  x:bool = bool.or(a2,a3)
+  y:bool = bool.or(b2,b3)
+  c:bool = bool.and(a0,a1)
+  d:bool = bool.and(b0,b1)
+  e:bool = bool.and(c,d)
+  f:bool = bool.and(x,y)
+  pair:u64 = bit.or(a,b)
+  low:u64 = bit.and(pair,seven)
+  aligned:bool = compare.eq(low,z)
+  both:bool = bool.and(e,f)
+  good:bool = bool.and(both,aligned)
+  branch good yes() no()
+block yes()
+  trueval:u64 = const() {"value":1}
+  ret(trueval)
+block no()
+  falseval:u64 = const() {"value":0}
+  ret(falseval)
+end
+fn f9(packed:u64,prior:u64,table:u64,source:u64,target:u64,tops:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(packed:u64,prior:u64,table:u64,source:u64,target:u64,tops:u64)
+  mask:u64 = const() {"value":4294967295}
+  shift:u64 = const() {"value":32}
+  maxpack:u64 = const() {"value":65535}
+  ids:u64 = const() {"value":31}
+  six:u64 = const() {"value":6}
+  own:u64 = bit.and(packed,mask)
+  topo:u64 = int.shr.checked(packed,shift)
+  depraw:u64 = int.shr.checked(topo,six)
+  dep:u64 = bit.and(depraw,ids)
+  old:u64 = bit.and(prior,ids)
+  packok:bool = compare.le(topo,maxpack)
+  bind:bool = compare.eq(dep,old)
+  stackstatus:u64 = call(own,tops) {"function":"f8"}
+  one:u64 = const() {"value":1}
+  stacks:bool = compare.eq(stackstatus,one)
+  a:bool = bool.and(packok,bind)
+  good:bool = bool.and(a,stacks)
+  branch good admit(packed,prior,table,source,target,tops) invalid()
+block admit(ap:u64,ao:u64,at:u64,af:u64,ag:u64,ah:u64)
+  amask:u64 = const() {"value":4294967295}
+  ashift:u64 = const() {"value":32}
+  nmask:u64 = const() {"value":63}
+  eleven:u64 = const() {"value":11}
+  own2:u64 = bit.and(ap,amask)
+  topology:u64 = int.shr.checked(ap,ashift)
+  count:u64 = bit.and(topology,nmask)
+  selected:u64 = int.shr.checked(topology,eleven)
+  status:u64 = call(own2,ao,at,count,af,selected) {"function":"f7"}
+  zero:u64 = const() {"value":0}
+  admitted:bool = compare.eq(status,zero)
+  branch admitted reverse(at,topology,af,ag,ah) refused(status)
+block reverse(rt:u64,rp:u64,rf:u64,rg:u64,rh:u64)
+  rmask:u64 = const() {"value":4294967295}
+  rshift:u64 = const() {"value":32}
+  rnmask:u64 = const() {"value":63}
+  rids:u64 = const() {"value":31}
+  r6:u64 = const() {"value":6}
+  r11:u64 = const() {"value":11}
+  n:u64 = bit.and(rp,rnmask)
+  depraw2:u64 = int.shr.checked(rp,r6)
+  dep2:u64 = bit.and(depraw2,rids)
+  sel2:u64 = int.shr.checked(rp,r11)
+  newdep:u64 = int.shl.checked(sel2,r6)
+  newsel:u64 = int.shl.checked(dep2,r11)
+  ids2:u64 = bit.or(newdep,newsel)
+  reversepack:u64 = bit.or(ids2,n)
+  stop:u64 = bit.and(rh,rmask)
+  ttop:u64 = int.shr.checked(rh,rshift)
+  result:u64 = call(rt,reversepack,rg,ttop,rf,stop) {"function":"f6"}
+  ret(result)
+block refused(code:u64)
+  ret(code)
+block invalid()
+  bad:u64 = const() {"value":6}
+  ret(bad)
+end
+fn f11(slot:u64,before:u64,count:u64,depart:u64,chosen:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(slot:u64,before:u64,count:u64,depart:u64,chosen:u64)
+  z:u64 = const() {"value":0}
+  seven:u64 = const() {"value":7}
+  limit:u64 = const() {"value":140737488355328}
+  maxn:u64 = const() {"value":32}
+  low:u64 = bit.and(slot,seven)
+  aligned:bool = compare.eq(low,z)
+  nonnull:bool = compare.ne(slot,z)
+  canonical:bool = compare.lt(slot,limit)
+  nonempty:bool = compare.ne(count,z)
+  bounded:bool = compare.le(count,maxn)
+  departok:bool = compare.lt(depart,count)
+  chosenok:bool = compare.lt(chosen,count)
+  distinct:bool = compare.ne(depart,chosen)
+  a:bool = bool.and(aligned,nonnull)
+  b:bool = bool.and(canonical,nonempty)
+  c:bool = bool.and(bounded,departok)
+  d:bool = bool.and(chosenok,distinct)
+  e:bool = bool.and(a,b)
+  f:bool = bool.and(c,d)
+  valid:bool = bool.and(e,f)
+  branch valid decode(slot,before,count,depart,chosen) invalid()
+block decode(ptr:u64,old:u64,n:u64,dep:u64,sel:u64)
+  mask:u64 = const() {"value":4294967295}
+  shift:u64 = const() {"value":32}
+  maxbase:u64 = const() {"value":4294967293}
+  g:u64 = int.shr.checked(old,shift)
+  bits:u64 = bit.and(old,mask)
+  upper:u64 = int.shr.checked(bits,n)
+  dz:u64 = const() {"value":0}
+  one:u64 = const() {"value":1}
+  depbit:u64 = int.shl.checked(one,dep)
+  selbit:u64 = int.shl.checked(one,sel)
+  depval:u64 = bit.and(bits,depbit)
+  selval:u64 = bit.and(bits,selbit)
+  room:bool = compare.le(g,maxbase)
+  clean:bool = compare.eq(upper,dz)
+  absent:bool = compare.eq(depval,dz)
+  present:bool = compare.eq(selval,selbit)
+  d0:bool = bool.and(room,clean)
+  d1:bool = bool.and(absent,present)
+  good:bool = bool.and(d0,d1)
+  branch good compensate(ptr,bits,g,depbit,selbit) invalid()
+block compensate(addr:u64,bitmap:u64,gen:u64,outbit:u64,inbit:u64)
+  removed:u64 = bit.xor(bitmap,inbit)
+  swapped:u64 = bit.or(removed,outbit)
+  unit:u64 = const() {"value":1}
+  two:u64 = const() {"value":2}
+  sh:u64 = const() {"value":32}
+  aftergen:u64 = int.add.wrap(gen,unit)
+  rollbackgen:u64 = int.add.wrap(gen,two)
+  afterhigh:u64 = int.shl.checked(aftergen,sh)
+  rollbackhigh:u64 = int.shl.checked(rollbackgen,sh)
+  afterword:u64 = bit.or(afterhigh,swapped)
+  rollbackword:u64 = bit.or(rollbackhigh,bitmap)
+  seen:u64 = x86.atomic.cmpxchg64(addr,afterword,rollbackword)
+  match:bool = compare.eq(seen,afterword)
+  branch match success() stale()
+block success()
+  _ = x86.fence.mfence()
+  ok:u64 = const() {"value":0}
+  ret(ok)
+block invalid()
+  bad:u64 = const() {"value":65}
+  ret(bad)
+block stale()
+  retry:u64 = const() {"value":66}
+  ret(retry)
+end
+fn f13(ready:u64,count:u64,current:u64) -> (u64) effects(trap) entry(start)
+block start(ready:u64,count:u64,current:u64)
+  zero:u64 = const() {"value":0}
+  sixtyfour:u64 = const() {"value":64}
+  nonempty:bool = compare.lt(zero,count)
+  bounded:bool = compare.le(count,sixtyfour)
+  validcursor:bool = compare.lt(current,count)
+  validcount:bool = bool.and(nonempty,bounded)
+  valid:bool = bool.and(validcount,validcursor)
+  branch valid width(ready,count,current) invalid()
+block width(wmask:u64,wn:u64,wcur:u64)
+  maxwidth:u64 = const() {"value":64}
+  fullwidth:bool = compare.eq(wn,maxwidth)
+  branch fullwidth begin(wmask,wn,wcur) checkbits(wmask,wn,wcur)
+block checkbits(bmask:u64,bn:u64,bcur:u64)
+  upper:u64 = int.shr.checked(bmask,bn)
+  bz:u64 = const() {"value":0}
+  clean:bool = compare.eq(upper,bz)
+  branch clean begin(bmask,bn,bcur) invalid()
+block begin(imask:u64,inumber:u64,icursor:u64)
+  iz:u64 = const() {"value":0}
+  anyready:bool = compare.ne(imask,iz)
+  branch anyready step(imask,inumber,icursor,inumber) idle()
+block step(smask:u64,sn:u64,sidx:u64,sleft:u64)
+  unit:u64 = const() {"value":1}
+  next:u64 = int.add.wrap(sidx,unit)
+  end:bool = compare.eq(next,sn)
+  branch end wrap(smask,sn,sleft) probe(smask,sn,next,sleft)
+block wrap(rmask:u64,rn:u64,rleft:u64)
+  first:u64 = const() {"value":0}
+  jump probe(rmask,rn,first,rleft)
+block probe(pmask:u64,pn:u64,pidx:u64,pleft:u64)
+  bitone:u64 = const() {"value":1}
+  marker:u64 = int.shl.checked(bitone,pidx)
+  active:u64 = bit.and(pmask,marker)
+  pzero:u64 = const() {"value":0}
+  hit:bool = compare.ne(active,pzero)
+  branch hit chosen(pidx) advance(pmask,pn,pidx,pleft)
+block advance(amask:u64,an:u64,aidx:u64,aleft:u64)
+  aone:u64 = const() {"value":1}
+  azero:u64 = const() {"value":0}
+  rem:u64 = int.sub.wrap(aleft,aone)
+  more:bool = compare.ne(rem,azero)
+  branch more step(amask,an,aidx,rem) idle()
+block chosen(result:u64)
+  ret(result)
+block idle()
+  idlecode:u64 = const() {"value":64}
+  ret(idlecode)
+block invalid()
+  badcode:u64 = const() {"value":65}
+  ret(badcode)
+end
+fn f12(slot:u64,before:u64,count:u64,current:u64,selected:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(slot:u64,before:u64,count:u64,current:u64,selected:u64)
+  zero:u64 = const() {"value":0}
+  one:u64 = const() {"value":1}
+  seven:u64 = const() {"value":7}
+  limit:u64 = const() {"value":140737488355328}
+  width:u64 = const() {"value":32}
+  align:u64 = bit.and(slot,seven)
+  aligned:bool = compare.eq(align,zero)
+  nonnull:bool = compare.ne(slot,zero)
+  canonical:bool = compare.lt(slot,limit)
+  nonempty:bool = compare.lt(one,count)
+  bounded:bool = compare.le(count,width)
+  cursorok:bool = compare.lt(current,count)
+  selectok:bool = compare.lt(selected,count)
+  distinct:bool = compare.ne(current,selected)
+  p:bool = bool.and(aligned,nonnull)
+  q:bool = bool.and(canonical,nonempty)
+  r:bool = bool.and(bounded,cursorok)
+  s:bool = bool.and(selectok,distinct)
+  a:bool = bool.and(p,q)
+  b:bool = bool.and(r,s)
+  valid:bool = bool.and(a,b)
+  branch valid decode(slot,before,count,current,selected) invalid()
+block decode(ptr:u64,old:u64,n:u64,cur:u64,sel:u64)
+  lowmask:u64 = const() {"value":4294967295}
+  shift:u64 = const() {"value":32}
+  maxbase:u64 = const() {"value":4294967293}
+  bits:u64 = bit.and(old,lowmask)
+  gen:u64 = int.shr.checked(old,shift)
+  room:bool = compare.le(gen,maxbase)
+  branch room check(ptr,n,cur,sel,bits,gen) invalid()
+block check(addr:u64,num:u64,cursor:u64,target:u64,mask:u64,g:u64)
+  curone:u64 = const() {"value":1}
+  marker:u64 = int.shl.checked(curone,cursor)
+  curbit:u64 = bit.and(mask,marker)
+  z:u64 = const() {"value":0}
+  absent:bool = compare.eq(curbit,z)
+  idleidx:u64 = int.sub.wrap(num,curone)
+  upper:u64 = int.shr.checked(mask,idleidx)
+  clean:bool = compare.eq(upper,z)
+  both:bool = bool.and(absent,clean)
+  branch both choose(addr,num,cursor,target,mask,g,idleidx) invalid()
+block choose(caddr:u64,cnum:u64,ccur:u64,ctarget:u64,cmask:u64,cgen:u64,cidle:u64)
+  pick:u64 = call(cmask,cnum,ccur) {"function":"f13"}
+  code:u64 = const() {"value":64}
+  empty:bool = compare.eq(pick,code)
+  branch empty enter(caddr,ccur,ctarget,cmask,cgen,cidle) claim(caddr,ctarget,cmask,cgen,pick)
+block enter(eaddr:u64,ecur:u64,etarget:u64,emask:u64,egen:u64,eidle:u64)
+  targetidle:bool = compare.eq(etarget,eidle)
+  realtask:bool = compare.ne(ecur,eidle)
+  ok:bool = bool.and(targetidle,realtask)
+  branch ok compensate(eaddr,emask,egen,emask) invalid()
+block claim(daddr:u64,dtarget:u64,dmask:u64,dgen:u64,dpick:u64)
+  matched:bool = compare.eq(dtarget,dpick)
+  branch matched remove(daddr,dmask,dgen,dpick) invalid()
+block remove(raddr:u64,rmask:u64,rgen:u64,rpick:u64)
+  unit:u64 = const() {"value":1}
+  bit:u64 = int.shl.checked(unit,rpick)
+  removed:u64 = bit.xor(rmask,bit)
+  jump compensate(raddr,rmask,rgen,removed)
+block compensate(address:u64,bitmap:u64,generation:u64,afterbits:u64)
+  onegen:u64 = const() {"value":1}
+  twogen:u64 = const() {"value":2}
+  sh:u64 = const() {"value":32}
+  aftergen:u64 = int.add.wrap(generation,onegen)
+  restoregen:u64 = int.add.wrap(generation,twogen)
+  afterhigh:u64 = int.shl.checked(aftergen,sh)
+  restorehigh:u64 = int.shl.checked(restoregen,sh)
+  afterword:u64 = bit.or(afterhigh,afterbits)
+  restored:u64 = bit.or(restorehigh,bitmap)
+  seen:u64 = x86.atomic.cmpxchg64(address,afterword,restored)
+  same:bool = compare.eq(seen,afterword)
+  branch same success() stale()
+block success()
+  _ = x86.fence.mfence()
+  result:u64 = const() {"value":0}
+  ret(result)
+block invalid()
+  bad:u64 = const() {"value":65}
+  ret(bad)
+block stale()
+  retry:u64 = const() {"value":66}
+  ret(retry)
+end
+fn f10(slot:u64,before:u64,count:u64,current:u64,selected:u64,reason:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(slot:u64,before:u64,count:u64,current:u64,selected:u64,reason:u64)
+  one:u64 = const() {"value":1}
+  max:u64 = const() {"value":32}
+  lo:bool = compare.lt(one,count)
+  hi:bool = compare.le(count,max)
+  cur:bool = compare.lt(current,count)
+  sel:bool = compare.lt(selected,count)
+  diff:bool = compare.ne(current,selected)
+  bounds:bool = bool.and(lo,hi)
+  ids:bool = bool.and(cur,sel)
+  both:bool = bool.and(bounds,ids)
+  valid:bool = bool.and(both,diff)
+  branch valid topology(slot,before,count,current,selected,reason) invalid()
+block topology(ts:u64,tw:u64,tn:u64,tc:u64,tt:u64,tr:u64)
+  tone:u64 = const() {"value":1}
+  tidle:u64 = int.sub.wrap(tn,tone)
+  idle:bool = compare.eq(tc,tidle)
+  branch idle idlemode(ts,tw,tn,tc,tt,tr) runningmode(ts,tw,tn,tc,tt,tr)
+block idlemode(is:u64,iw:u64,in:u64,ic:u64,it:u64,ir:u64)
+  two:u64 = const() {"value":2}
+  wake:bool = compare.eq(ir,two)
+  branch wake blockpath(is,iw,in,ic,it) invalid()
+block runningmode(rs:u64,rw:u64,rn:u64,rc:u64,rt:u64,rr:u64)
+  rz:u64 = const() {"value":0}
+  pre:bool = compare.eq(rr,rz)
+  branch pre preempt(rs,rw,rn,rc,rt) checkblock(rs,rw,rn,rc,rt,rr)
+block checkblock(bs:u64,bw:u64,bn:u64,bc:u64,bt:u64,br:u64)
+  bone:u64 = const() {"value":1}
+  blockok:bool = compare.eq(br,bone)
+  branch blockok blockpath(bs,bw,bn,bc,bt) invalid()
+block preempt(ps:u64,pw:u64,pn:u64,pc:u64,pt:u64)
+  pone:u64 = const() {"value":1}
+  realn:u64 = int.sub.wrap(pn,pone)
+  lowmask:u64 = const() {"value":4294967295}
+  bits:u64 = bit.and(pw,lowmask)
+  pick:u64 = call(bits,realn,pc) {"function":"f13"}
+  exact:bool = compare.eq(pick,pt)
+  inrange:bool = compare.lt(pt,realn)
+  good:bool = bool.and(exact,inrange)
+  branch good compensate(ps,pw,realn,pc,pt) invalid()
+block compensate(cs:u64,cw:u64,cn:u64,cc:u64,ct:u64)
+  cr:u64 = call(cs,cw,cn,cc,ct) {"function":"f11"}
+  ret(cr)
+block blockpath(xs:u64,xw:u64,xn:u64,xc:u64,xt:u64)
+  xr:u64 = call(xs,xw,xn,xc,xt) {"function":"f12"}
+  ret(xr)
+block invalid()
+  bad:u64 = const() {"value":65}
+  ret(bad)
+end
+fn f14(ready:u64,table:u64,owner:u64,topo:u64,tops:u64) -> (u64) effects(trap) entry(start)
+block start(ready:u64,table:u64,owner:u64,topo:u64,tops:u64)
+  zero:u64 = const() {"value":0}
+  seven:u64 = const() {"value":7}
+  maxptr:u64 = const() {"value":1073741816}
+  low:u64 = bit.and(ready,seven)
+  aligned:bool = compare.eq(low,zero)
+  nz:bool = compare.ne(ready,zero)
+  bounded:bool = compare.le(ready,maxptr)
+  distinct:bool = compare.ne(ready,owner)
+  nmask:u64 = const() {"value":63}
+  n:u64 = bit.and(topo,nmask)
+  one:u64 = const() {"value":1}
+  maxn:u64 = const() {"value":32}
+  nlo:bool = compare.gt(n,one)
+  nhi:bool = compare.le(n,maxn)
+  three:u64 = const() {"value":3}
+  size:u64 = int.shl.checked(n,three)
+  endtable:u64 = int.add.wrap(table,size)
+  left:bool = compare.lt(ready,table)
+  right:bool = compare.ge(ready,endtable)
+  outside:bool = bool.or(left,right)
+  stack:u64 = call(ready,tops) {"function":"f8"}
+  stackok:bool = compare.eq(stack,one)
+  a:bool = bool.and(aligned,nz)
+  b:bool = bool.and(bounded,distinct)
+  c:bool = bool.and(nlo,nhi)
+  e:bool = bool.and(outside,stackok)
+  ab:bool = bool.and(a,b)
+  ce:bool = bool.and(c,e)
+  good:bool = bool.and(ab,ce)
+  branch good yes() no()
+block yes()
+  ok:u64 = const() {"value":1}
+  ret(ok)
+block no()
+  bad:u64 = const() {"value":0}
+  ret(bad)
+end
+fn f0(packed:u64,prior:u64,table_ready:u64,frames:u64,tops:u64,before:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(packed:u64,prior:u64,table_ready:u64,frames:u64,tops:u64,before:u64)
+  mask:u64 = const() {"value":4294967295}
+  sh:u64 = const() {"value":32}
+  tm:u64 = const() {"value":65535}
+  rs:u64 = const() {"value":16}
+  two:u64 = const() {"value":2}
+  one:u64 = const() {"value":1}
+  hi:u64 = int.shr.checked(packed,sh)
+  topo:u64 = bit.and(hi,tm)
+  reason:u64 = int.shr.checked(hi,rs)
+  owner:u64 = bit.and(packed,mask)
+  table:u64 = bit.and(table_ready,mask)
+  ready:u64 = int.shr.checked(table_ready,sh)
+  validreason:bool = compare.le(reason,two)
+  check:u64 = call(ready,table,owner,topo,tops) {"function":"f14"}
+  noalias:bool = compare.eq(check,one)
+  good:bool = bool.and(validreason,noalias)
+  branch good reverse(packed,prior,table_ready,frames,tops,before) invalid()
+block reverse(rp:u64,ro:u64,rt:u64,rf:u64,rh:u64,rw:u64)
+  pmask:u64 = const() {"value":281474976710655}
+  mask2:u64 = const() {"value":4294967295}
+  sh2:u64 = const() {"value":32}
+  clean:u64 = bit.and(rp,pmask)
+  tab:u64 = bit.and(rt,mask2)
+  source:u64 = bit.and(rf,mask2)
+  target:u64 = int.shr.checked(rf,sh2)
+  rev:u64 = call(clean,ro,tab,source,target,rh) {"function":"f9"}
+  z:u64 = const() {"value":0}
+  success:bool = compare.eq(rev,z)
+  branch success compensate(rp,rt,rw) refused(rev)
+block compensate(cp:u64,ct:u64,cw:u64)
+  csh:u64 = const() {"value":32}
+  c16:u64 = const() {"value":16}
+  c6:u64 = const() {"value":6}
+  c11:u64 = const() {"value":11}
+  cmask:u64 = const() {"value":31}
+  cnmask:u64 = const() {"value":63}
+  upper:u64 = int.shr.checked(cp,csh)
+  reason2:u64 = int.shr.checked(upper,c16)
+  count:u64 = bit.and(upper,cnmask)
+  depraw:u64 = int.shr.checked(upper,c6)
+  dep:u64 = bit.and(depraw,cmask)
+  selraw:u64 = int.shr.checked(upper,c11)
+  sel:u64 = bit.and(selraw,cmask)
+  addr:u64 = int.shr.checked(ct,csh)
+  result:u64 = call(addr,cw,count,dep,sel,reason2) {"function":"f10"}
+  cz:u64 = const() {"value":0}
+  ok:bool = compare.eq(result,cz)
+  branch ok done() fatal()
+block done()
+  zero2:u64 = const() {"value":0}
+  ret(zero2)
+block fatal()
+  fail:u64 = const() {"value":67}
+  ret(fail)
+block refused(code:u64)
+  ret(code)
+block invalid()
+  bad:u64 = const() {"value":6}
+  ret(bad)
+end
