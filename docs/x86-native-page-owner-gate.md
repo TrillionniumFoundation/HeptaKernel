@@ -1,0 +1,13 @@
+# Native common claim/retire writer gate with bounded task-stack use
+
+Experimental fixed two-CPU HIA candidate based on #253 (3e39656389c842c7d22266c8fbe64e3dab99dce3). Full Linux acceptance remains HOLD. Existing source and workflow files are retained unchanged.
+
+The common writer gate now includes the ownership claim and retire operations, with the same generation-bound cooperative writer lease and poison admission used for transfer. The independent observer exercises actual page claim/retire in both CPU directions, refuses both operations on a poisoned gate with unchanged metadata, and observes real metadata mutation when the corresponding gate is bypassed. This is not an arbitrary allocator, proof of exclusion against arbitrary page-table writers, or general SMP authority.
+
+## Stack failure and correction
+
+The earlier unpublished candidate failed the first native PC case (A, exit 37 on the second attempt). Exact image SHA256 c875c52ddd2169571719e0c7d9fc9dc066d6d218f3d46feb5253cd4635758c29. GDB at the actual abort found CPU1 in the native path at RIP 0x10b825, RSP 0x115ca0, below its allocated stack [0x117000,0x119000) and inside the BSP stack [0x114000,0x116000). The conservative direct-call bound was 13088 bytes. The earlier #253 poison object separately has a conservative bound of 12080 bytes, not proof that its previously passing executions actually overflowed.
+
+The revised HIA separates admission, common leaf lookup, fixed low walk, upper scans, ownership operations, transfer, and final release/poison so large frames no longer remain nested. Intermediate code that passed all 76 cases still had an 8128-byte mutation bound; it was not accepted. An independent disassembly check rejects unsupported stack and call forms and enforces a 7936-byte limit for each focused object. The actual task stacks remain 8192 bytes; the observer checks 128-byte bottom canaries on both CPUs before terminal output. This is a fixed direct-call/observer bound, not a universal interrupt-stack or NMI proof.
+
+Local final PC/Q35: 76/76, all 38 objects checked. Native bound 7488 bytes, maximum 7728 bytes. The inherited #253 object is recompiled as a bound-control case. HIA SHA256 509100a14e4a2851481ae801c2377a852ee3e716260fc59337011edef0bfb0fd; object c9d85fc962edb7eae3eaf912a2a6aead5bcb5d5a6e05dc3b7602215c2128fd81; text 2ac774f8b7e3317d90605014fa6101035ef073dd6e49e4eab83ac5da4504fa7a. Existing independent #253 artifacts were checked separately; the new exact candidate must still pass both independent CI runs, all 916 expected cases and raw artifact verification. No historical failure, production lock, ABI obligation or full-acceptance gate is waived.

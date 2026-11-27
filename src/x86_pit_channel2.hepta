@@ -1,0 +1,170 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0,f1,f2,f3)
+fn f0(ticks:u16) -> (u64) effects(privilege,trap) entry(start)
+block start(ticks:u16)
+  min:u16 = const() {"value":1024}
+  max:u16 = const() {"value":60000}
+  lo:bool = compare.ge(ticks,min)
+  hi:bool = compare.le(ticks,max)
+  good:bool = bool.and(lo,hi)
+  branch good idle(ticks) bad_args()
+block idle(count:u16)
+  port:u16 = const() {"value":97}
+  live:u64 = x86.io.in8(port)
+  mask:u64 = const() {"value":3}
+  state:u64 = bit.and(live,mask)
+  zero:u64 = const() {"value":0}
+  quiet:bool = compare.eq(state,zero)
+  branch quiet load_count(count) stale()
+block load_count(n:u16)
+  ctl:u16 = const() {"value":67}
+  data:u16 = const() {"value":66}
+  mode:u8 = const() {"value":176}
+  eight:u16 = const() {"value":8}
+  upper:u16 = int.shr.checked(n,eight)
+  lb:u8 = int.cast(n) {"mode":"wrap"}
+  hb:u8 = int.cast(upper) {"mode":"wrap"}
+  _ = x86.io.out8(ctl,mode)
+  _ = x86.io.out8(data,lb)
+  _ = x86.io.out8(data,hb)
+  p:u16 = const() {"value":97}
+  now:u64 = x86.io.in8(p)
+  mask2:u64 = const() {"value":35}
+  bits:u64 = bit.and(now,mask2)
+  z:u64 = const() {"value":0}
+  valid:bool = compare.eq(bits,z)
+  branch valid read_count(n) refused_readback()
+block read_count(requested:u16)
+  control:u16 = const() {"value":67}
+  data_port:u16 = const() {"value":66}
+  latch:u8 = const() {"value":128}
+  _ = x86.io.out8(control,latch)
+  low_count:u64 = x86.io.in8(data_port)
+  high_count:u64 = x86.io.in8(data_port)
+  shift:u64 = const() {"value":8}
+  shifted:u64 = int.shl.checked(high_count,shift)
+  observed:u64 = bit.or(low_count,shifted)
+  expected:u64 = int.cast(requested) {"mode":"wrap"}
+  tolerance:u64 = const() {"value":1024}
+  minimum:u64 = int.sub.wrap(expected,tolerance)
+  lower_ok:bool = compare.ge(observed,minimum)
+  upper_ok:bool = compare.le(observed,expected)
+  latched_ok:bool = bool.and(lower_ok,upper_ok)
+  branch latched_ok done() bad_count()
+block bad_count()
+  code:u64 = const() {"value":11}
+  ret(code)
+block done()
+  ok:u64 = const() {"value":0}
+  ret(ok)
+block bad_args()
+  e:u64 = const() {"value":6}
+  ret(e)
+block stale()
+  e2:u64 = const() {"value":9}
+  ret(e2)
+block refused_readback()
+  e3:u64 = const() {"value":10}
+  ret(e3)
+end
+fn f1() -> (u64) effects(privilege,trap) entry(start)
+block start()
+  p:u16 = const() {"value":97}
+  a:u64 = x86.io.in8(p)
+  mask:u64 = const() {"value":35}
+  state:u64 = bit.and(a,mask)
+  z:u64 = const() {"value":0}
+  ready:bool = compare.eq(state,z)
+  branch ready gate(a) stale()
+block gate(saved:u64)
+  port:u16 = const() {"value":97}
+  one:u64 = const() {"value":1}
+  changed:u64 = bit.or(saved,one)
+  value:u8 = int.cast(changed) {"mode":"wrap"}
+  _ = x86.io.out8(port,value)
+  readback:u64 = x86.io.in8(port)
+  mask2:u64 = const() {"value":3}
+  state2:u64 = bit.and(readback,mask2)
+  ok:bool = compare.eq(state2,one)
+  branch ok done() bad_readback()
+block done()
+  rc:u64 = const() {"value":0}
+  ret(rc)
+block stale()
+  rc2:u64 = const() {"value":9}
+  ret(rc2)
+block bad_readback()
+  rc3:u64 = const() {"value":10}
+  ret(rc3)
+end
+fn f2(budget:u64) -> (u64) effects(privilege) entry(start)
+block start(budget:u64)
+  z:u64 = const() {"value":0}
+  limit:u64 = const() {"value":1073741824}
+  a:bool = compare.gt(budget,z)
+  b:bool = compare.le(budget,limit)
+  valid:bool = bool.and(a,b)
+  branch valid poll(budget) bad_args()
+block poll(left:u64)
+  port:u16 = const() {"value":97}
+  raw:u64 = x86.io.in8(port)
+  mask:u64 = const() {"value":3}
+  bits:u64 = bit.and(raw,mask)
+  one:u64 = const() {"value":1}
+  active:bool = compare.eq(bits,one)
+  branch active check_out(raw,left) stale()
+block check_out(sample:u64,remaining:u64)
+  m:u64 = const() {"value":32}
+  out_bit:u64 = bit.and(sample,m)
+  expired:bool = compare.eq(out_bit,m)
+  branch expired done() again(remaining)
+block again(n:u64)
+  dec:u64 = const() {"value":1}
+  next:u64 = int.sub.wrap(n,dec)
+  zero:u64 = const() {"value":0}
+  exhausted:bool = compare.eq(next,zero)
+  branch exhausted timeout() poll(next)
+block done()
+  r0:u64 = const() {"value":0}
+  ret(r0)
+block bad_args()
+  r1:u64 = const() {"value":6}
+  ret(r1)
+block stale()
+  r2:u64 = const() {"value":9}
+  ret(r2)
+block timeout()
+  r3:u64 = const() {"value":12}
+  ret(r3)
+end
+fn f3() -> (u64) effects(privilege) entry(start)
+block start()
+  p:u16 = const() {"value":97}
+  raw:u64 = x86.io.in8(p)
+  m:u64 = const() {"value":3}
+  state:u64 = bit.and(raw,m)
+  one:u64 = const() {"value":1}
+  owned:bool = compare.eq(state,one)
+  branch owned close_gate(raw) stale()
+block close_gate(prior:u64)
+  mask:u64 = const() {"value":252}
+  gated:u64 = bit.and(prior,mask)
+  value:u8 = int.cast(gated) {"mode":"wrap"}
+  port:u16 = const() {"value":97}
+  _ = x86.io.out8(port,value)
+  after:u64 = x86.io.in8(port)
+  mask2:u64 = const() {"value":3}
+  bits:u64 = bit.and(after,mask2)
+  z:u64 = const() {"value":0}
+  okay:bool = compare.eq(bits,z)
+  branch okay done() bad_readback()
+block done()
+  success:u64 = const() {"value":0}
+  ret(success)
+block stale()
+  error:u64 = const() {"value":9}
+  ret(error)
+block bad_readback()
+  error2:u64 = const() {"value":10}
+  ret(error2)
+end
