@@ -1,0 +1,7 @@
+# Experimental native HIA xAPIC one-shot timer
+
+Fixed supervisor UC xAPIC aperture and live expected IA32_APIC_BASE are admitted. The HIA arm function checks software enablement, priority, exact caller-observed LVT/divider, a stopped masked one-shot profile and no matching IRR/ISR. It stages divider (16), one-shot vector 0x51, and initial count 1048576, reading each register back before proceeding. The initial count is the architectural programmed value, not a timing calibration. Native HIA EOI is reused from the independent #178 source.
+
+The non-HIA Multiboot observer saves a stopped original timer, installs a known masked profile, executes the exact compiled HIA object, then enables interrupts and halts. The observer requires actual hardware ISR, native EOI and cleared ISR, exactly one handler and an expired current count with initial count retained. The observer independently restores the original stopped timer, APIC state and PIC masks. Refusals and all four independently located MMIO-store deletion mutants require expected staged hardware state. PC and Q35 are separate test cases; all new evidence must bind the new exact candidate.
+
+This is one isolated timer and a single exclusive owner. No periodic mode, calibrated tick rate, preemption, native interrupt entry/return or general timer resource authority is claimed. No main, production lock, full Linux gate or original syscall obligation changes.

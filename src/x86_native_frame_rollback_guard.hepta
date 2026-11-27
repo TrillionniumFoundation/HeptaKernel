@@ -1,0 +1,129 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0)
+fn f0(owner:u64,prior:u64,table:u64,count:u64,frame:u64,selected:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(owner:u64,prior:u64,table:u64,count:u64,frame:u64,selected:u64)
+  z:u64 = const() {"value":0}
+  mask:u64 = const() {"value":7}
+  limit:u64 = const() {"value":1073741824}
+  flimit:u64 = const() {"value":1073741664}
+  maxn:u64 = const() {"value":32}
+  maxgen:u64 = const() {"value":18446744073709551584}
+  oldmask:u64 = const() {"value":31}
+  oldid:u64 = bit.and(prior,oldmask)
+  pair:u64 = bit.or(owner,table)
+  all:u64 = bit.or(pair,frame)
+  low:u64 = bit.and(all,mask)
+  aligned:bool = compare.eq(low,z)
+  a0:bool = compare.ne(owner,z)
+  a1:bool = compare.ne(table,z)
+  a2:bool = compare.ne(frame,z)
+  b0:bool = compare.lt(owner,limit)
+  b1:bool = compare.lt(table,limit)
+  b2:bool = compare.le(frame,flimit)
+  c0:bool = compare.ne(count,z)
+  c1:bool = compare.le(count,maxn)
+  c2:bool = compare.lt(oldid,count)
+  c3:bool = compare.lt(selected,count)
+  c4:bool = compare.ne(oldid,selected)
+  c5:bool = compare.lt(prior,maxgen)
+  d0:bool = bool.and(a0,a1)
+  d1:bool = bool.and(a2,b0)
+  d2:bool = bool.and(b1,b2)
+  d3:bool = bool.and(c0,c1)
+  d4:bool = bool.and(c2,c3)
+  d5:bool = bool.and(c4,c5)
+  e0:bool = bool.and(d0,d1)
+  e1:bool = bool.and(d2,d3)
+  e2:bool = bool.and(d4,d5)
+  e3:bool = bool.and(e0,e1)
+  e4:bool = bool.and(e2,aligned)
+  good:bool = bool.and(e3,e4)
+  branch good extent(owner,prior,table,count,frame,selected) reject()
+block extent(eo:u64,ep:u64,et:u64,en:u64,ef:u64,es:u64)
+  three:u64 = const() {"value":3}
+  bytes:u64 = int.shl.checked(en,three)
+  tend:u64 = int.add.wrap(et,bytes)
+  bound:u64 = const() {"value":1073741824}
+  full:bool = compare.le(tend,bound)
+  sz:u64 = const() {"value":160}
+  fend:u64 = int.add.wrap(ef,sz)
+  tblbefore:bool = compare.le(tend,ef)
+  tblafter:bool = compare.ge(et,fend)
+  tblok:bool = bool.or(tblbefore,tblafter)
+  obefore:bool = compare.lt(eo,et)
+  oafter:bool = compare.ge(eo,tend)
+  ook:bool = bool.or(obefore,oafter)
+  fbefore:bool = compare.lt(eo,ef)
+  fafter:bool = compare.ge(eo,fend)
+  fok:bool = bool.or(fbefore,fafter)
+  ex0:bool = bool.and(full,tblok)
+  ex1:bool = bool.and(ook,fok)
+  exok:bool = bool.and(ex0,ex1)
+  branch exok resolve(eo,ep,et,ef,es) reject()
+block resolve(ro:u64,rp:u64,rt:u64,rf:u64,rs:u64)
+  rshift:u64 = const() {"value":3}
+  roldmask:u64 = const() {"value":31}
+  ri:u64 = bit.and(rp,roldmask)
+  poff:u64 = int.shl.checked(ri,rshift)
+  toff:u64 = int.shl.checked(rs,rshift)
+  parked:u64 = int.add.wrap(rt,poff)
+  taken:u64 = int.add.wrap(rt,toff)
+  jump live(ro,rp,parked,rf,taken,rs)
+block live(o:u64,old:u64,p:u64,f:u64,t:u64,lnext:u64)
+  idx:u32 = const() {"value":27}
+  actual:u64 = x86.msr.read(idx)
+  modemask:u64 = const() {"value":18446744073709550592}
+  mode:u64 = bit.and(actual,modemask)
+  required:u64 = const() {"value":4276094976}
+  modeok:bool = compare.eq(mode,required)
+  branch modeok cpu(o,old,p,f,t,lnext) reject()
+block cpu(cowner:u64,cold:u64,cpark:u64,cframe:u64,ctake:u64,cnext:u64)
+  idaddr:u64 = const() {"value":4276092960}
+  rawid:u32 = x86.mmio.read32(idaddr)
+  idmask:u32 = const() {"value":4278190080}
+  apicid:u32 = bit.and(rawid,idmask)
+  bsp:u32 = const() {"value":0}
+  isbsp:bool = compare.eq(apicid,bsp)
+  branch isbsp irq(cowner,cold,cpark,cframe,ctake,cnext) reject()
+block irq(io:u64,ip:u64,ips:u64,ifr:u64,its:u64,inext:u64)
+  israddr:u64 = const() {"value":4276093216}
+  isr:u32 = x86.mmio.read32(israddr)
+  bitmask:u32 = const() {"value":131072}
+  bits:u32 = bit.and(isr,bitmask)
+  active:bool = compare.eq(bits,bitmask)
+  lvtaddr:u64 = const() {"value":4276093728}
+  lvt:u32 = x86.mmio.read32(lvtaddr)
+  lvtmask:u32 = const() {"value":196863}
+  lvbits:u32 = bit.and(lvt,lvtmask)
+  periodic:u32 = const() {"value":131153}
+  periodicok:bool = compare.eq(lvbits,periodic)
+  admitted:bool = bool.and(active,periodicok)
+  branch admitted check_park(io,ip,ips,ifr,its,inext) inactive()
+block check_park(po:u64,pp:u64,ps:u64,pf:u64,ts:u64,pnext:u64)
+  _ = x86.fence.mfence()
+  found:u64 = x86.atomic.cmpxchg64(ps,pf,pf)
+  same:bool = compare.eq(found,pf)
+  branch same check_take(po,pp,ts,pnext) stale()
+block check_take(to:u64,tp:u64,slot:u64,tnext:u64)
+  tz:u64 = const() {"value":0}
+  observed:u64 = x86.atomic.cmpxchg64(slot,tz,tz)
+  empty:bool = compare.eq(observed,tz)
+  branch empty publish(to,tp,tnext) stale()
+block publish(dest:u64,expected:u64,unext:u64)
+  current:u64 = x86.atomic.cmpxchg64(dest,expected,expected)
+  match:bool = compare.eq(current,expected)
+  branch match ordered() stale()
+block ordered()
+  _ = x86.fence.mfence()
+  ok:u64 = const() {"value":0}
+  ret(ok)
+block reject()
+  bad:u64 = const() {"value":6}
+  ret(bad)
+block inactive()
+  no_irq:u64 = const() {"value":11}
+  ret(no_irq)
+block stale()
+  refused:u64 = const() {"value":9}
+  ret(refused)
+end
