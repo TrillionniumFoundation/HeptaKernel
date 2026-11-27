@@ -1,0 +1,26 @@
+# Experimental native return-frame content admission after EOI (HOLD)
+
+Exact parent: 40c4a66deb727715f15c0da7cf3ee44adfb099b0 (PR #227). The original source is unchanged except for four explicit changes to carry the checked stack top and invoke a private HIA helper after the inherited dispatch, ownership, and EOI operations have completed. The helper checks the five actual saved control words using identity/zero-expected locked CAS observations on caller-owned writable stack memory: nonzero low-half RIP, fixed CPL0 CS=0x18 and SS=0x10, flags restricted to 0xad7 with bit 1 set, and saved RSP between the frame end and the selected stack top. Its result is tested by the native export; rejection is UD2 before callback return, with no rollback after owner commit or EOI. The existing native raw IRQ entry consumes the returned pointer and executes IRETQ. This is a bounded fixed BSP experiment, not address authority, arbitrary selectors, general stack accounting, or a direct same-export terminal IRETQ.
+
+Five independent fixture faults change RIP, CS, RFLAGS, RSP or SS in the actual selected parked frame immediately before the successful dispatch call. The independent #UD handler verifies the exact instruction address, cleared timer ISR, committed owner and ready words, slot state, target progress, and the corrupted frame word. Removing the new admission predicate is a distinct compiled negative control and returns to the observer (N), which terminates without passing the bad frame to IRETQ. Normal short/long runs preserve four handoffs and one no-peer idle stay.
+
+## Preserved development failures and concrete stack-overflow diagnosis
+
+R1: the original bypass mutation created an unreachable block and native compilation rejected it (exit 2). R2: the corrected mutant compiled, but the extra wrapper caused the new positive PC case to fail A/37 after 180 inherited PASS records. The exact failed guest image SHA256 is e66ffefb4b69b2f89230c1310a3e2f1a9f4974af7bf5bdce2fdca475aa6fbbad. A same-image QEMU interrupt trace located #UD at 0x12d9c6. A GDB hardware watchpoint independently observed the parked task0 CS word at 0x13a070 change from 24 to 0 during task1 dispatch. The original frame was intact when task1 first entered. The actual writer was the generated spill at 0x11c5f7 (`mov %rax,-0x2d0(%rbp)`), with RBP=0x13a340 and RSP=0x139c80, below task1's lower stack boundary 0x13a098. The adjacent saved RSP was overwritten with 0xfee00020. The watchpoint proved a real cross-stack spill, not a guessed timing issue or an oracle failure.
+
+The repair is architectural: no outer wrapper remains live while dispatch nests. The check is called only after the existing composition has unwound, using the existing bounded stack, without enlarging the test stacks or weakening the observer. R3 compiled but its helper placement made the old export-minus-two instruction-location assertion fail before hardware scenarios; R4 places the helper before the export and preserves that precise UD2 oracle. The original rejected sources, test scripts, QEMU trace, GDB records and reports remain on the isolated desktop. This repairs the observed composition-specific overflow, but does not establish a general native call-stack bound or resolve historical A/37 failures.
+
+Diagnostic artifact SHA256:
+- rejected-r2.hepta: 5263cab8ba77fff102c5b5f33e079900b697d0beb35fecf5f3ab6c41a4af270c
+- trace-frame-content-r2.log: 896880ebf596db9d91521115c32ac2f2c03049800e2d5cd2573f37f9c06bcc8c
+- trace-r2-gdb.txt: e3012cbf010f057de61a6b62a799afde388ec0b76b8adc68528ccea65543a48e
+- trace-r2-watch.txt: ba85c4afb349e80af4cfd65151ea7011e312d66bdd7f5258e55644f48f83ccda
+
+## Remaining stack-accounting obligation
+
+A separate disassembly-based diagnostic enumerated fixed frame prologues and direct rel32 calls, checked that every direct call target resolves to a discovered prologue, and rejected additional stack-adjusting instructions inside those functions. A longest path over the static call graph (including return address and saved RBP per function, without path-feasibility filtering or caller/IRQ stack cost) is 16,784 bytes for the exact parent, 18,608 bytes for the failed R2 wrapper, and 16,880 bytes for R4. This conservative graph bound exceeds the 16,376-byte task-stack extent even after the concrete R2 spill is repaired. It is not an observed worst-case depth and must not be interpreted as a proof that the fixed stack is safe. A separate bounded scheduler/IRQ stack with resource ownership, admission and independent stack guards, or a proven smaller path-sensitive bound, is a P0 open requirement. The original 17 HOLD gates, 422 syscall obligations, production locks, original 3s/5s/60s budgets, all historical failures, full architecture/ABI/driver obligations and general SMP remain unchanged.
+
+Desktop qualification: 196/196 PASS, including all 180 inherited case records and inherited object records exactly identical, and 16 new cases. All eight inherited host oracles and two empty-PATH compilations retained. Native hashes:
+- source_sha256: 3b8190e40322c72e00e8baf6c867e32c4201550a117a99a7d716ef883743b334
+- object_sha256: 3b4bfd9e8b0c63c7efd1130bb9c47cca7551107cc1dcc4327a326c6cfd0d5a2d
+- text_sha256: 7afd9b7d3da0207c1bbca3e2175c17232cc9eed338c9f2d9673f152121bc6b8f

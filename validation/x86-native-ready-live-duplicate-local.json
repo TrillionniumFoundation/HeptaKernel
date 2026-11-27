@@ -1,0 +1,39 @@
+{
+  "parent": "d0f28931d79d27d5830e90737cf517a59e4a6178",
+  "original_counterexample": {
+    "live": 1,
+    "expected": 0,
+    "count": 32,
+    "task": 0,
+    "desired": 0,
+    "actual_return": 7,
+    "required_return": 9,
+    "live_after": 1
+  },
+  "original_worker_stderr": "Traceback (most recent call last):\n  File \"/tmp/hk-ready-live-duplicate-20261125-t19/tests/test_x86_native_versioned_ready_state.py\", line 181, in <module>\n    worker(Path(sys.argv[2]))\n  File \"/tmp/hk-ready-live-duplicate-20261125-t19/tests/test_x86_native_versioned_ready_state.py\", line 55, in worker\n    check(1,0,32,0,0)\n  File \"/tmp/hk-ready-live-duplicate-20261125-t19/tests/test_x86_native_versioned_ready_state.py\", line 45, in check\n    assert (native(addr, old, n, task, desired), storage[1]) == (rc, value), (live,old,n,task,desired,rc,value,storage[1])\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: (1, 0, 32, 0, 0, 9, 1, 1)\n",
+  "local_report": {
+    "compiler_sha256": "970a16f48687678c0df1b307a987ef9651d81481c70563af1cf4c92c536a70f4",
+    "compiler_source_sha256": "42f8cccca8b084f42b40a30c3db19df1ffca069295d04666c5290f752e4a9715",
+    "source_sha256": "e6ac03a8ac79740500ab950e6875e07fa3a5aa6f80e32216de226c9ac7561fe2",
+    "object_sha256": "fc4377904d2fc5bb33e5a49033c01336c10555932b6939c2b3930cde216a5487",
+    "execution": {
+      "sequential_calls": 23704,
+      "contended_one_winner_calls": 256,
+      "concurrent_toggle_calls": 4019,
+      "successful_concurrent_toggles": 4000,
+      "status": "PASS"
+    },
+    "negative_controls": {
+      "no-generation-advance": "DETECTED",
+      "no-clear": "DETECTED",
+      "ignore-stale": "DETECTED",
+      "ignore-stale-duplicate": "DETECTED"
+    },
+    "packed_generation_bits": 32,
+    "packed_ready_bits": 32,
+    "live_duplicate_validation": true,
+    "live_irq_dispatch_proved": false,
+    "resource_authority_proved": false,
+    "full_linux_acceptance": "HOLD"
+  }
+}
