@@ -1,7 +1,7 @@
 name: x86 native page poison
 on:
   push:
-    branches: ['automation/x86-native-page-meta-tlb-*']
+    branches: ['automation/x86-native-page-poison-*']
   pull_request:
     paths:
       - 'src/x86_native_idle_compensation.hepta'
