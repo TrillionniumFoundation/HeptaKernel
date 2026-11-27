@@ -149,13 +149,13 @@ on:
       - 'tests/fixtures/x86_native_page_owner.S'
       - 'tests/test_x86_native_page_owner.py'
       - '.github/workflows/x86-native-page-owner.yml'
-  workflow_dispatch:
-permissions:
-  contents: read
       - 'src/x86_native_page_cohort.hepta'
       - 'tests/fixtures/x86_native_page_cohort.S'
       - 'tests/test_x86_native_page_cohort.py'
       - '.github/workflows/x86-native-page-cohort.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   native-scheduler-guard:
     runs-on: ubuntu-24.04
