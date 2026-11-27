@@ -1,0 +1,55 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0)
+fn f0(ready:u64,count:u64,current:u64) -> (u64) effects(trap) entry(start)
+block start(ready:u64,count:u64,current:u64)
+  zero:u64 = const() {"value":0}
+  sixtyfour:u64 = const() {"value":64}
+  nonempty:bool = compare.lt(zero,count)
+  bounded:bool = compare.le(count,sixtyfour)
+  validcursor:bool = compare.lt(current,count)
+  validcount:bool = bool.and(nonempty,bounded)
+  valid:bool = bool.and(validcount,validcursor)
+  branch valid width(ready,count,current) invalid()
+block width(wmask:u64,wn:u64,wcur:u64)
+  maxwidth:u64 = const() {"value":64}
+  fullwidth:bool = compare.eq(wn,maxwidth)
+  branch fullwidth begin(wmask,wn,wcur) checkbits(wmask,wn,wcur)
+block checkbits(bmask:u64,bn:u64,bcur:u64)
+  upper:u64 = int.shr.checked(bmask,bn)
+  bz:u64 = const() {"value":0}
+  clean:bool = compare.eq(upper,bz)
+  branch clean begin(bmask,bn,bcur) invalid()
+block begin(imask:u64,inumber:u64,icursor:u64)
+  iz:u64 = const() {"value":0}
+  anyready:bool = compare.ne(imask,iz)
+  branch anyready step(imask,inumber,icursor,inumber) idle()
+block step(smask:u64,sn:u64,sidx:u64,sleft:u64)
+  unit:u64 = const() {"value":1}
+  next:u64 = int.add.wrap(sidx,unit)
+  end:bool = compare.eq(next,sn)
+  branch end wrap(smask,sn,sleft) probe(smask,sn,next,sleft)
+block wrap(rmask:u64,rn:u64,rleft:u64)
+  first:u64 = const() {"value":0}
+  jump probe(rmask,rn,first,rleft)
+block probe(pmask:u64,pn:u64,pidx:u64,pleft:u64)
+  bitone:u64 = const() {"value":1}
+  marker:u64 = int.shl.checked(bitone,pidx)
+  active:u64 = bit.and(pmask,marker)
+  pzero:u64 = const() {"value":0}
+  hit:bool = compare.ne(active,pzero)
+  branch hit chosen(pidx) advance(pmask,pn,pidx,pleft)
+block advance(amask:u64,an:u64,aidx:u64,aleft:u64)
+  aone:u64 = const() {"value":1}
+  azero:u64 = const() {"value":0}
+  rem:u64 = int.sub.wrap(aleft,aone)
+  more:bool = compare.ne(rem,azero)
+  branch more step(amask,an,aidx,rem) idle()
+block chosen(result:u64)
+  ret(result)
+block idle()
+  idlecode:u64 = const() {"value":64}
+  ret(idlecode)
+block invalid()
+  badcode:u64 = const() {"value":65}
+  ret(badcode)
+end

@@ -1,0 +1,21 @@
+{
+  "compiler_sha256": "970a16f48687678c0df1b307a987ef9651d81481c70563af1cf4c92c536a70f4",
+  "compiler_source_sha256": "42f8cccca8b084f42b40a30c3db19df1ffca069295d04666c5290f752e4a9715",
+  "source_sha256": "aa249de5505e6220faf58b2311a1d7d7ebae36cb1ef0274a5274532f8ab9f794",
+  "object_sha256": "676137ce95cfa6d8ad6190a3f0e7a7dfc78ea83a722f2cd862a101fab1fab44d",
+  "execution": {
+    "sequential_calls": 45258,
+    "concurrent_unique_claims": 1024,
+    "drain_rounds": 32,
+    "status": "PASS"
+  },
+  "negative_controls": {
+    "no-clear": "DETECTED",
+    "no-generation-advance": "DETECTED",
+    "ignore-stale-claim": "DETECTED",
+    "ignore-stale-idle": "DETECTED"
+  },
+  "live_irq_dispatch_proved": false,
+  "resource_authority_proved": false,
+  "full_linux_acceptance": "HOLD"
+}
