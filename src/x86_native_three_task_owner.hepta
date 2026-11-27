@@ -1,0 +1,124 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0)
+fn f0(owner:u64,prior:u64,park:u64,frame:u64,take:u64,selected:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(owner:u64,prior:u64,park:u64,frame:u64,take:u64,selected:u64)
+  z:u64 = const() {"value":0}
+  maxgen:u64 = const() {"value":18446744073709551612}
+  mask:u64 = const() {"value":7}
+  limit:u64 = const() {"value":1073741824}
+  frame_limit:u64 = const() {"value":1073741664}
+  size:u64 = const() {"value":160}
+  op:u64 = bit.or(owner,park)
+  tf:u64 = bit.or(take,frame)
+  all:u64 = bit.or(op,tf)
+  lowbits:u64 = bit.and(all,mask)
+  aligned:bool = compare.eq(lowbits,z)
+  a0:bool = compare.ne(owner,z)
+  a1:bool = compare.ne(park,z)
+  a2:bool = compare.ne(take,z)
+  a3:bool = compare.ne(frame,z)
+  b0:bool = compare.lt(owner,limit)
+  b1:bool = compare.lt(park,limit)
+  b2:bool = compare.lt(take,limit)
+  b3:bool = compare.le(frame,frame_limit)
+  c0:bool = compare.ne(owner,park)
+  c1:bool = compare.ne(owner,take)
+  c2:bool = compare.ne(park,take)
+  valid_old:bool = compare.lt(prior,maxgen)
+  frame_end:u64 = int.add.wrap(frame,size)
+  d0:bool = compare.lt(owner,frame)
+  d1:bool = compare.ge(owner,frame_end)
+  d2:bool = compare.lt(park,frame)
+  d3:bool = compare.ge(park,frame_end)
+  d4:bool = compare.lt(take,frame)
+  d5:bool = compare.ge(take,frame_end)
+  outside0:bool = bool.or(d0,d1)
+  outside1:bool = bool.or(d2,d3)
+  outside2:bool = bool.or(d4,d5)
+  outside3:bool = bool.and(outside0,outside1)
+  outside:bool = bool.and(outside3,outside2)
+  e0:bool = bool.and(a0,a1)
+  e1:bool = bool.and(a2,a3)
+  e2:bool = bool.and(b0,b1)
+  e3:bool = bool.and(b2,b3)
+  e4:bool = bool.and(c0,c1)
+  e5:bool = bool.and(c2,valid_old)
+  e6:bool = bool.and(e0,e1)
+  e7:bool = bool.and(e2,e3)
+  e8:bool = bool.and(e4,e5)
+  e9:bool = bool.and(e6,e7)
+  e10:bool = bool.and(e8,outside)
+  e11:bool = bool.and(e9,e10)
+  ownmask:u64 = const() {"value":3}
+  oldid:u64 = bit.and(prior,ownmask)
+  oldidok:bool = compare.lt(oldid,ownmask)
+  newidok:bool = compare.lt(selected,ownmask)
+  differs:bool = compare.ne(oldid,selected)
+  ids0:bool = bool.and(oldidok,newidok)
+  ids1:bool = bool.and(ids0,differs)
+  shapeok:bool = bool.and(aligned,e11)
+  valid:bool = bool.and(shapeok,ids1)
+  branch valid live(owner,prior,park,frame,take,selected) reject()
+block live(o:u64,old:u64,p:u64,f:u64,t:u64,lnext:u64)
+  idx:u32 = const() {"value":27}
+  actual:u64 = x86.msr.read(idx)
+  modemask:u64 = const() {"value":18446744073709550592}
+  mode:u64 = bit.and(actual,modemask)
+  required:u64 = const() {"value":4276094976}
+  modeok:bool = compare.eq(mode,required)
+  branch modeok cpu(o,old,p,f,t,lnext) reject()
+block cpu(cowner:u64,cold:u64,cpark:u64,cframe:u64,ctake:u64,cnext:u64)
+  idaddr:u64 = const() {"value":4276092960}
+  rawid:u32 = x86.mmio.read32(idaddr)
+  idmask:u32 = const() {"value":4278190080}
+  apicid:u32 = bit.and(rawid,idmask)
+  bsp:u32 = const() {"value":0}
+  isbsp:bool = compare.eq(apicid,bsp)
+  branch isbsp irq(cowner,cold,cpark,cframe,ctake,cnext) reject()
+block irq(io:u64,ip:u64,ips:u64,ifr:u64,its:u64,inext:u64)
+  israddr:u64 = const() {"value":4276093216}
+  isr:u32 = x86.mmio.read32(israddr)
+  bitmask:u32 = const() {"value":131072}
+  bits:u32 = bit.and(isr,bitmask)
+  active:bool = compare.eq(bits,bitmask)
+  lvtaddr:u64 = const() {"value":4276093728}
+  lvt:u32 = x86.mmio.read32(lvtaddr)
+  lvtmask:u32 = const() {"value":196863}
+  lvbits:u32 = bit.and(lvt,lvtmask)
+  periodic:u32 = const() {"value":131153}
+  periodicok:bool = compare.eq(lvbits,periodic)
+  admitted:bool = bool.and(active,periodicok)
+  branch admitted check_park(io,ip,ips,ifr,its,inext) inactive()
+block check_park(po:u64,pp:u64,ps:u64,pf:u64,ts:u64,pnext:u64)
+  _ = x86.fence.mfence()
+  found:u64 = x86.atomic.cmpxchg64(ps,pf,pf)
+  same:bool = compare.eq(found,pf)
+  branch same check_take(po,pp,ts,pnext) stale()
+block check_take(to:u64,tp:u64,slot:u64,tnext:u64)
+  tz:u64 = const() {"value":0}
+  observed:u64 = x86.atomic.cmpxchg64(slot,tz,tz)
+  empty:bool = compare.eq(observed,tz)
+  branch empty publish(to,tp,tnext) stale()
+block publish(dest:u64,expected:u64,unext:u64)
+  step:u64 = const() {"value":4}
+  highmask:u64 = const() {"value":18446744073709551612}
+  high:u64 = bit.and(expected,highmask)
+  newgen:u64 = int.add.wrap(high,step)
+  next:u64 = bit.or(newgen,unext)
+  current:u64 = x86.atomic.cmpxchg64(dest,expected,next)
+  match:bool = compare.eq(current,expected)
+  branch match ordered() stale()
+block ordered()
+  _ = x86.fence.mfence()
+  ok:u64 = const() {"value":0}
+  ret(ok)
+block reject()
+  bad:u64 = const() {"value":6}
+  ret(bad)
+block inactive()
+  no_irq:u64 = const() {"value":11}
+  ret(no_irq)
+block stale()
+  refused:u64 = const() {"value":9}
+  ret(refused)
+end
