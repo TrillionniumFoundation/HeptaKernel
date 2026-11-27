@@ -1,0 +1,154 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f1)
+fn f0(base:u64,extent:u64,count:u64,callback:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(base:u64,extent:u64,count:u64,callback:u64)
+  z:u64 = const() {"value":0}
+  page:u64 = const() {"value":4096}
+  mask:u64 = const() {"value":4095}
+  limit:u64 = const() {"value":1073741824}
+  max:u64 = const() {"value":32}
+  align:u64 = bit.and(base,mask)
+  a:bool = compare.eq(align,z)
+  b:bool = compare.ge(base,page)
+  c:bool = compare.le(extent,limit)
+  d:bool = compare.lt(base,extent)
+  e:bool = compare.ne(count,z)
+  f:bool = compare.le(count,max)
+  g:bool = compare.ne(callback,z)
+  h:bool = compare.lt(callback,limit)
+  ab:bool = bool.and(a,b)
+  cd:bool = bool.and(c,d)
+  ef:bool = bool.and(e,f)
+  gh:bool = bool.and(g,h)
+  abcd:bool = bool.and(ab,cd)
+  efgh:bool = bool.and(ef,gh)
+  valid:bool = bool.and(abcd,efgh)
+  branch valid layout(base,extent,count,callback) bad()
+block layout(lb:u64,le:u64,ln:u64,lc:u64)
+  stride:u64 = const() {"value":20480}
+  metadata:u64 = const() {"value":4096}
+  payload:u64 = int.mul.wrap(ln,stride)
+  size:u64 = int.add.wrap(payload,metadata)
+  finish:u64 = int.add.wrap(lb,size)
+  exact:bool = compare.eq(finish,le)
+  cbefore:bool = compare.lt(lc,lb)
+  cafter:bool = compare.ge(lc,le)
+  disjoint:bool = bool.or(cbefore,cafter)
+  layoutok:bool = bool.and(exact,disjoint)
+  branch layoutok mode(lb,ln,lc) bad()
+block mode(mb:u64,mn:u64,mc:u64)
+  msr:u32 = const() {"value":27}
+  apic:u64 = x86.msr.read(msr)
+  modemask:u64 = const() {"value":18446744073709550592}
+  filtered:u64 = bit.and(apic,modemask)
+  expectedmode:u64 = const() {"value":4276094976}
+  modeok:bool = compare.eq(filtered,expectedmode)
+  branch modeok readid(mb,mn,mc) bad()
+block readid(ib:u64,in:u64,ic:u64)
+  idaddr:u64 = const() {"value":4276092960}
+  raw:u32 = x86.mmio.read32(idaddr)
+  idmask:u32 = const() {"value":4278190080}
+  actual:u32 = bit.and(raw,idmask)
+  first:u32 = const() {"value":0}
+  firstindex:u64 = const() {"value":0}
+  jump search(ib,in,ic,actual,first,firstindex)
+block search(sb:u64,sn:u64,sc:u64,sa:u32,sr:u32,si:u64)
+  inside:bool = compare.lt(si,sn)
+  branch inside match(sb,sn,sc,sa,sr,si) bad()
+block match(tb:u64,tn:u64,tc:u64,ta:u32,tr:u32,ti:u64)
+  same:bool = compare.eq(ta,tr)
+  branch same address(tb,tc,ti) next(tb,tn,tc,ta,tr,ti)
+block next(nb:u64,nn:u64,nc:u64,na:u32,nr:u32,ni:u64)
+  incr:u32 = const() {"value":16777216}
+  unit:u64 = const() {"value":1}
+  nextid:u32 = int.add.wrap(nr,incr)
+  nextindex:u64 = int.add.wrap(ni,unit)
+  jump search(nb,nn,nc,na,nextid,nextindex)
+block address(db:u64,dc:u64,di:u64)
+  dstride:u64 = const() {"value":32}
+  sstride:u64 = const() {"value":20480}
+  twopages:u64 = const() {"value":8192}
+  stacksize:u64 = const() {"value":16384}
+  doff:u64 = int.mul.wrap(di,dstride)
+  soff:u64 = int.mul.wrap(di,sstride)
+  desc:u64 = int.add.wrap(db,doff)
+  lowbase:u64 = int.add.wrap(db,twopages)
+  low:u64 = int.add.wrap(lowbase,soff)
+  top:u64 = int.add.wrap(low,stacksize)
+  gsidx:u32 = const() {"value":3221225729}
+  gs:u64 = x86.msr.read(gsidx)
+  correct:bool = compare.eq(gs,desc)
+  branch correct checkcb(desc,dc,low,top) bad()
+block checkcb(cdptr:u64,cc:u64,cl:u64,ct:u64)
+  gotcb:u64 = x86.atomic.cmpxchg64(cdptr,cc,cc)
+  cbok:bool = compare.eq(gotcb,cc)
+  branch cbok checklow(cdptr,cl,ct) bad()
+block checklow(ld:u64,ll:u64,lt:u64)
+  eight:u64 = const() {"value":8}
+  lptr:u64 = int.add.wrap(ld,eight)
+  gotlow:u64 = x86.atomic.cmpxchg64(lptr,ll,ll)
+  lowok:bool = compare.eq(gotlow,ll)
+  branch lowok checktop(ld,lt) bad()
+block checktop(td:u64,tt:u64)
+  sixteen:u64 = const() {"value":16}
+  tptr:u64 = int.add.wrap(td,sixteen)
+  gottop:u64 = x86.atomic.cmpxchg64(tptr,tt,tt)
+  topok:bool = compare.eq(gottop,tt)
+  branch topok success(td) bad()
+block success(result:u64)
+  ret(result)
+block bad()
+  fail:u64 = const() {"value":0}
+  ret(fail)
+end
+fn f1(frame:u64,base:u64,extent:u64,count:u64,callback:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(frame:u64,base:u64,extent:u64,count:u64,callback:u64)
+  desc:u64 = call(base,extent,count,callback) {"function":"f0"}
+  zero:u64 = const() {"value":0}
+  valid:bool = compare.ne(desc,zero)
+  branch valid lease(desc,frame) bad()
+block lease(ld:u64,lf:u64)
+  off:u64 = const() {"value":24}
+  one:u64 = const() {"value":1}
+  slot:u64 = int.add.wrap(ld,off)
+  observed:u64 = x86.atomic.cmpxchg64(slot,one,one)
+  held:bool = compare.eq(observed,one)
+  branch held epoch(ld,lf) bad()
+block epoch(ed:u64,ef:u64)
+  offe:u64 = const() {"value":1024}
+  eptr:u64 = int.add.wrap(ed,offe)
+  ez:u64 = const() {"value":0}
+  terminal:u64 = const() {"value":18446744073709551615}
+  current:u64 = x86.atomic.cmpxchg64(eptr,ez,ez)
+  bounded:bool = compare.lt(current,terminal)
+  branch bounded isr(eptr,current,ef) bad()
+block isr(ip:u64,ig:u64,ifr:u64)
+  ia:u64 = const() {"value":4276093216}
+  bit:u32 = const() {"value":131072}
+  v:u32 = x86.mmio.read32(ia)
+  masked:u32 = bit.and(v,bit)
+  active:bool = compare.eq(masked,bit)
+  branch active eoi(ip,ig,ifr) bad()
+block eoi(pp:u64,pg:u64,pf:u64)
+  ea:u64 = const() {"value":4276093104}
+  z32:u32 = const() {"value":0}
+  _ = x86.mmio.write32(ea,z32)
+  _ = x86.fence.mfence()
+  readaddr:u64 = const() {"value":4276093216}
+  readbit:u32 = const() {"value":131072}
+  rv:u32 = x86.mmio.read32(readaddr)
+  rmasked:u32 = bit.and(rv,readbit)
+  clear:bool = compare.eq(rmasked,z32)
+  branch clear publish(pp,pg,pf) bad()
+block publish(qp:u64,qg:u64,qf:u64)
+  unit:u64 = const() {"value":1}
+  next:u64 = int.add.wrap(qg,unit)
+  old:u64 = x86.atomic.cmpxchg64(qp,qg,next)
+  same:bool = compare.eq(old,qg)
+  branch same success(qf) bad()
+block success(result:u64)
+  ret(result)
+block bad()
+  fail:u64 = const() {"value":0}
+  ret(fail)
+end
