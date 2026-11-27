@@ -1,0 +1,158 @@
+name: Native scheduler sibling huge-page alias admission and guard fault
+on:
+  push:
+    branches: ['automation/x86-native-scheduler-huge-guard-*']
+  pull_request:
+    paths:
+      - 'src/x86_native_idle_compensation.hepta'
+      - 'src/x86_native_idle_select.hepta'
+      - 'src/x86_native_running_block.hepta'
+      - 'src/x86_native_frame_rollback_guard.hepta'
+      - 'src/x86_native_ready_compensation.hepta'
+      - 'src/x86_native_bounded_owner.hepta'
+      - 'src/x86_native_bounded_slot_dispatch.hepta'
+      - 'src/x86_native_three_task_owner.hepta'
+      - 'src/x86_native_ready_exchange.hepta'
+      - 'src/x86_native_versioned_ready_state.hepta'
+      - 'src/x86_native_owner_dispatch.hepta'
+      - 'src/x86_native_irq_entry.hepta'
+      - 'src/x86_native_kernel_frame.hepta'
+      - 'src/x86_two_task_preemption.hepta'
+      - 'tests/fixtures/x86_native_idle_exit_rollback.S'
+      - 'tests/fixtures/x86_native_idle_rollback.S'
+      - 'tests/fixtures/x86_native_idle_stay.S'
+      - 'tests/fixtures/x86_native_idle_select.S'
+      - 'tests/fixtures/x86_native_running_block.S'
+      - 'tests/fixtures/x86_apic_one_shot_timer.ld'
+      - 'tests/test_x86_native_idle_exit_rollback.py'
+      - 'tests/test_x86_native_idle_rollback.py'
+      - 'tests/test_x86_native_idle_stay.py'
+      - 'tests/test_x86_native_idle_select.py'
+      - 'src/x86_native_dispatch_policy.hepta'
+      - 'tests/fixtures/x86_native_policy_running.S'
+      - 'tests/fixtures/x86_native_policy_idle.S'
+      - 'tests/test_x86_native_dispatch_policy.py'
+      - '.github/workflows/x86-native-dispatch-policy.yml'
+      - 'src/x86_native_reserved_policy.hepta'
+      - 'tests/fixtures/x86_native_reserved_policy.S'
+      - 'tests/test_x86_native_reserved_policy.py'
+      - '.github/workflows/x86-native-reserved-policy.yml'
+      - 'src/x86_native_reserved_compensation.hepta'
+      - 'tests/fixtures/x86_native_reserved_compensation.S'
+      - 'tests/test_x86_native_reserved_compensation.py'
+      - '.github/workflows/x86-native-reserved-compensation.yml'
+      - 'src/x86_native_bounded_frame_compose.hepta'
+      - 'tests/fixtures/x86_native_bounded_frame_compose.S'
+      - 'tests/test_x86_native_bounded_frame_compose.py'
+      - '.github/workflows/x86-native-bounded-frame-compose.yml'
+      - 'src/x86_native_guarded_reverse.hepta'
+      - 'tests/fixtures/x86_native_guarded_reverse.S'
+      - 'tests/test_x86_native_guarded_reverse.py'
+      - '.github/workflows/x86-native-guarded-reverse.yml'
+      - 'src/x86_native_rollback_compose.hepta'
+      - 'tests/fixtures/x86_native_rollback_compose.S'
+      - 'tests/test_x86_native_rollback_compose.py'
+      - '.github/workflows/x86-native-rollback-compose.yml'
+      - 'src/x86_native_forward_compose.hepta'
+      - 'tests/fixtures/x86_native_forward_compose.S'
+      - 'tests/test_x86_native_forward_compose.py'
+      - '.github/workflows/x86-native-forward-compose.yml'
+      - 'src/x86_native_dispatch_compose.hepta'
+      - 'tests/fixtures/x86_native_dispatch_compose.S'
+      - 'tests/test_x86_native_dispatch_compose.py'
+      - '.github/workflows/x86-native-dispatch-compose.yml'
+      - 'src/x86_native_terminal_dispatch.hepta'
+      - 'tests/fixtures/x86_native_terminal_dispatch.S'
+      - 'tests/test_x86_native_terminal_dispatch.py'
+      - '.github/workflows/x86-native-terminal-dispatch.yml'
+      - 'src/x86_native_dispatch_failstop.hepta'
+      - 'tests/fixtures/x86_native_dispatch_failstop.S'
+      - 'tests/test_x86_native_dispatch_failstop.py'
+      - '.github/workflows/x86-native-dispatch-failstop.yml'
+      - 'src/x86_native_restore_select.hepta'
+      - 'tests/fixtures/x86_native_restore_select.S'
+      - 'tests/test_x86_native_restore_select.py'
+      - '.github/workflows/x86-native-restore-select.yml'
+      - 'src/x86_native_frame_content.hepta'
+      - 'tests/fixtures/x86_native_frame_content.S'
+      - 'tests/test_x86_native_frame_content.py'
+      - '.github/workflows/x86-native-frame-content.yml'
+      - 'src/x86_native_stack_bounded_dispatch.hepta'
+      - 'tests/fixtures/x86_native_stack_bounded_dispatch.S'
+      - 'tests/test_x86_native_stack_bounded_dispatch.py'
+      - '.github/workflows/x86-native-stack-bounded.yml'
+      - 'src/x86_native_scheduler_stack_entry.hepta'
+      - 'tests/fixtures/x86_native_scheduler_stack.S'
+      - 'tests/test_x86_native_scheduler_stack.py'
+      - '.github/workflows/x86-native-scheduler-stack.yml'
+      - 'src/x86_native_scheduler_guard.hepta'
+      - 'tests/fixtures/x86_native_guarded_scheduler_stack.S'
+      - 'tests/test_x86_native_scheduler_guard.py'
+      - '.github/workflows/x86-native-scheduler-guard.yml'
+      - 'src/x86_native_scheduler_identity_guard.hepta'
+      - 'tests/fixtures/x86_native_scheduler_identity_guard.S'
+      - 'tests/test_x86_native_scheduler_identity_guard.py'
+      - '.github/workflows/x86-native-scheduler-identity-guard.yml'
+      - 'src/x86_native_scheduler_huge_guard.hepta'
+      - 'tests/fixtures/x86_native_scheduler_huge_guard.S'
+      - 'tests/test_x86_native_scheduler_huge_guard.py'
+      - '.github/workflows/x86-native-scheduler-huge-guard.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-scheduler-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: 25c165ba7c80e3e1124acd4efb083c637fbb275a
+          persist-credentials: false
+          path: .upstream/hepta-experimental
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: dc4ce25ada3327658bc415b636f0be7a371d71f9
+          persist-credentials: false
+          path: .upstream/hepta-stack
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: sudo apt-get update && sudo apt-get install -y binutils gcc qemu-system-x86
+      - name: Rebuild exact original and new native compilers
+        run: |
+          test "$(git -C .upstream/hepta-experimental rev-parse HEAD)" = 25c165ba7c80e3e1124acd4efb083c637fbb275a
+          test "$(git -C .upstream/hepta-stack rev-parse HEAD)" = dc4ce25ada3327658bc415b636f0be7a371d71f9
+          python -B .upstream/hepta-experimental/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/kernel-experimental"
+          python -B .upstream/hepta-stack/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/stack-compiler"
+      - name: Preserve all original 196 native frame cases
+        run: python -B tests/test_x86_native_frame_content.py --compiler-dir "$RUNNER_TEMP/kernel-experimental" --output "$RUNNER_TEMP/idle-rollback"
+      - name: Preserve all 26 stack-bounded cases
+        run: LC_ALL=C python -B tests/test_x86_native_stack_bounded_dispatch.py --compiler-dir "$RUNNER_TEMP/kernel-experimental" --parent-output "$RUNNER_TEMP/idle-rollback" --output "$RUNNER_TEMP/stack-bounded"
+      - name: Native separate scheduler stack, lease and terminal restore
+        run: LC_ALL=C python -B tests/test_x86_native_scheduler_stack.py --compiler-dir "$RUNNER_TEMP/stack-compiler" --parent-output "$RUNNER_TEMP/idle-rollback" --bounded-output "$RUNNER_TEMP/stack-bounded" --output "$RUNNER_TEMP/scheduler-stack"
+      - name: Native guard page, live walk and actual stack write fault
+        run: LC_ALL=C python -B tests/test_x86_native_scheduler_guard.py --compiler-dir "$RUNNER_TEMP/stack-compiler" --parent-output "$RUNNER_TEMP/idle-rollback" --bounded-output "$RUNNER_TEMP/stack-bounded" --scheduler-output "$RUNNER_TEMP/scheduler-stack" --output "$RUNNER_TEMP/scheduler-guard"
+      - name: Native low-leaf alias admission and actual stack write fault
+        run: LC_ALL=C python -B tests/test_x86_native_scheduler_identity_guard.py --compiler-dir "$RUNNER_TEMP/stack-compiler" --parent-output "$RUNNER_TEMP/idle-rollback" --bounded-output "$RUNNER_TEMP/stack-bounded" --scheduler-output "$RUNNER_TEMP/scheduler-stack" --output "$RUNNER_TEMP/identity-guard"
+      - name: Native sibling huge-page alias admission and actual stack write fault
+        run: LC_ALL=C python -B tests/test_x86_native_scheduler_huge_guard.py --compiler-dir "$RUNNER_TEMP/stack-compiler" --parent-output "$RUNNER_TEMP/idle-rollback" --bounded-output "$RUNNER_TEMP/stack-bounded" --scheduler-output "$RUNNER_TEMP/scheduler-stack" --output "$RUNNER_TEMP/huge-guard"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: huge-guard-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/kernel-experimental/report.json
+            ${{ runner.temp }}/stack-compiler/report.json
+            ${{ runner.temp }}/idle-rollback/
+            ${{ runner.temp }}/stack-bounded/
+            ${{ runner.temp }}/scheduler-stack/
+            ${{ runner.temp }}/scheduler-guard/
+            ${{ runner.temp }}/identity-guard/
+            ${{ runner.temp }}/huge-guard/
+          retention-days: 7
