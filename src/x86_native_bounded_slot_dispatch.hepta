@@ -1,0 +1,53 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0)
+fn f0(table:u64,count:u64,index:u64,frame:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(table:u64,count:u64,index:u64,frame:u64)
+  z:u64 = const() {"value":0}
+  mask:u64 = const() {"value":7}
+  maxn:u64 = const() {"value":32}
+  limit:u64 = const() {"value":1073741824}
+  flimit:u64 = const() {"value":1073741664}
+  pair:u64 = bit.or(table,frame)
+  low:u64 = bit.and(pair,mask)
+  aligned:bool = compare.eq(low,z)
+  tnz:bool = compare.ne(table,z)
+  fnz:bool = compare.ne(frame,z)
+  tl:bool = compare.lt(table,limit)
+  fl:bool = compare.le(frame,flimit)
+  nnz:bool = compare.ne(count,z)
+  nb:bool = compare.le(count,maxn)
+  ix:bool = compare.lt(index,count)
+  a:bool = bool.and(tnz,fnz)
+  b:bool = bool.and(tl,fl)
+  c:bool = bool.and(nnz,nb)
+  d:bool = bool.and(a,b)
+  e:bool = bool.and(c,ix)
+  f:bool = bool.and(d,e)
+  good:bool = bool.and(f,aligned)
+  branch good extent(table,count,index,frame) reject()
+block extent(t:u64,n:u64,i:u64,fr:u64)
+  shift:u64 = const() {"value":3}
+  bytes:u64 = int.shl.checked(n,shift)
+  endaddr:u64 = int.add.wrap(t,bytes)
+  limit2:u64 = const() {"value":1073741824}
+  full:bool = compare.le(endaddr,limit2)
+  sz:u64 = const() {"value":160}
+  fend:u64 = int.add.wrap(fr,sz)
+  before:bool = compare.le(endaddr,fr)
+  after:bool = compare.ge(t,fend)
+  disjoint:bool = bool.or(before,after)
+  valid:bool = bool.and(full,disjoint)
+  branch valid resolve(t,i,fr) reject()
+block resolve(base:u64,idx:u64,expected:u64)
+  three:u64 = const() {"value":3}
+  offset:u64 = int.shl.checked(idx,three)
+  slot:u64 = int.add.wrap(base,offset)
+  actual:u64 = x86.atomic.cmpxchg64(slot,expected,expected)
+  match:bool = compare.eq(actual,expected)
+  branch match chosen(slot) reject()
+block chosen(result:u64)
+  ret(result)
+block reject()
+  zero:u64 = const() {"value":0}
+  ret(zero)
+end

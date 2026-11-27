@@ -1,0 +1,109 @@
+hia-asm.v1 hepta.hia.program.kernel-tlb.v1 selfhost_elf
+exports(f0)
+fn f0(page:u64,generation:u64,operation:u64) -> (u64) effects(privilege,atomic,read,write,trap) entry(start)
+block start(page:u64,generation:u64,operation:u64)
+  zero:u64 = const() {"value":0}
+  one:u64 = const() {"value":1}
+  mask:u64 = const() {"value":4095}
+  maxgen:u64 = const() {"value":18014398509481983}
+  bits:u64 = bit.and(page,mask)
+  aligned:bool = compare.eq(bits,zero)
+  genlo:bool = compare.ne(generation,zero)
+  genhi:bool = compare.le(generation,maxgen)
+  opok:bool = compare.le(operation,one)
+  ga:bool = bool.and(genlo,genhi)
+  ao:bool = bool.and(aligned,opok)
+  good:bool = bool.and(ga,ao)
+  branch good cpu_mode(page,generation,operation) bad()
+block cpu_mode(mp:u64,mg:u64,mo:u64)
+  apic_msr:u32 = const() {"value":27}
+  apic:u64 = x86.msr.read(apic_msr)
+  modemask:u64 = const() {"value":18446744073709550592}
+  filtered:u64 = bit.and(apic,modemask)
+  expectedmode:u64 = const() {"value":4276094976}
+  modeok:bool = compare.eq(filtered,expectedmode)
+  branch modeok readid(mp,mg,mo) bad()
+block readid(ip:u64,ig:u64,io:u64)
+  idaddr:u64 = const() {"value":4276092960}
+  raw:u32 = x86.mmio.read32(idaddr)
+  idmask:u32 = const() {"value":4278190080}
+  actual:u32 = bit.and(raw,idmask)
+  id0:u32 = const() {"value":0}
+  id1:u32 = const() {"value":16777216}
+  first:bool = compare.eq(actual,id0)
+  second:bool = compare.eq(actual,id1)
+  branch first bsp(ip,ig,io) other(ip,ig,io,second)
+block bsp(bp:u64,bg:u64,bo:u64)
+  own0:u64 = const() {"value":1}
+  delta0:u64 = const() {"value":0}
+  jump root(bp,bg,bo,own0,delta0)
+block other(op:u64,og:u64,oo:u64,isap:bool)
+  branch isap ap(op,og,oo) bad()
+block ap(apg:u64,agg:u64,aop:u64)
+  own1:u64 = const() {"value":2}
+  delta1:u64 = const() {"value":32}
+  jump root(apg,agg,aop,own1,delta1)
+block root(rp:u64,rg:u64,ro:u64,rown:u64,rd:u64)
+  fsidx:u32 = const() {"value":3221225728}
+  fs:u64 = x86.msr.read(fsidx)
+  z:u64 = const() {"value":0}
+  psize:u64 = const() {"value":4096}
+  pmask:u64 = const() {"value":4095}
+  maxroot:u64 = const() {"value":1789952}
+  align:u64 = bit.and(fs,pmask)
+  al:bool = compare.eq(align,z)
+  rlo:bool = compare.ge(fs,psize)
+  rhi:bool = compare.le(fs,maxroot)
+  lr:bool = bool.and(rlo,rhi)
+  rootok:bool = bool.and(al,lr)
+  branch rootok binding(rp,rg,ro,rown,rd,fs) bad()
+block binding(xp:u64,xg:u64,xo:u64,xown:u64,xd:u64,xf:u64)
+  gsidx:u32 = const() {"value":3221225729}
+  gs:u64 = x86.msr.read(gsidx)
+  wantgs:u64 = int.add.wrap(xf,xd)
+  bound:bool = compare.eq(gs,wantgs)
+  branch bound pool(xp,xg,xo,xown,xf) bad()
+block pool(pp:u64,pg:u64,po:u64,pown:u64,pf:u64)
+  slabsize:u64 = const() {"value":45056}
+  poolsize:u64 = const() {"value":262144}
+  base:u64 = int.add.wrap(pf,slabsize)
+  end:u64 = int.add.wrap(base,poolsize)
+  inlo:bool = compare.ge(pp,base)
+  inhi:bool = compare.lt(pp,end)
+  inside:bool = bool.and(inlo,inhi)
+  branch inside slot(pp,pg,po,pown,pf,base) bad()
+block slot(sp:u64,sg:u64,so:u64,sown:u64,sf:u64,sbase:u64)
+  page_shift:u64 = const() {"value":12}
+  stride:u64 = const() {"value":8}
+  ledger_offset:u64 = const() {"value":3584}
+  diff:u64 = int.sub.wrap(sp,sbase)
+  index:u64 = int.shr.checked(diff,page_shift)
+  delta:u64 = int.mul.wrap(index,stride)
+  ledger:u64 = int.add.wrap(sf,ledger_offset)
+  ptr:u64 = int.add.wrap(ledger,delta)
+  scale:u64 = const() {"value":1024}
+  freeword:u64 = int.mul.wrap(sg,scale)
+  owned:u64 = bit.or(freeword,sown)
+  claimop:u64 = const() {"value":0}
+  isclaim:bool = compare.eq(so,claimop)
+  branch isclaim claim(ptr,freeword,owned) retire(ptr,owned)
+block claim(cp:u64,cf:u64,co:u64)
+  seen:u64 = x86.atomic.cmpxchg64(cp,cf,co)
+  won:bool = compare.eq(seen,cf)
+  branch won success() stale()
+block retire(tp:u64,to:u64)
+  retired_bit:u64 = const() {"value":512}
+  retired:u64 = bit.or(to,retired_bit)
+  old:u64 = x86.atomic.cmpxchg64(tp,to,retired)
+  ok:bool = compare.eq(old,to)
+  branch ok success() stale()
+block success()
+  okcode:u64 = const() {"value":0}
+  ret(okcode)
+block stale()
+  stalecode:u64 = const() {"value":9}
+  ret(stalecode)
+block bad()
+  fail:u64 = const() {"value":6}
+  ret(fail)
+end
