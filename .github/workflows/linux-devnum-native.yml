@@ -1,0 +1,74 @@
+name: Scoped native HIA Linux device numbers
+
+on:
+  pull_request:
+    paths:
+      - 'src/linux_devnum.hepta'
+      - 'tests/test_linux_devnum.py'
+      - '.github/workflows/linux-devnum-native.yml'
+  push:
+    branches: [main, 'automation/dot-linux-devnum-*']
+    paths:
+      - 'src/linux_devnum.hepta'
+      - 'tests/test_linux_devnum.py'
+      - '.github/workflows/linux-devnum-native.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-devnum:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Check out locked HIA source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: f33d8da316de8fdf27b504371f1a5310997ff548
+          path: .toolchain/hepta
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            hepta
+            tools
+            examples/hia_bootstrap
+            docs
+      - name: Check out pinned Linux oracle headers
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: gregkh/linux
+          ref: 7595a62d45ee1a2297eafa5f2ef5d0a45142d84d
+          path: .upstream/linux
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /include/linux/kdev_t.h
+            /include/uapi/linux/kdev_t.h
+      - name: Rebuild compiler, verify HIA, and run exact Linux comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C .upstream/linux rev-parse HEAD)" = 7595a62d45ee1a2297eafa5f2ef5d0a45142d84d
+          python3 -I -S -B tools/bootstrap_hia.py --root .toolchain/hepta --output .toolchain/compiler
+          PYTHONPATH=.toolchain/hepta python3 -B - <<'PY'
+          from pathlib import Path
+          from hepta.hia_agent_assembly import assemble_program
+          assemble_program(Path("src/linux_devnum.hepta").read_bytes())
+          PY
+          mkdir -p build
+          python3 -I -B tests/test_linux_devnum.py --compiler .toolchain/compiler/native-compiler \
+            --linux-root .upstream/linux --report build/linux-devnum-native.json
+      - name: Retain exact candidate evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-devnum-native-${{ github.sha }}
+          path: build/linux-devnum-native.json
+          if-no-files-found: error
+          retention-days: 14

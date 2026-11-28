@@ -1,0 +1,27 @@
+{
+  "schema": "heptakernel.linux-devnum-native.v1",
+  "scope": "native x86-64 modern and legacy device-number conversion leaf",
+  "status": "PASS",
+  "full_linux_acceptance": "HOLD",
+  "compiler_sha256": "87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54",
+  "linux_commit": "7595a62d45ee1a2297eafa5f2ef5d0a45142d84d",
+  "linux_header_git_blobs": {
+    "include/linux/kdev_t.h": "4856706fbfeb4537a67e40cb54887584045a474f",
+    "include/uapi/linux/kdev_t.h": "e1990f2e97772a8bb798ac9b9a9d2fd3e8790e88"
+  },
+  "source_sha256": "a4956dfd1da3049ded320dfa0e7eb86888ee7ee87cfaad50045d4c40c333966e",
+  "object_sha256": "e22b2790528dafa00ba3ee4a136dccaa0b924cce1988de30ad64789eaef9c185",
+  "text_sha256": "300b7beb593e5b27fc3be9268e5eb7ece657079b29d8cdfe7a226c2bab9bcaa7",
+  "mutant_text_sha256": "0b4dd204348d38762040ab190d177b32443325d15bfc16514c6ad0d9f3c6e69c",
+  "calls_by_op_0_1_2_3_and_unknown": [
+    40212,
+    40212,
+    85644,
+    85644,
+    12
+  ],
+  "differential_calls": 251724,
+  "legacy_packed_values_exhaustively_tested": 65536,
+  "modern_samples_per_roundtrip_direction": 20104,
+  "native_negative_control_detected": true
+}
