@@ -1,0 +1,81 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+exports(linux_devnum)
+fn linux_devnum(op:u64,value:u64) -> (u64) effects(trap) entry(start)
+block start(op:u64,value:u64)
+  u32_max:u64 = const() {"value":4294967295}
+  fits:bool = compare.le(value,u32_max)
+  branch fits select_new_encode(op,value) refused()
+block select_new_encode(op0:u64,value0:u64)
+  zero:u64 = const() {"value":0}
+  is_new_encode:bool = compare.eq(op0,zero)
+  branch is_new_encode new_encode(value0) select_new_decode(op0,value0)
+block select_new_decode(op1:u64,value1:u64)
+  one:u64 = const() {"value":1}
+  is_new_decode:bool = compare.eq(op1,one)
+  branch is_new_decode new_decode(value1) select_old_encode(op1,value1)
+block select_old_encode(op2:u64,value2:u64)
+  two:u64 = const() {"value":2}
+  is_old_encode:bool = compare.eq(op2,two)
+  branch is_old_encode old_check(value2) select_old_decode(op2,value2)
+block select_old_decode(op3:u64,value3:u64)
+  three:u64 = const() {"value":3}
+  is_old_decode:bool = compare.eq(op3,three)
+  branch is_old_decode old_decode_check(value3) refused()
+block new_encode(raw0:u64)
+  byte0:u64 = const() {"value":255}
+  major0:u64 = const() {"value":4293918720}
+  high_minor0:u64 = const() {"value":1048320}
+  shift0:u64 = const() {"value":12}
+  low0:u64 = bit.and(raw0,byte0)
+  major_bits0:u64 = bit.and(raw0,major0)
+  mid0:u64 = int.shr.checked(major_bits0,shift0)
+  minor_bits0:u64 = bit.and(raw0,high_minor0)
+  high0:u64 = int.shl.checked(minor_bits0,shift0)
+  pair0:u64 = bit.or(low0,mid0)
+  packed0:u64 = bit.or(pair0,high0)
+  ret(packed0)
+block new_decode(raw1:u64)
+  byte1:u64 = const() {"value":255}
+  major1:u64 = const() {"value":1048320}
+  high_minor1:u64 = const() {"value":4293918720}
+  shift1:u64 = const() {"value":12}
+  low1:u64 = bit.and(raw1,byte1)
+  major_bits1:u64 = bit.and(raw1,major1)
+  high1:u64 = int.shl.checked(major_bits1,shift1)
+  minor_bits1:u64 = bit.and(raw1,high_minor1)
+  mid1:u64 = int.shr.checked(minor_bits1,shift1)
+  pair1:u64 = bit.or(low1,mid1)
+  packed1:u64 = bit.or(pair1,high1)
+  ret(packed1)
+block old_check(raw2:u64)
+  invalid:u64 = const() {"value":4027580160}
+  masked:u64 = bit.and(raw2,invalid)
+  nothing:u64 = const() {"value":0}
+  old_fits:bool = compare.eq(masked,nothing)
+  branch old_fits old_encode(raw2) refused()
+block old_encode(raw3:u64)
+  byte2:u64 = const() {"value":255}
+  major2:u64 = const() {"value":267386880}
+  shift2:u64 = const() {"value":12}
+  low2:u64 = bit.and(raw3,byte2)
+  major_bits2:u64 = bit.and(raw3,major2)
+  high2:u64 = int.shr.checked(major_bits2,shift2)
+  packed2:u64 = bit.or(low2,high2)
+  ret(packed2)
+block old_decode_check(raw4:u64)
+  u16_max:u64 = const() {"value":65535}
+  narrow:bool = compare.le(raw4,u16_max)
+  branch narrow old_decode(raw4) refused()
+block old_decode(raw5:u64)
+  byte3:u64 = const() {"value":255}
+  major3:u64 = const() {"value":65280}
+  shift3:u64 = const() {"value":12}
+  low3:u64 = bit.and(raw5,byte3)
+  major_bits3:u64 = bit.and(raw5,major3)
+  high3:u64 = int.shl.checked(major_bits3,shift3)
+  packed3:u64 = bit.or(low3,high3)
+  ret(packed3)
+block refused()
+  error:u64 = const() {"value":18446744073709551615}
+  ret(error)
+end
