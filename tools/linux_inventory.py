@@ -36,7 +36,9 @@ DEVICE_TABLE = re.compile(
 
 def git(repo: Path, *arguments: str) -> bytes:
     return subprocess.run(
-        ["git", "-C", str(repo), *arguments], check=True,
+        # A source receipt names the original object, not the Git history
+        # view selected by this machine's local replacement refs.
+        ["git", "--no-replace-objects", "-C", str(repo), *arguments], check=True,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     ).stdout
 
@@ -156,7 +158,7 @@ def enumerate_device_table_mentions(
     A match in a comment or inactive conditional is deliberately retained.
     """
     command = [
-        "git", "-C", str(repo), "grep", "--no-color", "-n", "-z",
+        "git", "--no-replace-objects", "-C", str(repo), "grep", "--no-color", "-n", "-z",
         "-I", "-E", r"MODULE_DEVICE_TABLE[[:space:]]*\(",
         commit, "--", "*.c", "*.h", "*.rs",
     ]
@@ -225,7 +227,7 @@ def enumerate_device_table_invocations(
     than inferred from a different line or silently omitted.
     """
     command = [
-        "git", "-C", str(repo), "grep", "--no-color", "-l", "-z",
+        "git", "--no-replace-objects", "-C", str(repo), "grep", "--no-color", "-l", "-z",
         "-I", "-F", "MODULE_DEVICE_TABLE", commit,
         "--", "*.c", "*.h", "*.rs",
     ]
