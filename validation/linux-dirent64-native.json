@@ -1,0 +1,23 @@
+{
+  "actual_host_kernel_records": 7,
+  "compiler_sha256": "87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54",
+  "full_linux_acceptance": "HOLD",
+  "linux_commit": "7595a62d45ee1a2297eafa5f2ef5d0a45142d84d",
+  "linux_git_blobs": {
+    "fs/readdir.c": "f2288841337ad10eea121f64db86109aff1ca104",
+    "include/linux/dirent.h": "99002220cd452646b924f76f3c37909d804a67d4",
+    "include/linux/fs_dirent.h": "92f75c5bac19022d2e28335d7722955764895ff3",
+    "include/uapi/linux/limits.h": "6bcbe306876196e53064dcd2f4099696208a1a48"
+  },
+  "object_sha256": "dfd815d2ec870071d6376480628345d0f0915f6f7f2f9da92ef33c0d34724307",
+  "outcomes": {
+    "-22": 4225,
+    "-5": 209,
+    "success": 8386
+  },
+  "pinned_oracle_calls": 12820,
+  "scope": "single native directory record, not a syscall",
+  "source_sha256": "2495bb6b5f495bc04c41a4795b87e963655f9f2be9dec733aa79c01499f9ef5f",
+  "status": "PASS",
+  "text_sha256": "62db85ac900c6d16de3294ae1e6b7f783f0c664f3d8a067fb379dc390d46bc25"
+}

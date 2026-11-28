@@ -1,0 +1,129 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn linux_dirent64(req:readbuf,out:mutbuf,unused:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(req:readbuf,out:mutbuf,unused:mutbuf)
+  reqn:usize = buffer.len(req)
+  min:usize = const() {"value":25}
+  max:usize = const() {"value":4119}
+  ge:bool = compare.ge(reqn,min)
+  le:bool = compare.le(reqn,max)
+  len_ok:bool = bool.and(ge,le)
+  branch len_ok validate(req,out,reqn) bad_name()
+block bad_name()
+  io:u32 = const() {"value":4294967291}
+  ret(io)
+block invalid()
+  einval:u32 = const() {"value":4294967274}
+  ret(einval)
+block validate(v_req:readbuf,v_out:mutbuf,v_end:usize)
+  flags_pos:usize = const() {"value":16}
+  flags:u64 = call(v_req,flags_pos) {"function":"read_u64"}
+  flags_max:u64 = const() {"value":4294967295}
+  fits:bool = compare.le(flags,flags_max)
+  name_pos:usize = const() {"value":24}
+  branch fits scan(v_req,v_out,v_end,name_pos,flags) invalid()
+block scan(s_req:readbuf,s_out:mutbuf,s_end:usize,s_i:usize,s_flags:u64)
+  more:bool = compare.lt(s_i,s_end)
+  branch more check_byte(s_req,s_out,s_end,s_i,s_flags) capacity(s_req,s_out,s_end,s_flags)
+block check_byte(c_req:readbuf,c_out:mutbuf,c_end:usize,c_i:usize,c_flags:u64)
+  slash:u8 = const() {"value":47}
+  ch:u8 = buffer.load(c_req,c_i)
+  forbidden:bool = compare.eq(ch,slash)
+  one:usize = const() {"value":1}
+  next:usize = int.add.wrap(c_i,one)
+  branch forbidden bad_name() scan(c_req,c_out,c_end,next,c_flags)
+block capacity(a_req:readbuf,a_out:mutbuf,a_end:usize,a_flags:u64)
+  three:usize = const() {"value":3}
+  seven:usize = const() {"value":7}
+  high:usize = bit.not(seven)
+  unmasked:usize = int.add.wrap(a_end,three)
+  reclen:usize = bit.and(unmasked,high)
+  outn:usize = buffer.len(a_out)
+  enough:bool = compare.ge(outn,reclen)
+  branch enough header(a_req,a_out,a_end,a_flags,reclen) invalid()
+block header(h_req:readbuf,h_out:mutbuf,h_end:usize,h_flags:u64,h_reclen:usize)
+  zero:usize = const() {"value":0}
+  eight:usize = const() {"value":8}
+  sixteen:usize = const() {"value":16}
+  seventeen:usize = const() {"value":17}
+  eighteen:usize = const() {"value":18}
+  nineteen:usize = const() {"value":19}
+  twentyfour:usize = const() {"value":24}
+  dtype_mask:u64 = const() {"value":15}
+  dtype_bits:u64 = bit.and(h_flags,dtype_mask)
+  dtype:u8 = int.cast(dtype_bits) {"mode":"wrap"}
+  inode:u64 = call(h_req,zero) {"function":"read_u64"}
+  off:u64 = call(h_req,eight) {"function":"read_u64"}
+  written_ino:u32 = call(h_out,zero,inode) {"function":"write_u64"}
+  written_off:u32 = call(h_out,eight,off) {"function":"write_u64"}
+  rwide:u64 = int.cast(h_reclen) {"mode":"wrap"}
+  low:u8 = int.cast(rwide) {"mode":"wrap"}
+  shift:u64 = const() {"value":8}
+  high_wide:u64 = int.shr.checked(rwide,shift)
+  high_byte:u8 = int.cast(high_wide) {"mode":"wrap"}
+  _ = buffer.store(h_out,sixteen,low)
+  _ = buffer.store(h_out,seventeen,high_byte)
+  _ = buffer.store(h_out,eighteen,dtype)
+  jump copy(h_req,h_out,h_end,twentyfour,nineteen,h_reclen)
+block copy(p_req:readbuf,p_out:mutbuf,p_end:usize,p_src:usize,p_dst:usize,p_reclen:usize)
+  further:bool = compare.lt(p_src,p_end)
+  branch further copy_one(p_req,p_out,p_end,p_src,p_dst,p_reclen) finish(p_out,p_dst,p_reclen)
+block copy_one(o_req:readbuf,o_out:mutbuf,o_end:usize,o_src:usize,o_dst:usize,o_reclen:usize)
+  byte:u8 = buffer.load(o_req,o_src)
+  _ = buffer.store(o_out,o_dst,byte)
+  step:usize = const() {"value":1}
+  next_src:usize = int.add.wrap(o_src,step)
+  next_dst:usize = int.add.wrap(o_dst,step)
+  jump copy(o_req,o_out,o_end,next_src,next_dst,o_reclen)
+block finish(f_out:mutbuf,f_dst:usize,f_reclen:usize)
+  nul:u8 = const() {"value":0}
+  _ = buffer.store(f_out,f_dst,nul)
+  count:u32 = int.cast(f_reclen) {"mode":"wrap"}
+  ret(count)
+end
+fn read_u64(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
+  mm_start_first:u64 = const() {"value":0}
+  mm_start_initial:u64 = const() {"value":0}
+  jump loop(bytes,offset,mm_start_first,mm_start_initial)
+block loop(mm_loop_input:readbuf,mm_loop_base_offset:usize,mm_loop_index:u64,mm_loop_accumulator:u64)
+  mm_loop_width:u64 = const() {"value":8}
+  mm_loop_more:bool = compare.lt(mm_loop_index,mm_loop_width)
+  branch mm_loop_more read_byte(mm_loop_input,mm_loop_base_offset,mm_loop_index,mm_loop_accumulator) done(mm_loop_accumulator)
+block read_byte(mm_read_byte_byte_input:readbuf,mm_read_byte_word_offset:usize,mm_read_byte_byte_index:u64,mm_read_byte_current:u64)
+  mm_read_byte_index_usize:usize = int.cast(mm_read_byte_byte_index) {"mode":"wrap"}
+  mm_read_byte_address:usize = int.add.wrap(mm_read_byte_word_offset,mm_read_byte_index_usize)
+  mm_read_byte_octet:u8 = buffer.load(mm_read_byte_byte_input,mm_read_byte_address)
+  mm_read_byte_widened:u64 = int.cast(mm_read_byte_octet) {"mode":"wrap"}
+  mm_read_byte_eight:u64 = const() {"value":8}
+  mm_read_byte_shift:u64 = int.mul.wrap(mm_read_byte_byte_index,mm_read_byte_eight)
+  mm_read_byte_shifted:u64 = int.shl.checked(mm_read_byte_widened,mm_read_byte_shift)
+  mm_read_byte_combined:u64 = bit.or(mm_read_byte_current,mm_read_byte_shifted)
+  mm_read_byte_one:u64 = const() {"value":1}
+  mm_read_byte_next:u64 = int.add.wrap(mm_read_byte_byte_index,mm_read_byte_one)
+  jump loop(mm_read_byte_byte_input,mm_read_byte_word_offset,mm_read_byte_next,mm_read_byte_combined)
+block done(mm_done_value:u64)
+  ret(mm_done_value)
+end
+fn write_u64(bytes:mutbuf,offset:usize,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(bytes:mutbuf,offset:usize,value:u64)
+  mm_start_first:u64 = const() {"value":0}
+  jump loop(bytes,offset,value,mm_start_first)
+block loop(mm_loop_output:mutbuf,mm_loop_base_offset:usize,mm_loop_word:u64,mm_loop_index:u64)
+  mm_loop_width:u64 = const() {"value":8}
+  mm_loop_more:bool = compare.lt(mm_loop_index,mm_loop_width)
+  branch mm_loop_more write_byte(mm_loop_output,mm_loop_base_offset,mm_loop_word,mm_loop_index) done()
+block write_byte(mm_write_byte_byte_output:mutbuf,mm_write_byte_word_offset:usize,mm_write_byte_source:u64,mm_write_byte_byte_index:u64)
+  mm_write_byte_index_usize:usize = int.cast(mm_write_byte_byte_index) {"mode":"wrap"}
+  mm_write_byte_address:usize = int.add.wrap(mm_write_byte_word_offset,mm_write_byte_index_usize)
+  mm_write_byte_eight:u64 = const() {"value":8}
+  mm_write_byte_shift:u64 = int.mul.wrap(mm_write_byte_byte_index,mm_write_byte_eight)
+  mm_write_byte_shifted:u64 = int.shr.checked(mm_write_byte_source,mm_write_byte_shift)
+  mm_write_byte_octet:u8 = int.cast(mm_write_byte_shifted) {"mode":"wrap"}
+  _ = buffer.store(mm_write_byte_byte_output,mm_write_byte_address,mm_write_byte_octet)
+  mm_write_byte_one:u64 = const() {"value":1}
+  mm_write_byte_next:u64 = int.add.wrap(mm_write_byte_byte_index,mm_write_byte_one)
+  jump loop(mm_write_byte_byte_output,mm_write_byte_word_offset,mm_write_byte_source,mm_write_byte_next)
+block done()
+  mm_done_success:u32 = const() {"value":0}
+  ret(mm_done_success)
+end
