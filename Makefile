@@ -54,9 +54,9 @@ build/reservation-boot.o: build/reservation-gate.o
 
 # Native HIA writes exactly one leaf in an exclusive caller-owned 4KiB table.
 build/x86-pt-commit.o: src/x86_pt_commit.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.x86-pt-commit.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.x86-pt-commit.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/x86-pt-commit.so: build/x86-pt-commit.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -71,9 +71,9 @@ test-x86-pt-commit: build/x86-pt-commit.so build/e820-allow-all.so
 # Native HIA classifier for hardware-captured #PF records; the CPU exception
 # entry and CRx/MSR sampling remain non-HIA until upstream backend support.
 build/x86-pf-gate.o: src/x86_pf_gate.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.x86-pf-gate.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.x86-pf-gate.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/x86-pf-gate.so: build/x86-pf-gate.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -89,9 +89,9 @@ test-x86-pf-gate: build/x86-pf-gate.so build/e820-allow-all.so
 
 # HIA native, single-owner IDT descriptor installer (no privileged LIDT yet).
 build/x86-idt.o: src/x86_idt_gate.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.x86-idt.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.x86-idt.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/x86-idt.so: build/x86-idt.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -106,9 +106,9 @@ test-x86-idt: build/x86-idt.so build/e820-allow-all.so
 
 # Native HIA 64-bit TSS descriptor writes the reserved selector 0x20 GDT pair.
 build/x86-tss-gdt.o: src/x86_tss_gdt.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.x86-tss-gdt.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.x86-tss-gdt.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/x86-tss-gdt.so: build/x86-tss-gdt.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -164,9 +164,9 @@ test-x86-tlb-plan: build/x86-tlb-plan.so build/x86-tlb-plan-unsafe.so
 
 # Real HIA Core v8 2 MiB huge PDE admission, distinct from the 4 KiB PTE writer.
 build/x86-pde-2m.o: src/x86_pde_2m.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.x86-pde-2m.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.x86-pde-2m.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/x86-pde-2m.so: build/x86-pde-2m.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -181,9 +181,9 @@ test-x86-pde-2m: build/x86-pde-2m.so build/e820-allow-all.so
 # Native HIA Core v8 1 GiB PDPTE writer (CPUID PDPE1GB required).
 # This is a quiescent single-owner table update, not an atomic operation.
 build/x86-pdpt-1g.o: src/x86_pdpt_1g.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.x86-pdpt-1g.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.x86-pdpt-1g.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/x86-pdpt-1g.so: build/x86-pdpt-1g.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -508,9 +508,9 @@ test-memory-map: build/e820-region.so build/e820-allow-all.so
 
 # Bounded read-only HIA arena geometry and ownership routing.
 build/arena-router.o: src/arena_router.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.arena-router.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.arena-router.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/arena-router.so: build/arena-router.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -527,9 +527,9 @@ test-owner-binding: build/owner-binding.so build/kernel-host.so build/e820-allow
 
 # An independent native HIA suffix-reservation precondition; no assembly stub.
 build/reservation-gate.o: src/reservation_gate.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.reservation.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.reservation.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/reservation-gate.so: build/reservation-gate.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -541,9 +541,9 @@ test-reservations: build/reservation-gate.so build/e820-allow-all.so
 
 # Native HIA TSS RSP0/IST1/IOPB transactional provisioning, prior to privileged LTR.
 build/x86-tss-state.o: src/x86_tss_state.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.x86-tss-state.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.x86-tss-state.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/x86-tss-state.so: build/x86-tss-state.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -557,9 +557,9 @@ test-x86-tss-state: build/x86-tss-state.so build/e820-allow-all.so
 
 # Genuine HIA 4KiB x86-64 PTE policy encoder; native tests, not MMU activation.
 build/x86-pte.o: src/x86_pte_leaf.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.x86-pte.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.x86-pte.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/x86-pte.so: build/x86-pte.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -596,9 +596,9 @@ test: test-x86-shadow-frame-admit test-x86-pt-pair test-elf64-snapshot test-elf6
 
 # Genuine native HIA single-owner upper-level user-access transition.
 build/x86-upper-user.o: src/x86_upper_user_gate.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.x86-upper-user.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.x86-upper-user.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/x86-upper-user.so: build/x86-upper-user.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -621,9 +621,9 @@ build/ring3-upper-stale-multiboot.elf: build/boot-ring3-upper-stale.o build/kern
 
 # Genuine HIA read-only 4KiB source -> exclusive mutable destination copy.
 build/page-copy.o: src/page_copy.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.page-copy.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.page-copy.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/page-copy.so: build/page-copy.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -636,9 +636,9 @@ build/page-copy-unsafe.so: build/page-copy-unsafe.o
 
 .PHONY: test-page-copy
 test-page-copy: build/page-copy.so build/page-copy-unsafe.so
-	@set -eu; tmp=$(mktemp build/.copy-byte-identity.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	env -i PATH= "$(HEPTA_COMPILER)" < src/page_copy.hepta > "$tmp"; \
-	cmp "$tmp" build/page-copy.o
+	@set -eu; tmp=$$(mktemp build/.copy-byte-identity.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/page_copy.hepta > "$$tmp"; \
+	cmp "$$tmp" build/page-copy.o
 	timeout 90 $(PYTHON) tests/test_page_copy.py build/page-copy.so
 	$(PYTHON) tests/test_page_copy.py build/page-copy-unsafe.so --expect-unsafe
 
@@ -770,9 +770,9 @@ test-x86-walk4-huge: build/x86-walk4-huge.so build/x86-walk4-huge-unsafe.so
 # Genuine HIA CR3-rooted walk through a permutable copied physical window.
 # Not authenticated RAM, a hardware CR3 read, or a concurrent MMU manager.
 build/x86-walk4-physical.o: src/x86_walk4_physical.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.x86-walk4-physical.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.x86-walk4-physical.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/x86-walk4-physical.so: build/x86-walk4-physical.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -1251,9 +1251,9 @@ test-cow-refcount-hw: build/cow-refcount-hw-multiboot.elf build/cow-refcount-dis
 
 # Genuine HIA Core v8 unpublished COW split abort (page zero + refcount restore).
 build/cow-abort.o: src/cow_abort.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.cow-abort.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.cow-abort.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/cow-abort.so: build/cow-abort.o
 	ld -shared -z noexecstack -o "$@" "$<"
@@ -1266,8 +1266,8 @@ build/cow-abort-unsafe.so: build/cow-abort-unsafe.o
 
 .PHONY: test-cow-abort
 test-cow-abort: build/cow-abort.so build/cow-abort-unsafe.so build/cow-split.so
-	@set -eu; tmp=$(mktemp build/.cow-abort-identity.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	env -i PATH= "$(HEPTA_COMPILER)" < src/cow_abort.hepta > "$tmp"; cmp "$tmp" build/cow-abort.o
+	@set -eu; tmp=$$(mktemp build/.cow-abort-identity.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < src/cow_abort.hepta > "$$tmp"; cmp "$$tmp" build/cow-abort.o
 	timeout 90 $(PYTHON) tests/test_cow_abort.py build/cow-abort.so --split-library build/cow-split.so
 	$(PYTHON) tests/test_cow_abort.py build/cow-abort-unsafe.so --expect-unsafe
 
@@ -1752,17 +1752,17 @@ test-elf64-load-segments: build/elf64-load-segments.so build/elf64-load-unsafe.s
 .PHONY: test-elf64-page-plan
 
 build/elf64-page-plan.o: src/elf64_page_plan.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.elf64-plan-native.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.elf64-plan-native.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/elf64-page-plan.so: build/elf64-page-plan.o
 	ld -shared -z noexecstack -o "$@" "$<"
 
 build/elf64-page-plan-unsafe.o: tests/negative/elf64_page_plan_noop.hepta | build check-compiler
-	@set -eu; tmp=$(mktemp build/.elf64-plan-unsafe.XXXXXX); trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-	"$(HEPTA_COMPILER)" < "$<" > "$tmp"; test -s "$tmp"; \
-	test -z "$(nm -u "$tmp")"; mv "$tmp" "$@"
+	@set -eu; tmp=$$(mktemp build/.elf64-plan-unsafe.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	"$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; mv "$$tmp" "$@"
 
 build/elf64-page-plan-unsafe.so: build/elf64-page-plan-unsafe.o
 	ld -shared -z noexecstack -o "$@" "$<"

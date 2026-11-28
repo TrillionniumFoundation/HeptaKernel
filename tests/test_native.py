@@ -200,6 +200,30 @@ class Campaign:
         self.check_state(native, model)
         return actual
 
+    def bitmap_octet_exhaustive(self):
+        # Enumerate every stored octet for every legal reserved-prefix and
+        # valid-length pair. Predict bit semantics independently, rather
+        # than repeating the HIA mask/popcount algorithm.
+        native = Native(self.library, 65)
+        for pages in range(1, 9):
+            for reserved in range(pages + 1):
+                for raw in range(256):
+                    occupied = {i for i in range(8) if raw & (1 << i)}
+                    free = set(range(pages)) - occupied
+                    for claimed in range(pages - reserved + 1):
+                        header = struct.pack("<5Q", MAGIC, pages, 0, reserved, claimed)
+                        state = header + bytes(24) + bytes([raw])
+                        ctypes.memmove(native.state_ptr, state, len(state))
+                        reserved_visible = set(range(reserved)) <= occupied
+                        tail_clear = occupied <= set(range(pages))
+                        sound = reserved_visible and tail_clear and claimed == len(free)
+                        expected = (OK, len(free)) if sound else (BAD_STATE, 0)
+                        actual = native.call((3, 0, 0, 0))
+                        self.commands += 1
+                        assert actual == expected, (pages, reserved, raw, claimed, actual, expected)
+                        assert native.snapshot() == state, "bitmap octet probe mutated state"
+        self.cases.append("all bitmap octets, lengths 1–8, legal prefixes, and in-range claimed counts")
+
     def boundaries(self):
         for n in (1, 2, 7, 8, 9, 15, 17, 63, 64, 65, 129):
             for reserved in sorted({0, n // 3, n}):
@@ -555,6 +579,7 @@ def main():
         campaign.invalid()
         campaign.header_corruption()
         campaign.bitmap_corruption()
+        campaign.bitmap_octet_exhaustive()
         campaign.contiguous_runs()
         campaign.free_runs()
         campaign.exact_claim_runs()

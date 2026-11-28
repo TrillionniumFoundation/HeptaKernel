@@ -1,0 +1,188 @@
+{
+  "cases": [
+    {
+      "case": "plain",
+      "discovery": [
+        0,
+        4194304
+      ],
+      "pmm_invocations": 8,
+      "reverse_rows": false
+    },
+    {
+      "case": "plain",
+      "discovery": [
+        0,
+        4194304
+      ],
+      "pmm_invocations": 8,
+      "reverse_rows": true
+    },
+    {
+      "case": "blocked_first_byte",
+      "discovery": [
+        0,
+        4227072
+      ],
+      "pmm_invocations": 8,
+      "reverse_rows": false
+    },
+    {
+      "case": "blocked_first_byte",
+      "discovery": [
+        0,
+        4227072
+      ],
+      "pmm_invocations": 8,
+      "reverse_rows": true
+    },
+    {
+      "case": "ram_union",
+      "discovery": [
+        0,
+        4194304
+      ],
+      "pmm_invocations": 8,
+      "reverse_rows": false
+    },
+    {
+      "case": "ram_union",
+      "discovery": [
+        0,
+        4194304
+      ],
+      "pmm_invocations": 8,
+      "reverse_rows": true
+    },
+    {
+      "case": "disabled_ignored",
+      "discovery": [
+        0,
+        4194304
+      ],
+      "pmm_invocations": 8,
+      "reverse_rows": false
+    },
+    {
+      "case": "disabled_ignored",
+      "discovery": [
+        0,
+        4194304
+      ],
+      "pmm_invocations": 8,
+      "reverse_rows": true
+    },
+    {
+      "case": "persistent_overlap",
+      "discovery": [
+        0,
+        4202496
+      ],
+      "pmm_invocations": 8,
+      "reverse_rows": false
+    },
+    {
+      "case": "persistent_overlap",
+      "discovery": [
+        0,
+        4202496
+      ],
+      "pmm_invocations": 8,
+      "reverse_rows": true
+    },
+    {
+      "case": "physical_limit",
+      "discovery": [
+        0,
+        4503599627354112
+      ],
+      "pmm_invocations": 8,
+      "reverse_rows": false
+    },
+    {
+      "case": "physical_limit",
+      "discovery": [
+        0,
+        4503599627354112
+      ],
+      "pmm_invocations": 8,
+      "reverse_rows": true
+    },
+    {
+      "case": "blocked_everywhere",
+      "discovery": [
+        5,
+        0
+      ],
+      "pmm_invocations": 0,
+      "reverse_rows": false
+    },
+    {
+      "case": "blocked_everywhere",
+      "discovery": [
+        5,
+        0
+      ],
+      "pmm_invocations": 0,
+      "reverse_rows": true
+    },
+    {
+      "case": "gap_at_join",
+      "discovery": [
+        5,
+        0
+      ],
+      "pmm_invocations": 0,
+      "reverse_rows": false
+    },
+    {
+      "case": "gap_at_join",
+      "discovery": [
+        5,
+        0
+      ],
+      "pmm_invocations": 0,
+      "reverse_rows": true
+    },
+    {
+      "case": "invalid_row",
+      "discovery": [
+        6,
+        0
+      ],
+      "pmm_invocations": 0,
+      "reverse_rows": false
+    },
+    {
+      "case": "invalid_row",
+      "discovery": [
+        6,
+        0
+      ],
+      "pmm_invocations": 0,
+      "reverse_rows": true
+    }
+  ],
+  "compiler_sha256": "87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54",
+  "full_linux_acceptance": "HOLD",
+  "pmm_invocations": 96,
+  "scope": "host-composed-native-HIA",
+  "status": "PASS",
+  "targets": {
+    "e820_find_arena": {
+      "linked_text_sha256": "15392a656dfb6a463de18fff88ddf1c946556d0935c76021cfa747bbf236fdd2",
+      "object_sha256": "306c1133014b45ce6b64c5971f42c541aa9cea1c155f6c50b8f261dd1f29ad38",
+      "source_sha256": "c580c66928dfb0d3183bb2e13747ca0dc06239e19635364ca918f6d080b5da9e"
+    },
+    "e820_region": {
+      "linked_text_sha256": "4fbaa668a608032b6a46ba86c69df33a536700f8eea3828d0fab66bab684a336",
+      "object_sha256": "565776a7e99181164455cf5b578b0bb55dfd30a3e540ba0ecd3ddd683b12ce50",
+      "source_sha256": "1195866579b208a81c3387d8cf3e1a177c84c442b8c21994cfe9059ebfbe3b6b"
+    },
+    "kernel": {
+      "linked_text_sha256": "65dfc8c3e1959cb7f3aabb0c5b4d17678a4c6313a69982ed8ff45be328827be8",
+      "object_sha256": "8a280ebd0dfb551e6ed2811a1cbb94189f36f51c233d72dad2101437599fdaa5",
+      "source_sha256": "0e0794fde672fb89301e72b181896c263f461e6ba7c353a6a1f383f51fa1c929"
+    }
+  }
+}

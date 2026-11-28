@@ -24,11 +24,12 @@ HIA's internal capability checks cannot establish those facts about a foreign
 caller. The boot observer and native tests own and separate all three regions.
 
 The state region is trusted, private, single-owner kernel memory. Calls must be
-serialized. The current HIA state validator reads every active bitmap bit on
-each non-init operation, checks the reserved prefix, reconciles the exact
-free-frame counter, requires zero in every reserved header byte at offsets
-40–63, and requires zero bits beyond the page count in the final
-bitmap byte. This validation adds O(pages) work to each operation; it detects
+serialized. On each non-init operation the HIA state validator reads each
+active storage byte once, checks the reserved prefix and unused tail with
+separate masks, then counts zero bits within the valid mask using portable
+integer operations. It reconciles the exact free-frame counter and requires
+zero in every reserved header byte at offsets 40–63. This contributes
+O(ceil(pages/8)) byte iterations to each operation; it detects
 inconsistent bookkeeping but does not authenticate caller-owned memory or
 detect a coherent malicious rewrite of an entire private state. A future Linux
 allocator requires protected metadata, concurrency and scalable structures. This component has no interrupt/SMP synchronization and performs no
@@ -145,7 +146,7 @@ ALLOC sets exactly one eligible bit and decrements the count; FREE clears one
 dynamic allocated bit and increments it. Parameter and header checks bound
 all bitmap accesses. State validation checks ranges and capacity, rejects nonzero reserved header
 bytes before touching mutable allocation metadata, then rescans the active
-bitmap on every non-init call (O(pages)). The state is not an authenticated
+bitmap on every non-init call (one iteration per storage byte). The state is not an authenticated
 storage format and arbitrary memory corruption is not guaranteed to be detected.
 
 ## Verification
@@ -155,7 +156,10 @@ as the oracle. It compares every operation and state transition, exercises
 failed-operation immutability, preserved bytes, exact capacities, partial bitmap
 bytes, reserved prefixes, physical alignment, zero-address success and maximum
 geometry. The actual loaded library is hashed and its `.text` compared with
-the HIA object before attaching the test evidence.
+the HIA object before attaching the test evidence. The bitmap audit alone is
+also checked against an exhaustive set oracle for all 256 stored octets, all
+lengths from one to eight pages, every legal reserved prefix, and every
+in-range claimed free count. Each query must preserve the entire state.
 
 `tests/test_guard_pages.py` places capabilities against inaccessible pages and
 makes the request page read-only. This checks real process memory protection,

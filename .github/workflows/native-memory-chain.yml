@@ -1,0 +1,59 @@
+name: Native HIA E820-to-PMM composition
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/native-memory-chain.yml'
+      - 'compatibility/hia-toolchain-lock.json'
+      - 'src/e820_find_arena.hepta'
+      - 'src/e820_region.hepta'
+      - 'src/kernel.hepta'
+      - 'tests/test_native.py'
+      - 'tests/test_native_memory_chain.py'
+      - 'tools/bootstrap_hia.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  memory-chain:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Check out HeptaKernel
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Check out the pinned HIA bootstrap inputs
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: f33d8da316de8fdf27b504371f1a5310997ff548
+          path: .toolchain/hepta
+          persist-credentials: false
+          sparse-checkout-cone-mode: true
+          sparse-checkout: |
+            hepta
+            tools
+            examples/hia_bootstrap
+            docs
+      - name: Build the upstream native compiler and compose the three HIA objects
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I -S -B tools/bootstrap_hia.py --root .toolchain/hepta --output .toolchain/compiler
+          mkdir -p build
+          git rev-parse HEAD > build/native-memory-chain-commit.txt
+          python3 -I -S -B tests/test_native_memory_chain.py \
+            .toolchain/compiler/native-compiler | tee build/native-memory-chain.json
+      - name: Retain the composition report
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-memory-chain-${{ github.sha }}
+          path: |
+            build/native-memory-chain-commit.txt
+            build/native-memory-chain.json
+            .toolchain/compiler/bootstrap-report.json
+          if-no-files-found: error
+          retention-days: 14

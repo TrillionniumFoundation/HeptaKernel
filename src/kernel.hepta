@@ -207,51 +207,65 @@ block pad_next(padn_s:mutbuf,padn_p:u64,padn_r:u64,padn_f:u64,padn_i:u64)
   padn_one:u64 = const() {"value":1}
   padn_after:u64 = int.add.wrap(padn_i,padn_one)
   jump pad_scan(padn_s,padn_p,padn_r,padn_f,padn_after)
-block scan_start(hk_startscan_scan_state:mutbuf,hk_startscan_scan_pages:u64,hk_startscan_scan_reserved:u64,hk_startscan_claimed_free:u64)
-  hk_startscan_initial_index:u64 = const() {"value":0}
-  hk_startscan_initial_free:u64 = const() {"value":0}
-  jump scan(hk_startscan_scan_state,hk_startscan_scan_pages,hk_startscan_scan_reserved,hk_startscan_claimed_free,hk_startscan_initial_index,hk_startscan_initial_free)
-block scan(hk_walk_scan_state:mutbuf,hk_walk_scan_pages:u64,hk_walk_scan_reserved:u64,hk_walk_claimed_free:u64,hk_walk_index:u64,hk_walk_free_seen:u64)
-  hk_walk_more:bool = compare.lt(hk_walk_index,hk_walk_scan_pages)
-  branch hk_walk_more inspect_bit(hk_walk_scan_state,hk_walk_scan_pages,hk_walk_scan_reserved,hk_walk_claimed_free,hk_walk_index,hk_walk_free_seen) check_tail(hk_walk_scan_state,hk_walk_scan_pages,hk_walk_claimed_free,hk_walk_free_seen)
-block inspect_bit(hk_inspectbit_bit_state:mutbuf,hk_inspectbit_bit_pages:u64,hk_inspectbit_bit_reserved:u64,hk_inspectbit_bit_claimed:u64,hk_inspectbit_bit_index:u64,hk_inspectbit_seen:u64)
-  hk_inspectbit_occupied:bool = call(hk_inspectbit_bit_state,hk_inspectbit_bit_index) {"function":"bitmap_get"}
-  hk_inspectbit_reserved:bool = compare.lt(hk_inspectbit_bit_index,hk_inspectbit_bit_reserved)
-  hk_inspectbit_empty:bool = bool.not(hk_inspectbit_occupied)
-  hk_inspectbit_freed_reserved:bool = bool.and(hk_inspectbit_reserved,hk_inspectbit_empty)
-  branch hk_inspectbit_freed_reserved invalid() count_bit(hk_inspectbit_bit_state,hk_inspectbit_bit_pages,hk_inspectbit_bit_reserved,hk_inspectbit_bit_claimed,hk_inspectbit_bit_index,hk_inspectbit_seen,hk_inspectbit_occupied,hk_inspectbit_reserved)
-block count_bit(hk_countbit_count_state:mutbuf,hk_countbit_count_pages:u64,hk_countbit_count_reserved:u64,hk_countbit_count_claimed:u64,hk_countbit_count_index:u64,hk_countbit_old_free:u64,hk_countbit_occupied:bool,hk_countbit_reserved:bool)
-  hk_countbit_available:bool = bool.not(hk_countbit_occupied)
-  hk_countbit_dynamic:bool = bool.not(hk_countbit_reserved)
-  hk_countbit_is_free:bool = bool.and(hk_countbit_available,hk_countbit_dynamic)
-  hk_countbit_one:u64 = const() {"value":1}
-  hk_countbit_zero:u64 = const() {"value":0}
-  hk_countbit_increment:u64 = select(hk_countbit_is_free,hk_countbit_one,hk_countbit_zero)
-  hk_countbit_next_free:u64 = int.add.wrap(hk_countbit_old_free,hk_countbit_increment)
-  hk_countbit_next_index:u64 = int.add.wrap(hk_countbit_count_index,hk_countbit_one)
-  jump scan(hk_countbit_count_state,hk_countbit_count_pages,hk_countbit_count_reserved,hk_countbit_count_claimed,hk_countbit_next_index,hk_countbit_next_free)
-block check_tail(hk_tailcheck_tail_state:mutbuf,hk_tailcheck_tail_pages:u64,hk_tailcheck_tail_claimed:u64,hk_tailcheck_observed_free:u64)
-  hk_tailcheck_seven:u64 = const() {"value":7}
-  hk_tailcheck_zero:u64 = const() {"value":0}
-  hk_tailcheck_remainder:u64 = bit.and(hk_tailcheck_tail_pages,hk_tailcheck_seven)
-  hk_tailcheck_whole_bytes:bool = compare.eq(hk_tailcheck_remainder,hk_tailcheck_zero)
-  branch hk_tailcheck_whole_bytes check_free_count(hk_tailcheck_tail_claimed,hk_tailcheck_observed_free) inspect_tail(hk_tailcheck_tail_state,hk_tailcheck_tail_pages,hk_tailcheck_remainder,hk_tailcheck_tail_claimed,hk_tailcheck_observed_free)
-block inspect_tail(hk_tailinspect_tail_state:mutbuf,hk_tailinspect_tail_pages:u64,hk_tailinspect_remainder:u64,hk_tailinspect_tail_claimed:u64,hk_tailinspect_observed_free:u64)
-  hk_tailinspect_three:u64 = const() {"value":3}
-  hk_tailinspect_header:u64 = const() {"value":64}
-  hk_tailinspect_one:u64 = const() {"value":1}
-  hk_tailinspect_zero:u64 = const() {"value":0}
-  hk_tailinspect_index:u64 = int.shr.checked(hk_tailinspect_tail_pages,hk_tailinspect_three)
-  hk_tailinspect_offset:u64 = int.add.wrap(hk_tailinspect_header,hk_tailinspect_index)
-  hk_tailinspect_byte_offset:usize = int.cast(hk_tailinspect_offset) {"mode":"wrap"}
-  hk_tailinspect_octet:u8 = buffer.load(hk_tailinspect_tail_state,hk_tailinspect_byte_offset)
-  hk_tailinspect_value:u64 = int.cast(hk_tailinspect_octet) {"mode":"wrap"}
-  hk_tailinspect_first_unused:u64 = int.shl.checked(hk_tailinspect_one,hk_tailinspect_remainder)
-  hk_tailinspect_valid_mask:u64 = int.sub.wrap(hk_tailinspect_first_unused,hk_tailinspect_one)
-  hk_tailinspect_invalid_mask:u64 = bit.not(hk_tailinspect_valid_mask)
-  hk_tailinspect_tail_bits:u64 = bit.and(hk_tailinspect_value,hk_tailinspect_invalid_mask)
-  hk_tailinspect_clean:bool = compare.eq(hk_tailinspect_tail_bits,hk_tailinspect_zero)
-  branch hk_tailinspect_clean check_free_count(hk_tailinspect_tail_claimed,hk_tailinspect_observed_free) invalid()
+block scan_start(ba_s:mutbuf,ba_pages:u64,ba_reserved:u64,ba_free:u64)
+  ba_zero:u64 = const() {"value":0}
+  jump scan_byte(ba_s,ba_pages,ba_reserved,ba_free,ba_zero,ba_zero)
+block scan_byte(bs_s:mutbuf,bs_pages:u64,bs_reserved:u64,bs_expected:u64,bs_page:u64,bs_free:u64)
+  bs_more:bool = compare.lt(bs_page,bs_pages)
+  branch bs_more inspect_byte(bs_s,bs_pages,bs_reserved,bs_expected,bs_page,bs_free) check_free_count(bs_expected,bs_free)
+block inspect_byte(bi_s:mutbuf,bi_pages:u64,bi_reserved:u64,bi_expected:u64,bi_page:u64,bi_free:u64)
+  bi_one:u64 = const() {"value":1}
+  bi_three:u64 = const() {"value":3}
+  bi_eight:u64 = const() {"value":8}
+  bi_header:u64 = const() {"value":64}
+  bi_zero:u64 = const() {"value":0}
+  bi_index:u64 = int.shr.checked(bi_page,bi_three)
+  bi_offset:u64 = int.add.wrap(bi_header,bi_index)
+  bi_addr:usize = int.cast(bi_offset) {"mode":"wrap"}
+  bi_raw:u8 = buffer.load(bi_s,bi_addr)
+  bi_byte:u64 = int.cast(bi_raw) {"mode":"wrap"}
+  bi_remaining:u64 = int.sub.wrap(bi_pages,bi_page)
+  bi_full:bool = compare.ge(bi_remaining,bi_eight)
+  bi_valid_bits:u64 = select(bi_full,bi_eight,bi_remaining)
+  bi_reserved_here:bool = compare.gt(bi_reserved,bi_page)
+  bi_res_diff:u64 = int.sub.wrap(bi_reserved,bi_page)
+  bi_res_left:u64 = select(bi_reserved_here,bi_res_diff,bi_zero)
+  bi_res_full:bool = compare.ge(bi_res_left,bi_eight)
+  bi_res_bits:u64 = select(bi_res_full,bi_eight,bi_res_left)
+  bi_valid_limit:u64 = int.shl.checked(bi_one,bi_valid_bits)
+  bi_valid_mask:u64 = int.sub.wrap(bi_valid_limit,bi_one)
+  bi_res_limit:u64 = int.shl.checked(bi_one,bi_res_bits)
+  bi_res_mask:u64 = int.sub.wrap(bi_res_limit,bi_one)
+  bi_seen_res:u64 = bit.and(bi_byte,bi_res_mask)
+  bi_res_ok:bool = compare.eq(bi_seen_res,bi_res_mask)
+  bi_unused_mask:u64 = bit.not(bi_valid_mask)
+  bi_seen_unused:u64 = bit.and(bi_byte,bi_unused_mask)
+  bi_unused_ok:bool = compare.eq(bi_seen_unused,bi_zero)
+  bi_good:bool = bool.and(bi_res_ok,bi_unused_ok)
+  branch bi_good count_byte(bi_s,bi_pages,bi_reserved,bi_expected,bi_page,bi_free,bi_byte,bi_valid_mask) invalid()
+block count_byte(bc_s:mutbuf,bc_pages:u64,bc_reserved:u64,bc_expected:u64,bc_page:u64,bc_free:u64,bc_byte:u64,bc_mask:u64)
+  bc_one:u64 = const() {"value":1}
+  bc_two:u64 = const() {"value":2}
+  bc_four:u64 = const() {"value":4}
+  bc_eight:u64 = const() {"value":8}
+  bc_55:u64 = const() {"value":85}
+  bc_33:u64 = const() {"value":51}
+  bc_0f:u64 = const() {"value":15}
+  bc_inverse:u64 = bit.not(bc_byte)
+  bc_available:u64 = bit.and(bc_inverse,bc_mask)
+  bc_shift1:u64 = int.shr.checked(bc_available,bc_one)
+  bc_odd:u64 = bit.and(bc_shift1,bc_55)
+  bc_pairs:u64 = int.sub.wrap(bc_available,bc_odd)
+  bc_shift2:u64 = int.shr.checked(bc_pairs,bc_two)
+  bc_pair_low:u64 = bit.and(bc_pairs,bc_33)
+  bc_pair_high:u64 = bit.and(bc_shift2,bc_33)
+  bc_nibbles:u64 = int.add.wrap(bc_pair_low,bc_pair_high)
+  bc_shift4:u64 = int.shr.checked(bc_nibbles,bc_four)
+  bc_octet:u64 = int.add.wrap(bc_nibbles,bc_shift4)
+  bc_count:u64 = bit.and(bc_octet,bc_0f)
+  bc_total:u64 = int.add.wrap(bc_free,bc_count)
+  bc_next:u64 = int.add.wrap(bc_page,bc_eight)
+  jump scan_byte(bc_s,bc_pages,bc_reserved,bc_expected,bc_next,bc_total)
 block check_free_count(hk_countverify_expected:u64,hk_countverify_actual:u64)
   hk_countverify_consistent:bool = compare.eq(hk_countverify_expected,hk_countverify_actual)
   ret(hk_countverify_consistent)
