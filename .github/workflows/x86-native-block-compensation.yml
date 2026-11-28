@@ -1,0 +1,58 @@
+name: Experimental native block compensation (not Linux acceptance)
+on:
+  push:
+    branches: ['automation/x86-native-block-compensation-*']
+  pull_request:
+    paths:
+      - 'src/x86_native_block_compensation.hepta'
+      - 'src/x86_native_running_block.hepta'
+      - 'src/x86_native_frame_rollback_guard.hepta'
+      - 'src/x86_native_ready_compensation.hepta'
+      - 'src/x86_native_bounded_owner.hepta'
+      - 'src/x86_native_bounded_slot_dispatch.hepta'
+      - 'src/x86_native_three_task_owner.hepta'
+      - 'src/x86_native_ready_exchange.hepta'
+      - 'src/x86_native_versioned_ready_state.hepta'
+      - 'src/x86_native_owner_dispatch.hepta'
+      - 'src/x86_native_irq_entry.hepta'
+      - 'src/x86_native_kernel_frame.hepta'
+      - 'src/x86_two_task_preemption.hepta'
+      - 'tests/fixtures/x86_native_block_compensation.S'
+      - 'tests/fixtures/x86_apic_one_shot_timer.ld'
+      - 'tests/test_x86_native_block_compensation.py'
+      - '.github/workflows/x86-native-block-compensation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-block-compensation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: 25c165ba7c80e3e1124acd4efb083c637fbb275a
+          persist-credentials: false
+          path: .upstream/hepta-experimental
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: sudo apt-get update && sudo apt-get install -y binutils gcc qemu-system-x86
+      - name: Rebuild exact experimental native compiler
+        run: |
+          test "$(git -C .upstream/hepta-experimental rev-parse HEAD)" = 25c165ba7c80e3e1124acd4efb083c637fbb275a
+          python -B .upstream/hepta-experimental/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/kernel-experimental"
+      - name: Actual native block compensation and independent hardware oracle
+        run: python -B tests/test_x86_native_block_compensation.py --compiler-dir "$RUNNER_TEMP/kernel-experimental" --output "$RUNNER_TEMP/block-compensation"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: block-compensation-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/kernel-experimental/report.json
+            ${{ runner.temp }}/block-compensation/
+          retention-days: 7

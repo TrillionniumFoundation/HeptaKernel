@@ -1,0 +1,7 @@
+# Fixed native upper page-table identity admission
+
+Experimental HOLD; parent #256 exact 7e13e99114b106b1b9516a22993c93c3c4c9fd80. Adds a separate HIA subject, observer, focused test and cumulative workflow; no prior file or acceptance gate changed.
+
+Before accessing the writer lease, f7 calls f15 to inspect the four fixed upper-table virtual page identities through the existing PT0 view, tolerating A/D bits, then locally invalidates each checked address. Independent PC/Q35 observers redirect the virtual view of PML4, PDPT, PD0 or PD3 to real shadow storage, in both CPU directions. Intact guard refuses; its bypass permits actual lease mutation. Local focus-r1: 148/148 cases, including 32 table-view controls, all passed. Native source SHA256 fe06431f0af785c2f60145f547a4ef5e8067d1f0ba42e37fef9d0aadd9e49928, object eb0d0e961977e0bf40272d9c2f3d2b31fbe2af61930634d5d514d9ba7aeb355b, text 34778120d7b1a7d6eaa77a5b2121fd6f3f4e8e3c955708ac636c8615975d8519. Native direct stack bound 7488 bytes; all variants at most 7728, original 7936 limit, 8192-byte task stacks and 128-byte canaries retained. Independent CI and original artifact comparisons remain pending.
+
+The PT0 view itself remains trusted. No general root lifetime, arbitrary topology, concurrent mutation exclusion, physical reclamation, or original post-IRET stale proof is claimed. All 17 HOLD gates, 422 syscall obligations, historic failures and original budgets remain.
