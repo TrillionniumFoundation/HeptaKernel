@@ -6,8 +6,10 @@ Exit 2: HOLD (unfinished obligations or missing evidence).
 Exit 1: unreadable/invalid manifest or baseline identity mismatch.
 Exit 0: manifest conditions are present; independent review is still required.
 
-This tool checks declarations and evidence files. It does not establish Linux
-compatibility, prove HIA safety, or authenticate the conclusions in a report.
+This tool checks declarations and evidence files. Closure credit requires each
+receipt to be a {path, sha256} object whose digest matches its current bytes;
+legacy bare paths remain readable on unfinished rows. This does not establish
+Linux compatibility, prove HIA safety, or authenticate a report's conclusions.
 """
 from __future__ import annotations
 
@@ -20,6 +22,7 @@ import re
 
 SCHEMA = "heptakernel.linux-coverage.v1"
 LINUX_SHA = "7595a62d45ee1a2297eafa5f2ef5d0a45142d84d"
+HEPTA_BASELINE_SHA = "f33d8da316de8fdf27b504371f1a5310997ff548"
 SCOPE = "entire pinned Linux source and behavior; first x86_64 tranche does not reduce this scope"
 GATE_IDS = (
     "scope-source-inventory", "hia-target-purity", "hia-machine-semantics",
@@ -51,7 +54,8 @@ NONEXECUTABLE_SUFFIXES = {
 }
 LIMITATION = (
     "This checks manifest structure, fixed baseline identities, local evidence "
-    "availability and declared target-source language. A ready result does not "
+    "availability and matching evidence digests, and declared target-source "
+    "language. A ready result does not "
     "prove the evidence claims, full Linux compatibility or HIA semantic safety; "
     "independent review of the exact candidate remains required."
 )
@@ -71,6 +75,22 @@ def canonical_sha(value):
     return hashlib.sha256(raw).hexdigest()
 
 
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        need(key not in result, "duplicate JSON object member: " + key)
+        result[key] = value
+    return result
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def repository_path(root, value):
     need(isinstance(value, str) and value.strip(), "empty or non-string evidence/source path")
     rel = Path(value)
@@ -81,7 +101,7 @@ def repository_path(root, value):
     return resolved
 
 
-def evidence_ready(root, items):
+def evidence_ready(root, items, *, require_pins=False):
     need(isinstance(items, list), "evidence must be an array")
     ready = bool(items)
     for item in items:
@@ -96,7 +116,12 @@ def evidence_ready(root, items):
                  "evidence object requires a lowercase SHA-256")
         if not path.is_file() or path.stat().st_size == 0:
             ready = False
-        elif expected is not None and hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+        elif expected is None:
+            # Historical path-only receipts stay readable on unfinished rows
+            # but may not be used to remove a closure obligation.
+            if require_pins:
+                ready = False
+        elif file_sha256(path) != expected:
             ready = False
     return ready
 
@@ -113,19 +138,21 @@ def paths_ready(root, values):
 
 def row_ready(root, row, *, kind):
     need(isinstance(row, dict), "obligation must be an object")
-    need(row.get("status") in STATES, "unknown obligation status")
-    evidence_ok = evidence_ready(root, row.get("evidence"))
+    status = row.get("status")
+    need(isinstance(status, str) and status in STATES, "unknown obligation status")
+    claims_credit = status in {"VERIFIED_SCOPE", "NOT_APPLICABLE_WITH_EVIDENCE"}
+    evidence_ok = evidence_ready(root, row.get("evidence"), require_pins=claims_credit)
     implementation_ok = paths_ready(root, row.get("implementation_paths"))
-    if row["status"] == "NOT_APPLICABLE_WITH_EVIDENCE":
+    if status == "NOT_APPLICABLE_WITH_EVIDENCE":
         # Only an explicitly obsolete/unimplemented upstream syscall can take
         # this path. The upstream source note and the decision both need records.
         obsolete = (kind == "syscall" and
                     row.get("baseline_behavior") ==
                     "UPSTREAM_UNIMPLEMENTED_OR_OBSOLETE_REQUIRES_MATCHING_ERRNO" and
                     row.get("entry") in (None, "sys_ni_syscall"))
-        baseline_ok = evidence_ready(root, row.get("baseline_evidence", []))
+        baseline_ok = evidence_ready(root, row.get("baseline_evidence", []), require_pins=True)
         return bool(obsolete and evidence_ok and baseline_ok)
-    if row["status"] != "VERIFIED_SCOPE":
+    if status != "VERIFIED_SCOPE":
         return False
     if kind == "gate":
         return evidence_ok
@@ -142,6 +169,7 @@ def inspect(manifest, root):
     need(isinstance(baseline, dict), "missing baseline")
     need(baseline.get("linux_version") == "7.3.4" and
          baseline.get("linux_commit") == LINUX_SHA, "Linux baseline changed")
+    need(baseline.get("hepta_commit") == HEPTA_BASELINE_SHA, "Hepta baseline changed")
     for flag in ("inventory_complete", "full_rewrite_complete"):
         need(type(manifest.get(flag)) is bool, flag + " must be a boolean")
 
@@ -232,7 +260,7 @@ def main():
     root = args.root.resolve()
     manifest_path = args.manifest or root / "compatibility/coverage.json"
     try:
-        manifest = json.loads(manifest_path.read_text())
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"), object_pairs_hook=unique_object)
         report = inspect(manifest, root)
     except (OSError, ValueError, TypeError, KeyError) as exc:
         print(json.dumps({"schema": "heptakernel.closure-check.v1", "status": "INVALID_MANIFEST",

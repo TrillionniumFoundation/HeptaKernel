@@ -1,0 +1,34 @@
+{
+  "counts": {
+    "common_rows": 339,
+    "native_dispatch_obligations": 386,
+    "native_missing_declared_handler": 16,
+    "native_noreturn_declarations": 2,
+    "native_only_rows": 47,
+    "original_source_rows": 422,
+    "x32_dispatch_obligations": 375,
+    "x32_missing_declared_handler": 6,
+    "x32_noreturn_declarations": 2,
+    "x32_only_rows": 36
+  },
+  "full_rewrite_complete": false,
+  "inventory_complete": false,
+  "limitations": [
+    "Original 422 source rows remain intact and are not implementation counts",
+    "The x32 ABI inherits common rows and separately numbers x32-specific rows",
+    "No compat calling convention, generated syscall dispatch, Kconfig or behavior is evaluated",
+    "No HIA syscall handlers, ELF userspace, or kernel privilege backend is implemented"
+  ],
+  "linux_commit": "7595a62d45ee1a2297eafa5f2ef5d0a45142d84d",
+  "linux_root_tree": "d07c331ebf5acbde9ebf9caea9eac6e33b07ad77",
+  "native_sha256": "9bd154ffb38228cdc46edd970fdbabba8534c4c04b693da805562fc897c90e00",
+  "schema": "heptakernel.x86-dual-syscall-source-obligations.v1",
+  "source_blob_oid": "d5b6045b0090cce8f4fe91d113b53d6b814fde45",
+  "source_blob_sha256": "37794e7f9eb8dde12f95257c9414b0255fb008a8767be010b77717379aaa37c2",
+  "source_ledger_sha256": "ee7513c777ea1b2092f41e9379014a6d3e9e9a856def312b4f706245678a46a4",
+  "status": "SOURCE_ONLY_NO_IMPLEMENTATION_OR_KCONFIG_EVALUATION",
+  "vendor_sha256": "050b48441ae8926fe99b7274d7fe9ee2c830c9829e30e42d21f9bb8249865296",
+  "vendor_status": "VENDORED_EXTRA_TRAILING_LF",
+  "x32_dispatch_bit": 1073741824,
+  "x32_sha256": "344d6e55dbe04ae09b8bd71aab1311ab8eaf29ef0ef14a781315b197a392f057"
+}

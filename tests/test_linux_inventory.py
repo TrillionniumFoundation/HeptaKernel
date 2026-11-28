@@ -10,12 +10,16 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("linux_inventory", ROOT / "tools/linux_inventory.py")
 inventory = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(inventory)
+sys.path.insert(0, str(ROOT / "tools"))
+import linux_x86_syscall_matrix as x86_64
+import linux_x86_ia32_syscall_matrix as ia32
 
 
 def git(root: Path, *args: str) -> str:
@@ -196,6 +200,76 @@ def inspect(report_dir: Path, commit: str) -> None:
         assert hashlib.sha256((report_dir / file).read_bytes()).hexdigest() == report[field]
 
 
+def check_original_git_object_view(parent: Path) -> None:
+    source = parent / "provenance-fixture"
+    source.mkdir()
+    git(source, "init", "-q")
+    git(source, "config", "user.name", "Inventory Test")
+    git(source, "config", "user.email", "inventory@example.invalid")
+    table64 = "arch/x86/entry/syscalls/syscall_64.tbl"
+    table32 = "arch/x86/entry/syscalls/syscall_32.tbl"
+    put(source, table64, "0 common read sys_read\n1 64 old\n512 x32 exec compat_exec\n")
+    put(source, table32, "0 i386 restart sys_restart\n1 i386 exit sys_exit - noreturn\n")
+    put(source, "drivers/demo.c", "MODULE_DEVICE_TABLE(pci, original_ids);\n")
+    git(source, "add", "-A")
+    git(source, "commit", "-qm", "original")
+    pinned = git(source, "rev-parse", "HEAD")
+    vendor = parent / "vendored-x86-table"
+    vendor.write_bytes((source / table64).read_bytes())
+    lock = parent / "provenance-lock.json"
+    lock.write_text(json.dumps({"linux": {"commit": pinned}, "inventories": {
+        "x86_64_table_rows": 3, "native_x86_64_table_rows": 2, "x32_special_table_rows": 1,
+    }}))
+
+    def run(out: Path) -> dict[str, bytes]:
+        inventory.build(source, lock, out)
+        native = x86_64.run(source, out, lock, vendor)
+        compat = ia32.run(source, out, lock)
+        assert native["counts"]["native_dispatch_obligations"] == 2
+        assert native["counts"]["x32_dispatch_obligations"] == 2
+        assert compat["counts"]["source_rows"] == 2
+        return {path.name: path.read_bytes() for path in out.iterdir() if path.is_file()}
+
+    original = run(parent / "original-object-view")
+    put(source, table64, "0 common text sys_text\n1 64 old\n512 x32 news compat_news\n")
+    put(source, table32, "0 i386 resample sys_resample\n1 i386 exam sys_exam - noreturn\n")
+    put(source, "drivers/demo.c", "MODULE_DEVICE_TABLE(usb, alternate_ids);\n")
+    git(source, "add", "-A")
+    git(source, "commit", "-qm", "alternate local history view")
+    alternate = git(source, "rev-parse", "HEAD")
+    git(source, "update-ref", "HEAD", pinned)
+    git(source, "replace", pinned, alternate)
+    assert run(parent / "replaced-history-view") == original
+    git(source, "replace", "-d", pinned)
+
+    for path in (table64, table32, "drivers/demo.c"):
+        git(source, "replace", git(source, "rev-parse", pinned + ":" + path),
+            git(source, "rev-parse", alternate + ":" + path))
+    assert run(parent / "replaced-blob-view") == original
+
+    # A valid-looking regular mode still has to match the immutable tree,
+    # independently of the inventory report's own digest.
+    out = parent / "replaced-blob-view"
+    for table, call in (
+            (table64, lambda: x86_64.run(source, out, lock, vendor)),
+            (table32, lambda: ia32.run(source, out, lock))):
+        rows = [json.loads(line) for line in original["source-paths.jsonl"].splitlines()]
+        item = next(row for row in rows if row["path"] == table)
+        assert item["mode"] == "100644"
+        item["mode"] = "100755"
+        data = b"".join(inventory.json_line(row) for row in rows)
+        report = json.loads(original["report.json"])
+        report["source_paths_sha256"] = hashlib.sha256(data).hexdigest()
+        (out / "source-paths.jsonl").write_bytes(data)
+        (out / "report.json").write_text(json.dumps(report))
+        try:
+            call()
+        except ValueError as error:
+            assert "differs from pinned tree path" in str(error), error
+        else:
+            raise AssertionError("table mode did not match pinned tree")
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="heptakernel-linux-inventory-") as temp:
         parent = Path(temp)
@@ -237,6 +311,7 @@ def main() -> None:
             assert "full lowercase" in str(e)
         else:
             raise AssertionError("short commit identity was accepted")
+        check_original_git_object_view(parent)
 
     print(json.dumps({
         "status": "PASS", "fixture_tracked_paths": 11,
@@ -247,6 +322,8 @@ def main() -> None:
         "non_utf8_and_newline_paths": "PASS",
         "symlink_and_gitlink": "PASS", "immutable_blob_read": "PASS",
         "deterministic_byte_replay": "PASS", "wrong_sha_fail_closed": "PASS",
+        "replacement_independent_inventory_and_x86_projection": "PASS",
+        "x86_table_mode_bound_to_pinned_tree": "PASS",
         "linux_full_rewrite_complete": False,
     }, sort_keys=True))
 
