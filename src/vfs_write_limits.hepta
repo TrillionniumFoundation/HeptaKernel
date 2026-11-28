@@ -1,0 +1,145 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn vfs_write_limits(request:readbuf,reply:mutbuf,unused:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,unused:mutbuf)
+  rp_len:usize = buffer.len(reply)
+  rp_need:usize = const() {"value":24}
+  rp_ok:bool = compare.ge(rp_len,rp_need)
+  branch rp_ok check_request(request,reply) short_reply()
+block short_reply()
+  sr_status:u32 = const() {"value":1}
+  ret(sr_status)
+block check_request(rq_request:readbuf,rq_reply:mutbuf)
+  rq_len:usize = buffer.len(rq_request)
+  rq_need:usize = const() {"value":40}
+  rq_ok:bool = compare.eq(rq_len,rq_need)
+  branch rq_ok decode(rq_request,rq_reply) bad_request(rq_reply)
+block bad_request(br_reply:mutbuf)
+  br_status:u32 = const() {"value":2}
+  br_zero:u64 = const() {"value":0}
+  br_no:u64 = const() {"value":0}
+  br_ret:u32 = call(br_reply,br_status,br_zero,br_no) {"function":"write_result"}
+  ret(br_ret)
+block decode(d_request:readbuf,d_reply:mutbuf)
+  d_off0:usize = const() {"value":0}
+  d_off8:usize = const() {"value":8}
+  d_off16:usize = const() {"value":16}
+  d_off24:usize = const() {"value":24}
+  d_off32:usize = const() {"value":32}
+  d_pos:u64 = call(d_request,d_off0) {"function":"read_request_u64"}
+  d_count:u64 = call(d_request,d_off8) {"function":"read_request_u64"}
+  d_limit:u64 = call(d_request,d_off16) {"function":"read_request_u64"}
+  d_max:u64 = call(d_request,d_off24) {"function":"read_request_u64"}
+  d_large:u64 = call(d_request,d_off32) {"function":"read_request_u64"}
+  jump validate(d_reply,d_pos,d_count,d_limit,d_max,d_large)
+block validate(v_reply:mutbuf,v_pos:u64,v_count:u64,v_limit:u64,v_max:u64,v_large:u64)
+  d_shift:u64 = const() {"value":1}
+  d_one:u64 = const() {"value":1}
+  d_zero:u64 = const() {"value":0}
+  d_infinity:u64 = bit.not(d_zero)
+  d_llmax:u64 = int.shr.checked(d_infinity,d_shift)
+  d_pos_ok:bool = compare.le(v_pos,d_llmax)
+  d_count_ok:bool = compare.le(v_count,d_llmax)
+  d_max_ok:bool = compare.le(v_max,d_llmax)
+  d_large_ok:bool = compare.le(v_large,d_one)
+  d_finite_ok:bool = compare.le(v_limit,d_llmax)
+  d_infinite:bool = compare.eq(v_limit,d_infinity)
+  d_limit_ok:bool = bool.or(d_finite_ok,d_infinite)
+  d_1:bool = bool.and(d_pos_ok,d_count_ok)
+  d_2:bool = bool.and(d_max_ok,d_large_ok)
+  d_3:bool = bool.and(d_1,d_2)
+  d_ok:bool = bool.and(d_3,d_limit_ok)
+  branch d_ok check_limit(v_reply,v_pos,v_count,v_limit,d_infinite,v_max,v_large) bad_request(v_reply)
+block check_limit(l_reply:mutbuf,l_pos:u64,l_count:u64,l_limit:u64,l_infinite:bool,l_max:u64,l_large:u64)
+  branch l_infinite check_max(l_reply,l_pos,l_count,l_max,l_large) finite_limit(l_reply,l_pos,l_count,l_limit,l_max,l_large)
+block finite_limit(fl_reply:mutbuf,fl_pos:u64,fl_count:u64,fl_limit:u64,fl_max:u64,fl_large:u64)
+  fl_hit:bool = compare.ge(fl_pos,fl_limit)
+  branch fl_hit signal_big(fl_reply,fl_count) clip_limit(fl_reply,fl_pos,fl_count,fl_limit,fl_max,fl_large)
+block signal_big(sb_reply:mutbuf,sb_count:u64)
+  sb_status:u32 = const() {"value":27}
+  sb_yes:u64 = const() {"value":1}
+  sb_ret:u32 = call(sb_reply,sb_status,sb_count,sb_yes) {"function":"write_result"}
+  ret(sb_ret)
+block clip_limit(cl_reply:mutbuf,cl_pos:u64,cl_count:u64,cl_limit:u64,cl_max:u64,cl_large:u64)
+  cl_room:u64 = int.sub.wrap(cl_limit,cl_pos)
+  cl_exceeds:bool = compare.gt(cl_count,cl_room)
+  cl_clipped:u64 = select(cl_exceeds,cl_room,cl_count)
+  jump check_max(cl_reply,cl_pos,cl_clipped,cl_max,cl_large)
+block check_max(m_reply:mutbuf,m_pos:u64,m_count:u64,m_max:u64,m_large:u64)
+  m_one:u64 = const() {"value":1}
+  m_legacy:u64 = const() {"value":2147483647}
+  m_islarge:bool = compare.eq(m_large,m_one)
+  m_bound:u64 = select(m_islarge,m_max,m_legacy)
+  m_hit:bool = compare.ge(m_pos,m_bound)
+  branch m_hit no_signal_big(m_reply,m_count) finish(m_reply,m_pos,m_count,m_bound)
+block no_signal_big(nb_reply:mutbuf,nb_count:u64)
+  nb_status:u32 = const() {"value":27}
+  nb_no:u64 = const() {"value":0}
+  nb_ret:u32 = call(nb_reply,nb_status,nb_count,nb_no) {"function":"write_result"}
+  ret(nb_ret)
+block finish(f_reply:mutbuf,f_pos:u64,f_count:u64,f_bound:u64)
+  f_room:u64 = int.sub.wrap(f_bound,f_pos)
+  f_exceeds:bool = compare.gt(f_count,f_room)
+  f_clipped:u64 = select(f_exceeds,f_room,f_count)
+  f_status:u32 = const() {"value":0}
+  f_no:u64 = const() {"value":0}
+  f_ret:u32 = call(f_reply,f_status,f_clipped,f_no) {"function":"write_result"}
+  ret(f_ret)
+end
+fn read_request_u64(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
+  first:u64 = const() {"value":0}
+  initial:u64 = const() {"value":0}
+  jump loop(bytes,offset,first,initial)
+block loop(input:readbuf,base_offset:usize,index:u64,accumulator:u64)
+  width:u64 = const() {"value":8}
+  more:bool = compare.lt(index,width)
+  branch more read_byte(input,base_offset,index,accumulator) done(accumulator)
+block read_byte(byte_input:readbuf,word_offset:usize,byte_index:u64,current:u64)
+  index_usize:usize = int.cast(byte_index) {"mode":"wrap"}
+  address:usize = int.add.wrap(word_offset,index_usize)
+  octet:u8 = buffer.load(byte_input,address)
+  widened:u64 = int.cast(octet) {"mode":"wrap"}
+  eight:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(byte_index,eight)
+  shifted:u64 = int.shl.checked(widened,shift)
+  combined:u64 = bit.or(current,shifted)
+  one:u64 = const() {"value":1}
+  next:u64 = int.add.wrap(byte_index,one)
+  jump loop(byte_input,word_offset,next,combined)
+block done(value:u64)
+  ret(value)
+end
+fn write_u64(bytes:mutbuf,offset:usize,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(bytes:mutbuf,offset:usize,value:u64)
+  first:u64 = const() {"value":0}
+  jump loop(bytes,offset,value,first)
+block loop(output:mutbuf,base_offset:usize,word:u64,index:u64)
+  width:u64 = const() {"value":8}
+  more:bool = compare.lt(index,width)
+  branch more write_byte(output,base_offset,word,index) done()
+block write_byte(byte_output:mutbuf,word_offset:usize,source:u64,byte_index:u64)
+  index_usize:usize = int.cast(byte_index) {"mode":"wrap"}
+  address:usize = int.add.wrap(word_offset,index_usize)
+  eight:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(byte_index,eight)
+  shifted:u64 = int.shr.checked(source,shift)
+  octet:u8 = int.cast(shifted) {"mode":"wrap"}
+  _ = buffer.store(byte_output,address,octet)
+  one:u64 = const() {"value":1}
+  next:u64 = int.add.wrap(byte_index,one)
+  jump loop(byte_output,word_offset,source,next)
+block done()
+  success:u32 = const() {"value":0}
+  ret(success)
+end
+fn write_result(reply:mutbuf,status:u32,count:u64,signal:u64) -> (u32) effects(write,trap) entry(start)
+block start(reply:mutbuf,status:u32,count:u64,signal:u64)
+  wr_0:usize = const() {"value":0}
+  wr_8:usize = const() {"value":8}
+  wr_16:usize = const() {"value":16}
+  wr_status:u64 = int.cast(status) {"mode":"wrap"}
+  wr_a:u32 = call(reply,wr_0,wr_status) {"function":"write_u64"}
+  wr_b:u32 = call(reply,wr_8,count) {"function":"write_u64"}
+  wr_c:u32 = call(reply,wr_16,signal) {"function":"write_u64"}
+  ret(status)
+end
