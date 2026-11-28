@@ -1,0 +1,12 @@
+pc primary-shadow-bsp 35 b'V'
+q35 primary-shadow-bsp 35 b'V'
+pc primary-shadow-ap 35 b'V'
+q35 primary-shadow-ap 35 b'V'
+Traceback (most recent call last):
+  File "/tmp/hk-audit-shadow-t70-5O4qg8Ou/tests/test_x86_native_audit_shadow.py", line 215, in <module>
+    if __name__=='__main__':main()
+                            ^^^^^^
+  File "/tmp/hk-audit-shadow-t70-5O4qg8Ou/tests/test_x86_native_audit_shadow.py", line 208, in main
+    row.update(returncode=p.returncode,serial=p.stdout.decode(errors='replace'));assert (p.returncode,p.stdout)==(expected,serial.encode()),row
+                                                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'case': 'both-shadow-bsp', 'machine': 'pc', 'image_sha256': 'f28dbe0cc36abe3ec5506590791694dc3c4d95882fb7f532b756d8846f9ce680', 'guest_sha256': '3797edbf6b6a02bde2b0522956b2833b1eecca2ac76d7fb55e8bed58f3fb55b6', 'expected_rc': 35, 'expected_serial': 'N', 'status': 'FAIL', 'returncode': 37, 'serial': 'AA'}

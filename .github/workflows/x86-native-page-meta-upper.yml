@@ -1,0 +1,359 @@
+name: x86 native page metadata upper alias
+on:
+  push:
+    branches: ['automation/x86-native-page-meta-upper-*']
+  pull_request:
+    paths:
+      - 'src/x86_native_idle_compensation.hepta'
+      - 'src/x86_native_idle_select.hepta'
+      - 'src/x86_native_running_block.hepta'
+      - 'src/x86_native_frame_rollback_guard.hepta'
+      - 'src/x86_native_ready_compensation.hepta'
+      - 'src/x86_native_bounded_owner.hepta'
+      - 'src/x86_native_bounded_slot_dispatch.hepta'
+      - 'src/x86_native_three_task_owner.hepta'
+      - 'src/x86_native_ready_exchange.hepta'
+      - 'src/x86_native_versioned_ready_state.hepta'
+      - 'src/x86_native_owner_dispatch.hepta'
+      - 'src/x86_native_irq_entry.hepta'
+      - 'src/x86_native_kernel_frame.hepta'
+      - 'src/x86_two_task_preemption.hepta'
+      - 'tests/fixtures/x86_native_idle_exit_rollback.S'
+      - 'tests/fixtures/x86_native_idle_rollback.S'
+      - 'tests/fixtures/x86_native_idle_stay.S'
+      - 'tests/fixtures/x86_native_idle_select.S'
+      - 'tests/fixtures/x86_native_running_block.S'
+      - 'tests/fixtures/x86_apic_one_shot_timer.ld'
+      - 'tests/test_x86_native_idle_exit_rollback.py'
+      - 'tests/test_x86_native_idle_rollback.py'
+      - 'tests/test_x86_native_idle_stay.py'
+      - 'tests/test_x86_native_idle_select.py'
+      - 'src/x86_native_dispatch_policy.hepta'
+      - 'tests/fixtures/x86_native_policy_running.S'
+      - 'tests/fixtures/x86_native_policy_idle.S'
+      - 'tests/test_x86_native_dispatch_policy.py'
+      - '.github/workflows/x86-native-dispatch-policy.yml'
+      - 'src/x86_native_reserved_policy.hepta'
+      - 'tests/fixtures/x86_native_reserved_policy.S'
+      - 'tests/test_x86_native_reserved_policy.py'
+      - '.github/workflows/x86-native-reserved-policy.yml'
+      - 'src/x86_native_reserved_compensation.hepta'
+      - 'tests/fixtures/x86_native_reserved_compensation.S'
+      - 'tests/test_x86_native_reserved_compensation.py'
+      - '.github/workflows/x86-native-reserved-compensation.yml'
+      - 'src/x86_native_bounded_frame_compose.hepta'
+      - 'tests/fixtures/x86_native_bounded_frame_compose.S'
+      - 'tests/test_x86_native_bounded_frame_compose.py'
+      - '.github/workflows/x86-native-bounded-frame-compose.yml'
+      - 'src/x86_native_guarded_reverse.hepta'
+      - 'tests/fixtures/x86_native_guarded_reverse.S'
+      - 'tests/test_x86_native_guarded_reverse.py'
+      - '.github/workflows/x86-native-guarded-reverse.yml'
+      - 'src/x86_native_rollback_compose.hepta'
+      - 'tests/fixtures/x86_native_rollback_compose.S'
+      - 'tests/test_x86_native_rollback_compose.py'
+      - '.github/workflows/x86-native-rollback-compose.yml'
+      - 'src/x86_native_forward_compose.hepta'
+      - 'tests/fixtures/x86_native_forward_compose.S'
+      - 'tests/test_x86_native_forward_compose.py'
+      - '.github/workflows/x86-native-forward-compose.yml'
+      - 'src/x86_native_dispatch_compose.hepta'
+      - 'tests/fixtures/x86_native_dispatch_compose.S'
+      - 'tests/test_x86_native_dispatch_compose.py'
+      - '.github/workflows/x86-native-dispatch-compose.yml'
+      - 'src/x86_native_terminal_dispatch.hepta'
+      - 'tests/fixtures/x86_native_terminal_dispatch.S'
+      - 'tests/test_x86_native_terminal_dispatch.py'
+      - '.github/workflows/x86-native-terminal-dispatch.yml'
+      - 'src/x86_native_dispatch_failstop.hepta'
+      - 'tests/fixtures/x86_native_dispatch_failstop.S'
+      - 'tests/test_x86_native_dispatch_failstop.py'
+      - '.github/workflows/x86-native-dispatch-failstop.yml'
+      - 'src/x86_native_restore_select.hepta'
+      - 'tests/fixtures/x86_native_restore_select.S'
+      - 'tests/test_x86_native_restore_select.py'
+      - '.github/workflows/x86-native-restore-select.yml'
+      - 'src/x86_native_frame_content.hepta'
+      - 'tests/fixtures/x86_native_frame_content.S'
+      - 'tests/test_x86_native_frame_content.py'
+      - '.github/workflows/x86-native-frame-content.yml'
+      - 'src/x86_native_stack_bounded_dispatch.hepta'
+      - 'tests/fixtures/x86_native_stack_bounded_dispatch.S'
+      - 'tests/test_x86_native_stack_bounded_dispatch.py'
+      - '.github/workflows/x86-native-stack-bounded.yml'
+      - 'src/x86_native_scheduler_stack_entry.hepta'
+      - 'tests/fixtures/x86_native_scheduler_stack.S'
+      - 'tests/test_x86_native_scheduler_stack.py'
+      - '.github/workflows/x86-native-scheduler-stack.yml'
+      - 'src/x86_native_scheduler_guard.hepta'
+      - 'tests/fixtures/x86_native_guarded_scheduler_stack.S'
+      - 'tests/test_x86_native_scheduler_guard.py'
+      - '.github/workflows/x86-native-scheduler-guard.yml'
+      - 'src/x86_native_scheduler_identity_guard.hepta'
+      - 'tests/fixtures/x86_native_scheduler_identity_guard.S'
+      - 'tests/test_x86_native_scheduler_identity_guard.py'
+      - '.github/workflows/x86-native-scheduler-identity-guard.yml'
+      - 'src/x86_native_scheduler_huge_guard.hepta'
+      - 'tests/fixtures/x86_native_scheduler_huge_guard.S'
+      - 'tests/test_x86_native_scheduler_huge_guard.py'
+      - '.github/workflows/x86-native-scheduler-huge-guard.yml'
+      - 'src/x86_native_scheduler_upper_guard.hepta'
+      - 'tests/fixtures/x86_native_scheduler_upper_guard.S'
+      - 'tests/test_x86_native_scheduler_upper_guard.py'
+      - '.github/workflows/x86-native-scheduler-upper-guard.yml'
+      - 'src/x86_native_percpu_descriptor.hepta'
+      - 'tests/fixtures/x86_native_percpu_descriptor.S'
+      - 'tests/fixtures/x86_native_percpu_descriptor.ld'
+      - 'tests/test_x86_native_percpu_descriptor.py'
+      - '.github/workflows/x86-native-percpu-descriptor.yml'
+      - 'src/x86_native_percpu_lease.hepta'
+      - 'tests/fixtures/x86_native_percpu_lease.S'
+      - 'tests/fixtures/x86_native_percpu_lease.ld'
+      - 'tests/test_x86_native_percpu_lease.py'
+      - '.github/workflows/x86-native-percpu-lease.yml'
+      - 'src/x86_native_percpu_irq.hepta'
+      - 'tests/fixtures/x86_native_percpu_irq.S'
+      - 'tests/fixtures/x86_native_percpu_irq.ld'
+      - 'tests/test_x86_native_percpu_irq.py'
+      - '.github/workflows/x86-native-percpu-irq.yml'
+      - 'src/x86_native_generation_irq.hepta'
+      - 'src/x86_native_generation_irq_entry.hepta'
+      - 'tests/fixtures/x86_native_generation_irq.S'
+      - 'tests/fixtures/x86_native_generation_irq.ld'
+      - 'tests/test_x86_native_generation_irq.py'
+      - '.github/workflows/x86-native-generation-irq.yml'
+      - 'src/x86_native_dual_guard.hepta'
+      - 'tests/fixtures/x86_native_dual_guard.S'
+      - 'tests/test_x86_native_dual_guard.py'
+      - '.github/workflows/x86-native-dual-guard.yml'
+      - 'src/x86_native_bound_irq_entry.hepta'
+      - 'tests/fixtures/x86_native_bound_irq.S'
+      - 'tests/test_x86_native_bound_irq.py'
+      - '.github/workflows/x86-native-bound-irq.yml'
+      - 'tests/fixtures/x86_native_bound_dual.S'
+      - 'tests/test_x86_native_bound_dual.py'
+      - '.github/workflows/x86-native-bound-dual.yml'
+      - 'src/x86_native_slab_irq_entry.hepta'
+      - 'tests/fixtures/x86_native_slab_irq.S'
+      - 'tests/test_x86_native_slab_irq.py'
+      - '.github/workflows/x86-native-slab-irq.yml'
+      - 'src/x86_native_frame_slab_entry.hepta'
+      - 'tests/fixtures/x86_native_frame_slab.S'
+      - 'tests/test_x86_native_frame_slab.py'
+      - '.github/workflows/x86-native-frame-slab.yml'
+      - 'src/x86_native_slab_physical.hepta'
+      - 'tests/fixtures/x86_native_slab_physical.S'
+      - 'tests/test_x86_native_slab_physical.py'
+      - '.github/workflows/x86-native-slab-physical.yml'
+      - 'src/x86_native_page_owner.hepta'
+      - 'tests/fixtures/x86_native_page_owner.S'
+      - 'tests/test_x86_native_page_owner.py'
+      - '.github/workflows/x86-native-page-owner.yml'
+      - 'src/x86_native_page_cohort.hepta'
+      - 'tests/fixtures/x86_native_page_cohort.S'
+      - 'tests/test_x86_native_page_cohort.py'
+      - '.github/workflows/x86-native-page-cohort.yml'
+      - 'src/x86_native_page_transfer.hepta'
+      - 'tests/fixtures/x86_native_page_transfer.S'
+      - 'tests/test_x86_native_page_transfer.py'
+      - '.github/workflows/x86-native-page-transfer.yml'
+      - 'src/x86_native_page_alias.hepta'
+      - 'tests/fixtures/x86_native_page_alias.S'
+      - 'tests/test_x86_native_page_alias.py'
+      - '.github/workflows/x86-native-page-alias.yml'
+      - 'src/x86_native_page_upper.hepta'
+      - 'src/x86_native_page_lock.hepta'
+      - 'tests/fixtures/x86_native_page_upper.S'
+      - 'tests/fixtures/x86_native_page_lock.S'
+      - 'tests/test_x86_native_page_upper.py'
+      - 'tests/test_x86_native_page_lock.py'
+      - '.github/workflows/x86-native-page-upper.yml'
+      - '.github/workflows/x86-native-page-lock.yml'
+      - 'src/x86_native_page_root.hepta'
+      - 'src/x86_native_page_meta_tlb.hepta'
+      - 'tests/fixtures/x86_native_page_meta_tlb.S'
+      - 'tests/test_x86_native_page_meta_tlb.py'
+      - '.github/workflows/x86-native-page-meta-tlb.yml'
+      - '.github/workflows/x86-native-page-poison.yml'
+      - 'src/x86_native_page_poison.hepta'
+      - 'src/x86_native_page_owner_gate.hepta'
+      - 'tests/fixtures/x86_native_page_owner_gate.S'
+      - 'tests/test_x86_native_page_owner_gate.py'
+      - '.github/workflows/x86-native-page-owner-gate.yml'
+      - 'src/x86_native_page_meta_alias.hepta'
+      - 'tests/fixtures/x86_native_page_meta_alias.S'
+      - 'tests/test_x86_native_page_meta_alias.py'
+      - '.github/workflows/x86-native-page-meta-alias.yml'
+      - 'src/x86_native_page_meta_upper.hepta'
+      - 'tests/fixtures/x86_native_page_meta_upper.S'
+      - 'tests/test_x86_native_page_meta_upper.py'
+      - '.github/workflows/x86-native-page-meta-upper.yml'
+      - 'tests/test_x86_native_page_poison.py'
+      - 'tests/fixtures/x86_native_page_poison.S'
+      - 'tests/fixtures/x86_native_page_root.S'
+      - 'tests/test_x86_native_page_root.py'
+      - '.github/workflows/x86-native-page-root.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-scheduler-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: 25c165ba7c80e3e1124acd4efb083c637fbb275a
+          persist-credentials: false
+          path: .upstream/hepta-experimental
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: dc4ce25ada3327658bc415b636f0be7a371d71f9
+          persist-credentials: false
+          path: .upstream/hepta-stack
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: 846530249b26bf70bb8bb2fe52f485486a0d5188
+          persist-credentials: false
+          path: .upstream/hepta-generation
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: f587bda212423ae0ad6c4bf238ba32c855c3885a
+          persist-credentials: false
+          path: .upstream/hepta-bound
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: ac266033148d08c372eb490de023756cf10a45cf
+          persist-credentials: false
+          path: .upstream/hepta-slab
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: 5a1658e9ac1d8318eff4f0703c40f1ea13350685
+          persist-credentials: false
+          path: .upstream/hepta-frame-slab
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: sudo apt-get update && sudo apt-get install -y binutils gcc qemu-system-x86
+      - name: Rebuild exact original and new native compilers
+        run: |
+          test "$(git -C .upstream/hepta-experimental rev-parse HEAD)" = 25c165ba7c80e3e1124acd4efb083c637fbb275a
+          test "$(git -C .upstream/hepta-stack rev-parse HEAD)" = dc4ce25ada3327658bc415b636f0be7a371d71f9
+          python -B .upstream/hepta-experimental/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/kernel-experimental"
+          python -B .upstream/hepta-stack/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/stack-compiler"
+          test "$(git -C .upstream/hepta-generation rev-parse HEAD)" = 846530249b26bf70bb8bb2fe52f485486a0d5188
+          python -B .upstream/hepta-generation/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/generation-compiler"
+          test "$(git -C .upstream/hepta-bound rev-parse HEAD)" = f587bda212423ae0ad6c4bf238ba32c855c3885a
+          python -B .upstream/hepta-bound/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/bound-compiler"
+          test "$(git -C .upstream/hepta-slab rev-parse HEAD)" = ac266033148d08c372eb490de023756cf10a45cf
+          python -B .upstream/hepta-slab/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/slab-compiler"
+          test "$(git -C .upstream/hepta-frame-slab rev-parse HEAD)" = 5a1658e9ac1d8318eff4f0703c40f1ea13350685
+          python -B .upstream/hepta-frame-slab/tools/qualify_hia_kernel_selfhost_invlpg.py --output "$RUNNER_TEMP/frame-slab-compiler"
+      - name: Preserve all original 196 native frame cases
+        run: python -B tests/test_x86_native_frame_content.py --compiler-dir "$RUNNER_TEMP/kernel-experimental" --output "$RUNNER_TEMP/idle-rollback"
+      - name: Preserve all 26 stack-bounded cases
+        run: LC_ALL=C python -B tests/test_x86_native_stack_bounded_dispatch.py --compiler-dir "$RUNNER_TEMP/kernel-experimental" --parent-output "$RUNNER_TEMP/idle-rollback" --output "$RUNNER_TEMP/stack-bounded"
+      - name: Native separate scheduler stack, lease and terminal restore
+        run: LC_ALL=C python -B tests/test_x86_native_scheduler_stack.py --compiler-dir "$RUNNER_TEMP/stack-compiler" --parent-output "$RUNNER_TEMP/idle-rollback" --bounded-output "$RUNNER_TEMP/stack-bounded" --output "$RUNNER_TEMP/scheduler-stack"
+      - name: Native guard page, live walk and actual stack write fault
+        run: LC_ALL=C python -B tests/test_x86_native_scheduler_guard.py --compiler-dir "$RUNNER_TEMP/stack-compiler" --parent-output "$RUNNER_TEMP/idle-rollback" --bounded-output "$RUNNER_TEMP/stack-bounded" --scheduler-output "$RUNNER_TEMP/scheduler-stack" --output "$RUNNER_TEMP/scheduler-guard"
+      - name: Native low-leaf alias admission and actual stack write fault
+        run: LC_ALL=C python -B tests/test_x86_native_scheduler_identity_guard.py --compiler-dir "$RUNNER_TEMP/stack-compiler" --parent-output "$RUNNER_TEMP/idle-rollback" --bounded-output "$RUNNER_TEMP/stack-bounded" --scheduler-output "$RUNNER_TEMP/scheduler-stack" --output "$RUNNER_TEMP/identity-guard"
+      - name: Native sibling huge-page alias admission and actual stack write fault
+        run: LC_ALL=C python -B tests/test_x86_native_scheduler_huge_guard.py --compiler-dir "$RUNNER_TEMP/stack-compiler" --parent-output "$RUNNER_TEMP/idle-rollback" --bounded-output "$RUNNER_TEMP/stack-bounded" --scheduler-output "$RUNNER_TEMP/scheduler-stack" --output "$RUNNER_TEMP/huge-guard"
+      - name: Native upper-tree alias admission and actual stack write fault
+        run: LC_ALL=C python -B tests/test_x86_native_scheduler_upper_guard.py --compiler-dir "$RUNNER_TEMP/stack-compiler" --parent-output "$RUNNER_TEMP/idle-rollback" --bounded-output "$RUNNER_TEMP/stack-bounded" --scheduler-output "$RUNNER_TEMP/scheduler-stack" --output "$RUNNER_TEMP/upper-guard"
+      - name: Actual two-CPU native dense descriptor admission and independent refusal controls
+        run: LC_ALL=C python -B tests/test_x86_native_percpu_descriptor.py --compiler-dir "$RUNNER_TEMP/stack-compiler" --output "$RUNNER_TEMP/percpu-descriptor"
+      - name: Native two-CPU generation-bound acquire and release
+        run: LC_ALL=C python -B tests/test_x86_native_percpu_lease.py --compiler-dir "$RUNNER_TEMP/stack-compiler" --output "$RUNNER_TEMP/percpu-lease"
+      - name: Real simultaneous native IRQ stack entry and per-CPU EOI/restore
+        run: LC_ALL=C python -B tests/test_x86_native_percpu_irq.py --compiler-dir "$RUNNER_TEMP/stack-compiler" --output "$RUNNER_TEMP/percpu-irq"
+      - name: Native generation-bound raw IRQ and actual peer-busy refusal
+        run: LC_ALL=C python -B tests/test_x86_native_generation_irq.py --compiler-dir "$RUNNER_TEMP/generation-compiler" --output "$RUNNER_TEMP/generation-irq"
+      - name: Native pre-AP dual guard revocation and real per-CPU page faults
+        run: LC_ALL=C python -B tests/test_x86_native_dual_guard.py --compiler-dir "$RUNNER_TEMP/generation-compiler" --output "$RUNNER_TEMP/dual-guard"
+      - name: Native live CPU binding before lease and stack switch
+        run: LC_ALL=C python -B tests/test_x86_native_bound_irq.py --compiler-dir "$RUNNER_TEMP/bound-compiler" --output "$RUNNER_TEMP/bound-irq"
+      - name: Native live CPU binding, dual guard pages and both actual IST overflow faults
+        run: LC_ALL=C python -B tests/test_x86_native_bound_dual.py --compiler-dir "$RUNNER_TEMP/bound-compiler" --output "$RUNNER_TEMP/bound-dual"
+      - name: Native live CPU-derived slab extent before lease and RSP switch
+        run: LC_ALL=C python -B tests/test_x86_native_slab_irq.py --compiler-dir "$RUNNER_TEMP/slab-compiler" --output "$RUNNER_TEMP/slab-irq"
+      - name: Native full slab original and selected frame exclusion
+        run: LC_ALL=C python -B tests/test_x86_native_frame_slab.py --compiler-dir "$RUNNER_TEMP/frame-slab-compiler" --output "$RUNNER_TEMP/frame-slab"
+      - name: Native full slab physical extent and live page table exclusion
+        run: LC_ALL=C python -B tests/test_x86_native_slab_physical.py --compiler-dir "$RUNNER_TEMP/frame-slab-compiler" --output "$RUNNER_TEMP/slab-physical"
+      - name: Native actual two-CPU page ownership and retirement
+        run: LC_ALL=C python -B tests/test_x86_native_page_owner.py --compiler-dir "$RUNNER_TEMP/frame-slab-compiler" --output "$RUNNER_TEMP/page-owner"
+      - name: Native fixed two-CPU revoke ACK and physical page reuse
+        run: LC_ALL=C python -B tests/test_x86_native_page_cohort.py --compiler-dir "$RUNNER_TEMP/frame-slab-compiler" --output "$RUNNER_TEMP/page-cohort"
+      - name: Native zero-before-publish cross-owner physical page transfer
+        run: LC_ALL=C python -B tests/test_x86_native_page_transfer.py --compiler-dir "$RUNNER_TEMP/frame-slab-compiler" --output "$RUNNER_TEMP/page-transfer"
+      - name: Native fixed low-leaf alias exclusion before revoke ACK and reuse
+        run: LC_ALL=C python -B tests/test_x86_native_page_alias.py --compiler-dir "$RUNNER_TEMP/frame-slab-compiler" --output "$RUNNER_TEMP/page-alias"
+      - name: Native fixed upper topology exclusion before revoke ACK and reuse
+        run: LC_ALL=C python -B tests/test_x86_native_page_upper.py --compiler-dir "$RUNNER_TEMP/frame-slab-compiler" --output "$RUNNER_TEMP/page-upper"
+      - name: Native fixed cooperative page writer lease and actual busy refusal
+        run: LC_ALL=C python -B tests/test_x86_native_page_lock.py --compiler-dir "$RUNNER_TEMP/frame-slab-compiler" --output "$RUNNER_TEMP/page-lock"
+      - name: Native fixed metadata identity admission and actual remap refusal
+        run: LC_ALL=C python -B tests/test_x86_native_page_root.py --compiler-dir "$RUNNER_TEMP/frame-slab-compiler" --output "$RUNNER_TEMP/page-root"
+      - name: Native local metadata TLB refresh and actual stale translation controls
+        run: LC_ALL=C python -B tests/test_x86_native_page_meta_tlb.py --compiler-dir "$RUNNER_TEMP/frame-slab-compiler" --output "$RUNNER_TEMP/page-meta-tlb"
+      - name: Native partial transfer poison and actual writer reentry refusal
+        run: LC_ALL=C python -B tests/test_x86_native_page_poison.py --compiler-dir "$RUNNER_TEMP/frame-slab-compiler" --output "$RUNNER_TEMP/page-poison"
+      - name: Native common claim retire writer gate and poison refusal
+        run: LC_ALL=C python -B tests/test_x86_native_page_owner_gate.py --compiler-dir "$RUNNER_TEMP/frame-slab-compiler" --output "$RUNNER_TEMP/page-owner-gate"
+      - name: Native fixed low-leaf physical metadata alias exclusion before writer lease
+        run: LC_ALL=C python -B tests/test_x86_native_page_meta_alias.py --compiler-dir "$RUNNER_TEMP/frame-slab-compiler" --output "$RUNNER_TEMP/page-meta-alias"
+      - name: Native fixed upper topology metadata alias exclusion before writer lease
+        run: LC_ALL=C python -B tests/test_x86_native_page_meta_upper.py --compiler-dir "$RUNNER_TEMP/frame-slab-compiler" --output "$RUNNER_TEMP/page-meta-upper"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: page-meta-upper-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/kernel-experimental/report.json
+            ${{ runner.temp }}/stack-compiler/report.json
+            ${{ runner.temp }}/idle-rollback/
+            ${{ runner.temp }}/stack-bounded/
+            ${{ runner.temp }}/scheduler-stack/
+            ${{ runner.temp }}/scheduler-guard/
+            ${{ runner.temp }}/identity-guard/
+            ${{ runner.temp }}/huge-guard/
+            ${{ runner.temp }}/upper-guard/
+            ${{ runner.temp }}/percpu-descriptor/
+            ${{ runner.temp }}/percpu-lease/
+            ${{ runner.temp }}/percpu-irq/
+            ${{ runner.temp }}/generation-compiler/report.json
+            ${{ runner.temp }}/generation-irq/
+            ${{ runner.temp }}/dual-guard/
+            ${{ runner.temp }}/bound-compiler/report.json
+            ${{ runner.temp }}/bound-irq/
+            ${{ runner.temp }}/bound-dual/
+            ${{ runner.temp }}/slab-compiler/report.json
+            ${{ runner.temp }}/slab-irq/
+            ${{ runner.temp }}/frame-slab-compiler/report.json
+            ${{ runner.temp }}/frame-slab/
+            ${{ runner.temp }}/slab-physical/
+            ${{ runner.temp }}/page-owner/
+            ${{ runner.temp }}/page-cohort/
+            ${{ runner.temp }}/page-transfer/
+            ${{ runner.temp }}/page-alias/
+            ${{ runner.temp }}/page-upper/
+            ${{ runner.temp }}/page-lock/
+            ${{ runner.temp }}/page-root/
+            ${{ runner.temp }}/page-meta-tlb/
+            ${{ runner.temp }}/page-poison/
+            ${{ runner.temp }}/page-owner-gate/
+            ${{ runner.temp }}/page-meta-alias/
+            ${{ runner.temp }}/page-meta-upper/
+          retention-days: 7
