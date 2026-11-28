@@ -1,0 +1,25 @@
+{
+  "counts": {
+    "explicit_compat_overrides": 101,
+    "max_source_number": 472,
+    "missing_primary_entry": 19,
+    "noreturn_declarations": 2,
+    "source_rows": 462
+  },
+  "full_rewrite_complete": false,
+  "ia32_sha256": "cda861c862af19656a8a13d571b205e8fdc36e48d6594f60f558ed57d3fd5ec8",
+  "inventory_complete": false,
+  "limitations": [
+    "i386 source numbering and IA32_EMULATION declarations are not implemented handlers",
+    "The optional compat override is a source declaration, not verified dispatch",
+    "No Kconfig evaluation, ptrace ABI, register/errno translation, or userspace tests",
+    "The separate x86_64 422-row and x32 obligations remain unchanged"
+  ],
+  "linux_commit": "7595a62d45ee1a2297eafa5f2ef5d0a45142d84d",
+  "linux_root_tree": "d07c331ebf5acbde9ebf9caea9eac6e33b07ad77",
+  "schema": "heptakernel.ia32-syscall-source-obligations.v1",
+  "source_blob_oid": "2c172ef48dfd336ef823b97e4caed21314b06891",
+  "source_blob_sha256": "dac86f54b6894f0eb4482c595a463a267b5a15b552da3cf7f9ac6611aa6ab3e8",
+  "source_ledger_sha256": "ee7513c777ea1b2092f41e9379014a6d3e9e9a856def312b4f706245678a46a4",
+  "status": "SOURCE_ONLY_NO_IMPLEMENTATION_OR_KCONFIG_EVALUATION"
+}

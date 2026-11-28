@@ -35,7 +35,7 @@ def dec(data: str) -> bytes:
 
 def git(repo: Path, *args: str) -> bytes:
     return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, timeout=40,
+        ["git", "--no-replace-objects", "-C", str(repo), *args], check=True, timeout=40,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     ).stdout
 
@@ -130,11 +130,10 @@ def run(repo: Path, inventory: Path, lock_file: Path) -> dict:
             or matches[0]["mode"] not in ("100644", "100755")):
         raise ValueError("i386 table missing or not a regular Git blob")
     item = matches[0]
-    pinned_path_oid = git(
-        repo, "rev-parse", "HEAD:arch/x86/entry/syscalls/syscall_32.tbl"
-    ).strip().decode("ascii")
-    if pinned_path_oid != item["oid"]:
-        raise ValueError("i386 table blob does not match pinned tree path")
+    git_entry = git(repo, "ls-tree", "-z", commit, "--", TABLE.decode("ascii"))
+    expected_entry = f"{item['mode']} blob {item['oid']}\t".encode("ascii") + TABLE + b"\x00"
+    if git_entry != expected_entry:
+        raise ValueError("i386 syscall table mode or object differs from pinned tree path")
     blob = git(repo, "cat-file", "blob", item["oid"])
     if len(blob) != item["size"]:
         raise ValueError("i386 source blob size mismatch")

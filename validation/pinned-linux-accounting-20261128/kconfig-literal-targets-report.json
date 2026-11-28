@@ -1,0 +1,31 @@
+{
+  "context_counts": {
+    "DIRECTIVE_LEXICAL_CANDIDATE": 1922,
+    "UNRESOLVED_MIXED_HELP_INDENTATION": 13
+  },
+  "counts": {
+    "REQUIRED_UNTRACKED_LITERAL": 8,
+    "TRACKED_REGULAR_LITERAL": 1911,
+    "UNRESOLVED_LITERAL_SYNTAX": 13,
+    "UNRESOLVED_VARIABLE_GLOB_OR_ESCAPE": 3,
+    "all_lexical_edges": 1935
+  },
+  "full_rewrite_complete": false,
+  "inventory_complete": false,
+  "limitations": [
+    "All Kconfig conditions and environment substitutions are unevaluated",
+    "Help/continuation classifications are physical-line hints, not parsed Kconfig syntax",
+    "Tracked literal target does not imply an active or reachable include",
+    "Untracked required targets may be conditional or generated",
+    "Symlinks are not followed; globs/variables remain unresolved",
+    "No Linux functionality or HIA compiler capability is implemented"
+  ],
+  "linux_commit": "7595a62d45ee1a2297eafa5f2ef5d0a45142d84d",
+  "linux_root_tree": "d07c331ebf5acbde9ebf9caea9eac6e33b07ad77",
+  "schema": "heptakernel.linux-kconfig-literal-targets.v1",
+  "source_file": "kconfig-literal-targets.jsonl",
+  "source_sha256": "9efb17b55a8c643e906a1634a7c3a18864828d84c6e405e0ac31e96d15c1ca0b",
+  "status": "PARTIAL_LITERAL_TARGETS_NOT_ACTIVE_KCONFIG_GRAPH",
+  "upstream_edges_sha256": "f887c2d371a745e7bcd28f5be4a476295e4aebd1be5eb11d769810d297a06189",
+  "upstream_paths_sha256": "23d848e7824f55af7bf9e587f8e8d8e6fac2207aa69f3505b4568ea174e39d97"
+}

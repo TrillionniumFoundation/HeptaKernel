@@ -26,7 +26,7 @@ NAME = re.compile(rb"[A-Za-z_][A-Za-z_0-9]*\Z")
 
 def git(repo: Path, *args: str) -> bytes:
     return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, timeout=40,
+        ["git", "--no-replace-objects", "-C", str(repo), *args], check=True, timeout=40,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     ).stdout
 
@@ -137,9 +137,14 @@ def run(repo: Path, inventory: Path, lock_file: Path, vendor_file: Path) -> dict
         raise ValueError("original inventory SHA-256 mismatch")
     targets = [record for record in map(json.loads, paths_data.splitlines())
                if decode(record["path_b64"]) == TABLE]
-    if len(targets) != 1 or targets[0]["mode"] not in ("100644", "100755"):
+    if (len(targets) != 1 or targets[0]["type"] != "blob"
+            or targets[0]["mode"] not in ("100644", "100755")):
         raise ValueError("missing regular pinned x86 syscall table")
     target = targets[0]
+    git_entry = git(repo, "ls-tree", "-z", commit, "--", TABLE.decode("ascii"))
+    expected_entry = f"{target['mode']} blob {target['oid']}\t".encode("ascii") + TABLE + b"\x00"
+    if git_entry != expected_entry:
+        raise ValueError("x86 syscall table mode or object differs from pinned tree path")
     blob = git(repo, "cat-file", "blob", target["oid"])
     if len(blob) != target["size"]:
         raise ValueError("pinned Git syscall blob size mismatch")
