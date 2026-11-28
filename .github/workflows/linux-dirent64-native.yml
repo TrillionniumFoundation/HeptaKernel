@@ -1,0 +1,65 @@
+name: Native HIA Linux directory record
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/linux-dirent64-native.yml'
+      - 'src/linux_dirent64.hepta'
+      - 'tests/test_linux_dirent64.py'
+      - 'tools/bootstrap_hia.py'
+      - 'compatibility/hia-toolchain-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  directory-record:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: TrillionniumFoundation/Hepta
+          ref: f33d8da316de8fdf27b504371f1a5310997ff548
+          path: .toolchain/hepta
+          persist-credentials: false
+          sparse-checkout: |
+            hepta
+            tools
+            examples/hia_bootstrap
+            docs
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: gregkh/linux
+          ref: 7595a62d45ee1a2297eafa5f2ef5d0a45142d84d
+          path: .toolchain/linux
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /include/linux/dirent.h
+            /include/linux/fs_dirent.h
+            /include/uapi/linux/limits.h
+            /fs/readdir.c
+      - name: Build and compare the pinned native component
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I -S -B tools/bootstrap_hia.py --root .toolchain/hepta --output .toolchain/compiler
+          mkdir -p build
+          git rev-parse HEAD > build/linux-dirent64-commit.txt
+          python3 -I -S -B tests/test_linux_dirent64.py \
+            --compiler .toolchain/compiler/native-compiler \
+            --linux .toolchain/linux --report build/linux-dirent64.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-dirent64-native-${{ github.sha }}
+          path: |
+            build/linux-dirent64-commit.txt
+            build/linux-dirent64.json
+            .toolchain/compiler/bootstrap-report.json
+          if-no-files-found: error
+          retention-days: 14
