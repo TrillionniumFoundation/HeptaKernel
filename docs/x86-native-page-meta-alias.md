@@ -1,0 +1,9 @@
+# Native fixed low-leaf physical metadata alias exclusion before writer lease
+
+Experimental HIA candidate based on #254 exact 66f4e52f86295161fe95b477e0b83f6bfc57ab75. Full Linux acceptance remains HOLD. The prior writer metadata admission verified the identity leaf and refreshed its local translation but did not rule out a second low leaf mapping the same physical metadata page before a manual writer lease. This candidate reuses the existing native 512-leaf physical-alias scan on the metadata page, before local INVLPG and before any writer lease access. It does not change the target-page checks or writer state encoding.
+
+Independent observer on PC and Q35, in both CPU directions, installs an actual second low leaf to the writer metadata frame, writes a marker through the alias and reads it through the original mapping, then attempts manual lease acquisition. The native guard refuses with status 6 and both views of the lease word stay unchanged; bypass of only the new guard actually acquires the lease and both mappings observe the changed word. The alias PTE remains unchanged in each case. The peer is quiescent. This is fixed low-leaf admission, not general upper alias exclusion before the lease, arbitrary page-table writer exclusion, root lifetime or concurrent mutation safety.
+
+Local 84/84 PC/Q35, 42 objects; direct-call native stack bound 7488 bytes, maximum 7728 bytes, original 7936 limit, 8192 stack and 128-byte canary unchanged.
+HIA SHA256 a3ac858d58476d04c1beee936814c8994b9b5583f88ec505fed51a3166fa1554; object f4a8a39d1bd4ae89b8065467f6e4466dc27886768818928d2398c116a41da9e7; text 44477c32b0e5ecedd8d1978a1047c4038a8536f56db9e3ff23c17c5443fc5350.
+All 916 parent cases are retained in the new CI workflow, plus 84 focused cases (1000 total). The exact candidate needs independent push and PR CI and both original artifact archives. No historical failures or full Linux gates are waived.
