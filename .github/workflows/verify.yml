@@ -58,6 +58,12 @@ jobs:
               print("Verified functions:", len(checked.as_dict()["functions"]))
           PY
 
+      - name: Verify native HIA E820 aligned candidate discovery
+        shell: bash
+        run: |
+          PYTHONPATH=.toolchain/hepta python3 -c 'from pathlib import Path; from hepta.hia_agent_assembly import assemble_program; assemble_program(Path("src/e820_find_arena.hepta").read_bytes())'
+          timeout 90 python3 -B tests/test_e820_find_arena.py "$GITHUB_WORKSPACE/.toolchain/compiler/native-compiler"
+
       - name: Build the HIA object and boot image
         shell: bash
         run: |
