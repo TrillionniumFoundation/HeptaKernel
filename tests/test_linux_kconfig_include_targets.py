@@ -145,6 +145,25 @@ class KconfigLiteralTargetsTests(unittest.TestCase):
                 collect(repo, commit, source_ledger, poisoned, poisoned_manifest)
             with self.assertRaisesRegex(ValueError, "ledger"):
                 collect(repo, commit, source_ledger, edge_ledger, {**manifest, "source_paths_sha256": "0"*64})
+            without_target = [x for x in entries
+                              if base64.b64decode(x["path_b64"]) != b"sub/Kconfig"]
+            changed_type = [dict(x) for x in entries]
+            next(x for x in changed_type if base64.b64decode(x["path_b64"]) ==
+                 b"sub/Kconfig")["mode"] = "100755"
+            for changed in (without_target, changed_type):
+                encoded = b"".join((json.dumps(x, sort_keys=True) + "\n").encode()
+                                   for x in changed)
+                matching_summary = {**manifest,
+                                    "source_paths_sha256": hashlib.sha256(encoded).hexdigest(),
+                                    "counts": {**manifest["counts"], "tracked_paths": len(changed)}}
+                with self.assertRaisesRegex(ValueError, "complete pinned Git tree"):
+                    collect(repo, commit, encoded, edge_ledger, matching_summary)
+            truncated = b"".join(edge_ledger.splitlines(keepends=True)[:-1])
+            matching_summary = {**manifest,
+                                "kconfig_source_edges_sha256": hashlib.sha256(truncated).hexdigest(),
+                                "counts": {**manifest["counts"], "kconfig_source_edges": len(edges)-1}}
+            with self.assertRaisesRegex(ValueError, "incomplete Kconfig include edge ledger"):
+                collect(repo, commit, source_ledger, truncated, matching_summary)
             git(repo, "add", ".")
             git(repo, "commit", "-qm", "changed HEAD")
             with self.assertRaisesRegex(ValueError, "HEAD"):
