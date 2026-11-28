@@ -1,0 +1,91 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn timekeeper_update(request:readbuf,reply:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,state:mutbuf)
+  reply_size:usize = buffer.len(reply)
+  reply_min:usize = const() {"value":24}
+  room:bool = compare.ge(reply_size,reply_min)
+  branch room request_size(request,reply,state) short()
+block short()
+  short_code:u32 = const() {"value":1}
+  ret(short_code)
+block request_size(q_req:readbuf,q_out:mutbuf,q_mem:mutbuf)
+  actual:usize = buffer.len(q_req)
+  expected:usize = const() {"value":16}
+  good:bool = compare.eq(actual,expected)
+  branch good state_size(q_req,q_out,q_mem) bad_request(q_out)
+block bad_request(br_out:mutbuf)
+  br_code:u32 = const() {"value":2}
+  br_zero:u64 = const() {"value":0}
+  br_ret:u32 = call(br_out,br_code,br_zero,br_zero) {"function":"write_reply"}
+  ret(br_ret)
+block state_size(ss_req:readbuf,ss_out:mutbuf,ss_mem:mutbuf)
+  ss_actual:usize = buffer.len(ss_mem)
+  ss_expected:usize = const() {"value":64}
+  ss_good:bool = compare.eq(ss_actual,ss_expected)
+  branch ss_good verify_generation(ss_req,ss_out,ss_mem) bad_state(ss_out)
+block bad_state(bs_out:mutbuf)
+  bs_code:u32 = const() {"value":6}
+  bs_zero:u64 = const() {"value":0}
+  bs_ret:u32 = call(bs_out,bs_code,bs_zero,bs_zero) {"function":"write_reply"}
+  ret(bs_ret)
+block verify_generation(v_req:readbuf,v_out:mutbuf,v_mem:mutbuf)
+  v_off0:usize = const() {"value":0}
+  v_off24:usize = const() {"value":24}
+  v_expect:u64 = call(v_req,v_off0) {"function":"read_u64"}
+  v_generation:u64 = call(v_mem,v_off24) {"function":"state_u64"}
+  v_current:bool = compare.eq(v_expect,v_generation)
+  branch v_current check_generation(v_req,v_out,v_mem,v_generation) stale(v_out)
+block stale(st_out:mutbuf)
+  st_code:u32 = const() {"value":7}
+  st_zero:u64 = const() {"value":0}
+  st_ret:u32 = call(st_out,st_code,st_zero,st_zero) {"function":"write_reply"}
+  ret(st_ret)
+block check_generation(cg_req:readbuf,cg_out:mutbuf,cg_mem:mutbuf,cg_generation:u64)
+  cg_max:u64 = const() {"value":18446744073709551615}
+  cg_room:bool = compare.lt(cg_generation,cg_max)
+  branch cg_room convert(cg_req,cg_out,cg_mem,cg_generation) exhausted(cg_out)
+block exhausted(ex_out:mutbuf)
+  ex_code:u32 = const() {"value":8}
+  ex_zero:u64 = const() {"value":0}
+  ex_ret:u32 = call(ex_out,ex_code,ex_zero,ex_zero) {"function":"write_reply"}
+  ret(ex_ret)
+block convert(c_req:readbuf,c_out:mutbuf,c_mem:mutbuf,c_generation:u64)
+  c_8:usize = const() {"value":8}
+  c_now:u64 = call(c_req,c_8) {"function":"read_u64"}
+  c_status:u32 = call(c_req,c_out,c_mem) {"function":"clock_convert_fields"}
+  c_zero:u32 = const() {"value":0}
+  c_ok:bool = compare.eq(c_status,c_zero)
+  branch c_ok check_sum(c_out,c_mem,c_generation,c_now) propagate(c_status)
+block propagate(p_status:u32)
+  ret(p_status)
+block check_sum(a_out:mutbuf,a_mem:mutbuf,a_generation:u64,a_now:u64)
+  a_off8:usize = const() {"value":8}
+  a_off16:usize = const() {"value":16}
+  a_max:u64 = const() {"value":18446744073709551615}
+  a_previous:u64 = call(a_mem,a_off16) {"function":"state_u64"}
+  a_delta:u64 = call(a_out,a_off8) {"function":"state_u64"}
+  a_fraction:u64 = call(a_out,a_off16) {"function":"state_u64"}
+  a_room:u64 = int.sub.wrap(a_max,a_previous)
+  a_fits:bool = compare.le(a_delta,a_room)
+  branch a_fits commit(a_out,a_mem,a_previous,a_delta,a_generation,a_now,a_fraction) overflow(a_out)
+block overflow(o_out:mutbuf)
+  o_code:u32 = const() {"value":9}
+  o_zero:u64 = const() {"value":0}
+  o_ret:u32 = call(o_out,o_code,o_zero,o_zero) {"function":"write_reply"}
+  ret(o_ret)
+block commit(m_out:mutbuf,m_mem:mutbuf,m_previous:u64,m_delta:u64,m_generation:u64,m_now:u64,m_fraction:u64)
+  m_off0:usize = const() {"value":0}
+  m_off8:usize = const() {"value":8}
+  m_off16:usize = const() {"value":16}
+  m_off24:usize = const() {"value":24}
+  m_one:u64 = const() {"value":1}
+  m_total:u64 = int.add.wrap(m_previous,m_delta)
+  m_next:u64 = int.add.wrap(m_generation,m_one)
+  m_ws0:u32 = call(m_mem,m_off0,m_now) {"function":"write_u64"}
+  m_ws8:u32 = call(m_mem,m_off8,m_fraction) {"function":"write_u64"}
+  m_ws16:u32 = call(m_mem,m_off16,m_total) {"function":"write_u64"}
+  m_ws24:u32 = call(m_mem,m_off24,m_next) {"function":"write_u64"}
+  m_code:u32 = const() {"value":0}
+  m_ret:u32 = call(m_out,m_code,m_total,m_next) {"function":"write_reply"}
+  ret(m_ret)
+end
