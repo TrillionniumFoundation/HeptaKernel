@@ -5,12 +5,16 @@ on:
     paths:
       - 'src/linux_devnum.hepta'
       - 'tests/test_linux_devnum.py'
+      - 'src/x86_stat_dev_fields.hepta'
+      - 'tests/test_x86_stat_dev_fields.py'
       - '.github/workflows/linux-devnum-native.yml'
   push:
     branches: [main, 'automation/dot-linux-devnum-*']
     paths:
       - 'src/linux_devnum.hepta'
       - 'tests/test_linux_devnum.py'
+      - 'src/x86_stat_dev_fields.hepta'
+      - 'tests/test_x86_stat_dev_fields.py'
       - '.github/workflows/linux-devnum-native.yml'
   workflow_dispatch:
 
@@ -51,6 +55,12 @@ jobs:
           sparse-checkout: |
             /include/linux/kdev_t.h
             /include/uapi/linux/kdev_t.h
+            /include/uapi/asm-generic/posix_types.h
+            /include/uapi/asm-generic/bitsperlong.h
+            /arch/x86/include/uapi/asm/stat.h
+            /arch/x86/include/uapi/asm/posix_types.h
+            /arch/x86/include/uapi/asm/posix_types_64.h
+            /arch/x86/include/uapi/asm/bitsperlong.h
       - name: Rebuild compiler, verify HIA, and run exact Linux comparison
         shell: bash
         run: |
@@ -65,10 +75,25 @@ jobs:
           mkdir -p build
           python3 -I -B tests/test_linux_devnum.py --compiler .toolchain/compiler/native-compiler \
             --linux-root .upstream/linux --report build/linux-devnum-native.json
+      - name: Run native stat device-field staging comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I -B tests/test_x86_stat_dev_fields.py --compiler .toolchain/compiler/native-compiler \
+            --linux-root .upstream/linux --report build/x86-stat-dev-fields.json \
+            --composed build/x86-stat-dev-fields-composed.hepta
+          PYTHONPATH=.toolchain/hepta python3 -B - <<'PY'
+          from pathlib import Path
+          from hepta.hia_agent_assembly import assemble_program
+          assemble_program(Path("build/x86-stat-dev-fields-composed.hepta").read_bytes())
+          PY
       - name: Retain exact candidate evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: linux-devnum-native-${{ github.sha }}
-          path: build/linux-devnum-native.json
+          path: |
+            build/linux-devnum-native.json
+            build/x86-stat-dev-fields.json
+            build/x86-stat-dev-fields-composed.hepta
           if-no-files-found: error
           retention-days: 14

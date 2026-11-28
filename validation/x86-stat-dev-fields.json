@@ -1,0 +1,27 @@
+{
+  "schema": "heptakernel.x86-stat-device-fields.v1",
+  "status": "PASS",
+  "full_linux_acceptance": "HOLD",
+  "linux_commit": "7595a62d45ee1a2297eafa5f2ef5d0a45142d84d",
+  "linux_header_git_blobs": {
+    "include/linux/kdev_t.h": "4856706fbfeb4537a67e40cb54887584045a474f",
+    "include/uapi/linux/kdev_t.h": "e1990f2e97772a8bb798ac9b9a9d2fd3e8790e88",
+    "arch/x86/include/uapi/asm/stat.h": "9e3982d95d0f18ebaceb38795a326778310c946f",
+    "arch/x86/include/uapi/asm/posix_types.h": "c661e95f0134dbedab539462c1d620e2071a8e5b",
+    "arch/x86/include/uapi/asm/posix_types_64.h": "515afb8059ce359f9deef21dba95003fc11e2781",
+    "arch/x86/include/uapi/asm/bitsperlong.h": "5d72c84588388793d0d54a21b8252c48af3347d6",
+    "include/uapi/asm-generic/posix_types.h": "0a90ad92dbf3a29df42901afeb643feeddbe87ae",
+    "include/uapi/asm-generic/bitsperlong.h": "fadb3f857f2855db40dca88333d977e6a51b4c11"
+  },
+  "compiler_sha256": "87c247e4d1c3c9a449d2947fd4227fdc186d519bffd203a04cafce7861a4ed54",
+  "field_stager_sha256": "5b466ff3a42caae632364420f7794f455142b27482da9af36b3a53c2264e016e",
+  "standalone_codec_sha256": "a4956dfd1da3049ded320dfa0e7eb86888ee7ee87cfaad50045d4c40c333966e",
+  "composed_hia_sha256": "19f0d53a9d2205edc3c1886d023df891a6dca09f17b14635cdeefd6118297ab1",
+  "native_object_sha256": "5fe30e422089f298551c31542d24a2693911c075322fc92267fd7605df22ab1a",
+  "loaded_text_sha256": "c03b93055ecea371bae3c76d97e02a8566e253e4c43024d6b59238a7b048c8a2",
+  "wrong_offset_control_text_sha256": "748634e5ed2e72e4252d032199fc0d4fb2bf1d855bf42d118f98ee401cfa37ab",
+  "accepted": 5617,
+  "refused_without_write": 33,
+  "all_other_bytes_and_canaries_unchanged": true,
+  "native_negative_control_detected": true
+}

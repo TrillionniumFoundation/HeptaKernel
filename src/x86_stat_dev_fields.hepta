@@ -1,0 +1,85 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn x86_stat_dev_fields(request:readbuf,dst:mutbuf,scratch:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,dst:mutbuf,scratch:mutbuf)
+  expected:usize = const() {"value":144}
+  length:usize = buffer.len(dst)
+  exact:bool = compare.eq(length,expected)
+  branch exact admit(request,dst) bad_length()
+block admit(a_req:readbuf,a_dst:mutbuf)
+  req_len:usize = buffer.len(a_req)
+  need:usize = const() {"value":16}
+  request_ok:bool = compare.eq(req_len,need)
+  branch request_ok convert(a_req,a_dst) bad_length()
+block convert(c_req:readbuf,c_dst:mutbuf)
+  in_offset:usize = const() {"value":0}
+  in_r_offset:usize = const() {"value":8}
+  c_dev:u64 = call(c_req,in_offset) {"function":"load_stat_dev_word"}
+  c_rdev:u64 = call(c_req,in_r_offset) {"function":"load_stat_dev_word"}
+  mode:u64 = const() {"value":0}
+  encoded:u64 = call(mode,c_dev) {"function":"linux_devnum"}
+  encoded_r:u64 = call(mode,c_rdev) {"function":"linux_devnum"}
+  refused_code:u64 = const() {"value":18446744073709551615}
+  valid:bool = compare.ne(encoded,refused_code)
+  valid_r:bool = compare.ne(encoded_r,refused_code)
+  both:bool = bool.and(valid,valid_r)
+  branch both commit(c_dst,encoded,encoded_r) bad_input()
+block commit(w_dst:mutbuf,w_dev:u64,w_rdev:u64)
+  offset:usize = const() {"value":0}
+  offset_r:usize = const() {"value":40}
+  first:u32 = call(w_dst,offset,w_dev) {"function":"store_stat_dev_word"}
+  second:u32 = call(w_dst,offset_r,w_rdev) {"function":"store_stat_dev_word"}
+  status:u32 = bit.or(first,second)
+  ret(status)
+block bad_length()
+  bad_size:u32 = const() {"value":1}
+  ret(bad_size)
+block bad_input()
+  bad_dev:u32 = const() {"value":2}
+  ret(bad_dev)
+end
+fn store_stat_dev_word(dst:mutbuf,base:usize,word:u64) -> (u32) effects(write,trap) entry(start)
+block start(dst:mutbuf,base:usize,word:u64)
+  start_idx:u64 = const() {"value":0}
+  jump loop(dst,base,word,start_idx)
+block loop(l_dst:mutbuf,l_base:usize,l_word:u64,l_idx:u64)
+  width:u64 = const() {"value":8}
+  pending:bool = compare.lt(l_idx,width)
+  branch pending store(l_dst,l_base,l_word,l_idx) done()
+block store(s_dst:mutbuf,s_base:usize,s_word:u64,s_idx:u64)
+  step:usize = int.cast(s_idx) {"mode":"wrap"}
+  addr:usize = int.add.wrap(s_base,step)
+  bits_in_byte:u64 = const() {"value":8}
+  shift:u64 = int.mul.wrap(s_idx,bits_in_byte)
+  shifted:u64 = int.shr.checked(s_word,shift)
+  byte:u8 = int.cast(shifted) {"mode":"wrap"}
+  _ = buffer.store(s_dst,addr,byte)
+  one_byte:u64 = const() {"value":1}
+  incremented:u64 = int.add.wrap(s_idx,one_byte)
+  jump loop(s_dst,s_base,s_word,incremented)
+block done()
+  written:u32 = const() {"value":0}
+  ret(written)
+end
+fn load_stat_dev_word(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
+  rt_z:u64 = const() {"value":0}
+  jump loop(bytes,offset,rt_z,rt_z)
+block loop(p3_2_b:readbuf,p3_2_base:usize,p3_2_i:u64,p3_2_acc:u64)
+  rt_w:u64 = const() {"value":8}
+  rt_cont:bool = compare.lt(p3_2_i,rt_w)
+  branch rt_cont byte(p3_2_b,p3_2_base,p3_2_i,p3_2_acc) done(p3_2_acc)
+block byte(p3_3_b:readbuf,p3_3_base:usize,p3_3_i:u64,p3_3_acc:u64)
+  rt_i:usize = int.cast(p3_3_i) {"mode":"wrap"}
+  rt_off:usize = int.add.wrap(p3_3_base,rt_i)
+  rt_oct:u8 = buffer.load(p3_3_b,rt_off)
+  rt_wide:u64 = int.cast(rt_oct) {"mode":"wrap"}
+  rt_eight:u64 = const() {"value":8}
+  rt_sh:u64 = int.mul.wrap(p3_3_i,rt_eight)
+  rt_v:u64 = int.shl.checked(rt_wide,rt_sh)
+  rt_nextacc:u64 = bit.or(p3_3_acc,rt_v)
+  rt_one:u64 = const() {"value":1}
+  rt_nexti:u64 = int.add.wrap(p3_3_i,rt_one)
+  jump loop(p3_3_b,p3_3_base,rt_nexti,rt_nextacc)
+block done(p3_4_value:u64)
+  ret(p3_4_value)
+end
