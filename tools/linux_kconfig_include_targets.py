@@ -24,7 +24,7 @@ DYNAMIC = b"$*?[]\\"
 
 
 def git(repo: Path, *arguments: str) -> bytes:
-    return subprocess.run(["git", "-C", str(repo), *arguments], check=True,
+    return subprocess.run(["git", "--no-replace-objects", "-C", str(repo), *arguments], check=True,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout
 
 
@@ -34,6 +34,19 @@ def decode(value: str) -> bytes:
 
 def encode(value: bytes) -> str:
     return base64.b64encode(value).decode("ascii")
+
+
+def tree_identities(repo: Path, commit: str) -> dict:
+    entries = {}
+    for raw in git(repo, "ls-tree", "--full-tree", "-r", "-z", "-l", commit).split(b"\0"):
+        if not raw:
+            continue
+        header, path = raw.split(b"\t", 1)
+        mode, kind, oid, size = header.decode("ascii").split()
+        if not path or path in entries:
+            raise ValueError("malformed or duplicate pinned Git path")
+        entries[path] = (mode, kind, oid, None if size == "-" else int(size))
+    return entries
 
 
 
@@ -131,7 +144,29 @@ def collect(repo: Path, commit: str, source_bytes: bytes, edge_bytes: bytes,
         paths[path] = row
     if len(paths) != inventory["counts"]["tracked_paths"]:
         raise ValueError("incomplete source path ledger")
+    actual = tree_identities(repo, commit)
+    declared = {path: (row["mode"], row["type"], row["oid"], row["size"])
+                for path, row in paths.items()}
+    if declared != actual:
+        raise ValueError("source path ledger differs from complete pinned Git tree")
+
+    # Recount the physical lexical sites independently of the edge ledger's
+    # count field. Reuse content when multiple tracked paths name one blob.
     records, counts, scope_counts, seen, blob_lines, contexts = [], Counter(), Counter(), set(), {}, {}
+    expected = set()
+    for path, (mode, _kind, oid, size) in actual.items():
+        basename = path.rsplit(b"/", 1)[-1]
+        if not (basename == b"Kconfig" or basename.startswith(b"Kconfig.")):
+            continue
+        if mode not in ("100644", "100755"):
+            continue
+        if oid not in blob_lines:
+            blob = git(repo, "cat-file", "blob", oid)
+            if len(blob) != size:
+                raise ValueError("Kconfig original Git blob size mismatch")
+            blob_lines[oid] = blob.splitlines()
+        expected.update((path, number) for number, line in enumerate(blob_lines[oid], 1)
+                        if SOURCE.match(line))
     for line in edge_bytes.splitlines():
         edge = json.loads(line)
         path = decode(edge["path_b64"])
@@ -147,12 +182,10 @@ def collect(repo: Path, commit: str, source_bytes: bytes, edge_bytes: bytes,
         identity = (path, number)
         if identity in seen:
             raise ValueError("duplicate Kconfig include source line")
+        if identity not in expected:
+            raise ValueError("Kconfig source line differs from immutable blob")
         seen.add(identity)
-        if edge["blob_oid"] not in blob_lines:
-            blob = git(repo, "cat-file", "blob", edge["blob_oid"])
-            if len(blob) != original["size"]:
-                raise ValueError("Kconfig original Git blob size mismatch")
-            blob_lines[edge["blob_oid"]] = blob.splitlines()
+        if edge["blob_oid"] not in contexts:
             contexts[edge["blob_oid"]] = source_context(blob_lines[edge["blob_oid"]])
         lines = blob_lines[edge["blob_oid"]]
         if number > len(lines):
@@ -169,7 +202,7 @@ def collect(repo: Path, commit: str, source_bytes: bytes, edge_bytes: bytes,
         records.append(row)
         counts[status] += 1
         scope_counts[context] += 1
-    if len(records) != inventory["counts"]["kconfig_source_edges"]:
+    if seen != expected or len(records) != inventory["counts"]["kconfig_source_edges"]:
         raise ValueError("incomplete Kconfig include edge ledger")
     if git(repo, "rev-parse", "HEAD").strip().decode("ascii") != commit:
         raise ValueError("Linux HEAD moved during include-target audit")
