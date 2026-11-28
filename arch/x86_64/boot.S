@@ -638,6 +638,10 @@ hia_idt_next64:
     call puts64
 #endif
 
+#ifdef HEPTAKERNEL_TEST_E820_DISCOVERY
+    call discovery_choose64
+#endif
+
     /* Real Multiboot loader map, passed to the actual HIA-generated
      * E820 checker before any test physical frame is touched.
      */
@@ -656,7 +660,11 @@ hia_idt_next64:
     jne fail64
     cmpq $0, e820_reply(%rip)
     jne fail64
+#ifdef HEPTAKERNEL_TEST_E820_DISCOVERY
+    cmpq $DISCOVERY_PAGES, e820_reply+8(%rip)
+#else
     cmpq $1024, e820_reply+8(%rip)
+#endif
     jne fail64
     leaq message_map_pass(%rip), %rsi
     call puts64
@@ -666,6 +674,9 @@ hia_idt_next64:
     call reservation_admit64
     leaq message_reservation_pass(%rip), %rsi
     call puts64
+#ifdef HEPTAKERNEL_TEST_E820_DISCOVERY
+    jmp discovery_probe64
+#endif
 #if defined(HEPTAKERNEL_TEST_PMM_DUAL_HW)
     /* Isolated QEMU physical-RAM observation of the genuine HIA one-call
      * two-zone claim. The firmware observer and serial/port I/O are NON-HIA. */
@@ -4697,17 +4708,27 @@ wp_store_insn:
 
 /* The non-HIA Multiboot transport populates a bounded native-HIA request.
  * Three actual live intervals cover the image/BSS/stack, Multiboot info,
- * and original loader mmap. The additional fourth interval is a fault
- * injection only. All of the 4-8 MiB test arena is checked once here.
+ * and original loader mmap. The fixed fixture checks all 4-8 MiB.
+ * The opt-in discovery fixture checks its exact returned span and,
+ * in its reserved variant, also checks the declared exclusion.
  */
+#ifdef HEPTAKERNEL_TEST_E820_DISCOVERY
+#include "e820_discovery_fixture.inc"
+#endif
 reservation_admit64:
     movabsq $0xa55aa55a5aa55aa5, %r10
     movq %r10, reservation_guard_before(%rip)
     movq %r10, reservation_guard_after(%rip)
     movq %r10, reservation_unused(%rip)
     movq %r10, reservation_unused+8(%rip)
+#ifdef HEPTAKERNEL_TEST_E820_DISCOVERY
+    movq e820_request(%rip), %rax
+    movq %rax, reservation_request(%rip)
+    movq $DISCOVERY_PAGES, reservation_request+8(%rip)
+#else
     movq $ARENA_MIN, reservation_request(%rip)
     movq $1024, reservation_request+8(%rip)
+#endif
     movq $0, reservation_request+16(%rip)
     movq $3, reservation_request+24(%rip)
     leaq __kernel_start(%rip), %rax
@@ -4723,7 +4744,12 @@ reservation_admit64:
     movq %rdx, reservation_request+64(%rip)
     movl 44(%rax), %edx
     movq %rdx, reservation_request+72(%rip)
-#ifdef HEPTAKERNEL_TEST_INJECT_PROTECTED
+#if defined(HEPTAKERNEL_TEST_E820_DISCOVERY_RESERVED)
+    movq $4, reservation_request+24(%rip)
+    movq $(ARENA_MIN+1), reservation_request+80(%rip)
+    movq $1, reservation_request+88(%rip)
+    movl $96, %esi
+#elif defined(HEPTAKERNEL_TEST_INJECT_PROTECTED)
     /* Test-only claimed reservation overlapping otherwise usable RAM. */
     movq $4, reservation_request+24(%rip)
     movq $(ARENA_MIN + PAGE_BYTES), reservation_request+80(%rip)
@@ -4744,7 +4770,11 @@ reservation_admit64:
     jne fail64
     cmpq $0, reservation_reply(%rip)
     jne fail64
+#ifdef HEPTAKERNEL_TEST_E820_DISCOVERY
+    cmpq $DISCOVERY_PAGES, reservation_reply+8(%rip)
+#else
     cmpq $1024, reservation_reply+8(%rip)
+#endif
     jne fail64
     movabsq $0xa55aa55a5aa55aa5, %r10
     cmpq %r10, reservation_guard_before(%rip)

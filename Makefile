@@ -2808,3 +2808,25 @@ test-linux-kbuild-object-activation:
 	$(PYTHON) tests/test_linux_kbuild_ifdef.py
 
 test: test-linux-kbuild-object-activation
+
+# Opt-in positive boot fixtures; neither changes the default boot image.
+E820_DISCOVERY_BOOT_DEPS := build/kernel.o build/e820-boot.o build/arena-boot.o build/owner-boot.o build/reservation-boot.o build/pte-boot.o build/pt-commit-boot.o build/pf-gate-boot.o build/idt-gate-boot.o build/user-gdt-boot.o build/tss-gdt-boot.o build/tss-state-boot.o build/e820-discovery-native.o
+
+build/e820-discovery-native.o: src/e820_find_arena.hepta | build check-compiler
+	@set -eu; tmp=$$(mktemp build/.e820-discovery.XXXXXX); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	env -i PATH= "$(HEPTA_COMPILER)" < "$<" > "$$tmp"; test -s "$$tmp"; \
+	test -z "$$(nm -u "$$tmp")"; objcopy --redefine-sym f0=e820_discovery_f0 "$$tmp" "$@"
+
+build/e820-discovery-plain-boot.o: arch/x86_64/boot.S arch/x86_64/e820_discovery_fixture.inc build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_E820_DISCOVERY=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/e820-discovery-reserved-boot.o: arch/x86_64/boot.S arch/x86_64/e820_discovery_fixture.inc build/boot-cases.bin
+	cc -DHEPTAKERNEL_TEST_E820_DISCOVERY=1 -DHEPTAKERNEL_TEST_E820_DISCOVERY_RESERVED=1 -c -m64 -nostdlib -fno-pie -o "$@" "$<"
+
+build/e820-discovery-%-multiboot.elf: build/e820-discovery-%-boot.o $(E820_DISCOVERY_BOOT_DEPS) arch/x86_64/linker.ld
+	ld -nostdlib -z noexecstack -z max-page-size=0x1000 -T arch/x86_64/linker.ld -o "$(@:-multiboot.elf=.elf)" $(filter %.o,$^)
+	objcopy -O elf32-i386 "$(@:-multiboot.elf=.elf)" "$@"
+
+.PHONY: test-e820-discovery-boot
+test-e820-discovery-boot: build/e820-discovery-plain-multiboot.elf build/e820-discovery-reserved-multiboot.elf build/kernel-multiboot.elf
+	$(PYTHON) tests/test_e820_discovery_qemu.py --qemu "$(QEMU)"
