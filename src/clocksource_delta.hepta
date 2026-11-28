@@ -1,0 +1,178 @@
+hia-asm.v1 hepta.hia.program.v8 selfhost_elf
+fn clock_delta(request:readbuf,reply:mutbuf,state:mutbuf) -> (u32) effects(read,write,trap) entry(start)
+block start(request:readbuf,reply:mutbuf,state:mutbuf)
+  rsize:usize = buffer.len(reply)
+  rmin:usize = const() {"value":24}
+  room:bool = compare.ge(rsize,rmin)
+  branch room request_size(request,reply) short()
+block short()
+  short_code:u32 = const() {"value":1}
+  ret(short_code)
+block request_size(req:readbuf,out:mutbuf)
+  qsize:usize = buffer.len(req)
+  qmin:usize = const() {"value":56}
+  exact:bool = compare.eq(qsize,qmin)
+  branch exact decode(req,out) bad_request(out)
+block bad_request(bq_out:mutbuf)
+  bq_status:u32 = const() {"value":2}
+  bq_zero:u64 = const() {"value":0}
+  bq_ret:u32 = call(bq_out,bq_status,bq_zero,bq_zero) {"function":"write_reply"}
+  ret(bq_ret)
+block decode(d_req:readbuf,d_out:mutbuf)
+  o0:usize = const() {"value":0}
+  o8:usize = const() {"value":8}
+  o16:usize = const() {"value":16}
+  o24:usize = const() {"value":24}
+  o32:usize = const() {"value":32}
+  o40:usize = const() {"value":40}
+  o48:usize = const() {"value":48}
+  prior:u64 = call(d_req,o0) {"function":"read_u64"}
+  now:u64 = call(d_req,o8) {"function":"read_u64"}
+  mask:u64 = call(d_req,o16) {"function":"read_u64"}
+  limit:u64 = call(d_req,o24) {"function":"read_u64"}
+  mult:u64 = call(d_req,o32) {"function":"read_u64"}
+  shift:u64 = call(d_req,o40) {"function":"read_u64"}
+  fraction:u64 = call(d_req,o48) {"function":"read_u64"}
+  zero:u64 = const() {"value":0}
+  one:u64 = const() {"value":1}
+  max32:u64 = const() {"value":4294967295}
+  maxshift:u64 = const() {"value":32}
+  plus:u64 = int.add.wrap(mask,one)
+  holes:u64 = bit.and(mask,plus)
+  no_holes:bool = compare.eq(holes,zero)
+  half:u64 = int.shr.checked(mask,one)
+  valid_limit:bool = compare.le(limit,half)
+  positive_limit:bool = compare.gt(limit,zero)
+  fits_prior:bool = compare.le(prior,mask)
+  fits_next:bool = compare.le(now,mask)
+  nonzero_mult:bool = compare.gt(mult,zero)
+  fits_mult:bool = compare.le(mult,max32)
+  fits_shift:bool = compare.le(shift,maxshift)
+  geo1:bool = bool.and(no_holes,valid_limit)
+  geo2:bool = bool.and(geo1,positive_limit)
+  samples:bool = bool.and(fits_prior,fits_next)
+  geo:bool = bool.and(geo2,samples)
+  scale1:bool = bool.and(nonzero_mult,fits_mult)
+  scale:bool = bool.and(scale1,fits_shift)
+  profile:bool = bool.and(geo,scale)
+  branch profile check_fraction(d_out,prior,now,mask,limit,mult,shift,fraction) bad_profile(d_out)
+block bad_profile(bp_out:mutbuf)
+  bp_status:u32 = const() {"value":3}
+  bp_zero:u64 = const() {"value":0}
+  bp_ret:u32 = call(bp_out,bp_status,bp_zero,bp_zero) {"function":"write_reply"}
+  ret(bp_ret)
+block check_fraction(cf_out:mutbuf,cf_prior:u64,cf_next:u64,cf_mask:u64,cf_limit:u64,cf_mult:u64,cf_shift:u64,cf_fraction:u64)
+  cf_one:u64 = const() {"value":1}
+  cf_denom:u64 = int.shl.checked(cf_one,cf_shift)
+  cf_valid:bool = compare.lt(cf_fraction,cf_denom)
+  branch cf_valid check_delta(cf_out,cf_prior,cf_next,cf_mask,cf_limit,cf_mult,cf_shift,cf_denom,cf_fraction) bad_profile(cf_out)
+block check_delta(cd_out:mutbuf,cd_prior:u64,cd_next:u64,cd_mask:u64,cd_limit:u64,cd_mult:u64,cd_shift:u64,cd_denom:u64,cd_fraction:u64)
+  cd_difference:u64 = int.sub.wrap(cd_next,cd_prior)
+  cd_delta:u64 = bit.and(cd_difference,cd_mask)
+  cd_valid:bool = compare.le(cd_delta,cd_limit)
+  branch cd_valid scale_delta(cd_out,cd_delta,cd_mult,cd_shift,cd_denom,cd_fraction) outside_window(cd_out)
+block outside_window(ow_out:mutbuf)
+  ow_status:u32 = const() {"value":4}
+  ow_zero:u64 = const() {"value":0}
+  ow_ret:u32 = call(ow_out,ow_status,ow_zero,ow_zero) {"function":"write_reply"}
+  ret(ow_ret)
+block scale_delta(sd_out:mutbuf,sd_delta:u64,sd_mult:u64,sd_shift:u64,sd_denom:u64,sd_fraction:u64)
+  sd_32:u64 = const() {"value":32}
+  sd_mask32:u64 = const() {"value":4294967295}
+  sd_one:u64 = const() {"value":1}
+  sd_zero:u64 = const() {"value":0}
+  sd_low:u64 = bit.and(sd_delta,sd_mask32)
+  sd_high:u64 = int.shr.checked(sd_delta,sd_32)
+  sd_p:u64 = int.mul.wrap(sd_low,sd_mult)
+  sd_p0:u64 = int.add.wrap(sd_p,sd_fraction)
+  sd_p1:u64 = int.mul.wrap(sd_high,sd_mult)
+  sd_carry:u64 = int.shr.checked(sd_p0,sd_32)
+  sd_middle:u64 = int.add.wrap(sd_p1,sd_carry)
+  sd_highword:u64 = int.shr.checked(sd_middle,sd_32)
+  sd_excess:u64 = int.shr.checked(sd_highword,sd_shift)
+  sd_mid_low:u64 = bit.and(sd_middle,sd_mask32)
+  sd_shifted:u64 = int.shl.checked(sd_mid_low,sd_32)
+  sd_lowword:u64 = bit.and(sd_p0,sd_mask32)
+  sd_word:u64 = bit.or(sd_shifted,sd_lowword)
+  sd_frac_mask:u64 = int.sub.wrap(sd_denom,sd_one)
+  sd_remainder:u64 = bit.and(sd_word,sd_frac_mask)
+  sd_fits:bool = compare.eq(sd_excess,sd_zero)
+  branch sd_fits finish(sd_out,sd_word,sd_highword,sd_shift,sd_remainder) overflow(sd_out)
+block overflow(of_out:mutbuf)
+  of_status:u32 = const() {"value":5}
+  of_zero:u64 = const() {"value":0}
+  of_ret:u32 = call(of_out,of_status,of_zero,of_zero) {"function":"write_reply"}
+  ret(of_ret)
+block finish(f_out:mutbuf,f_word:u64,f_high:u64,f_shift:u64,f_remainder:u64)
+  f_zero:u64 = const() {"value":0}
+  f_unshifted:bool = compare.eq(f_shift,f_zero)
+  branch f_unshifted success(f_out,f_word,f_remainder) combine(f_out,f_word,f_high,f_shift,f_remainder)
+block combine(cb_out:mutbuf,cb_word:u64,cb_high:u64,cb_shift:u64,cb_remainder:u64)
+  cb_64:u64 = const() {"value":64}
+  cb_negshift:u64 = int.sub.wrap(cb_64,cb_shift)
+  cb_top:u64 = int.shl.checked(cb_high,cb_negshift)
+  cb_bottom:u64 = int.shr.checked(cb_word,cb_shift)
+  cb_ns:u64 = bit.or(cb_top,cb_bottom)
+  jump success(cb_out,cb_ns,cb_remainder)
+block success(s_out:mutbuf,s_ns:u64,s_remainder:u64)
+  s_status:u32 = const() {"value":0}
+  s_ret:u32 = call(s_out,s_status,s_ns,s_remainder) {"function":"write_reply"}
+  ret(s_ret)
+end
+fn read_u64(bytes:readbuf,offset:usize) -> (u64) effects(read,trap) entry(start)
+block start(bytes:readbuf,offset:usize)
+  pc_rzero:u64 = const() {"value":0}
+  jump loop(bytes,offset,pc_rzero,pc_rzero)
+block loop(pc_rbytes:readbuf,pc_rbase:usize,pc_ri:u64,pc_racc:u64)
+  pc_rwidth:u64 = const() {"value":8}
+  pc_rmore:bool = compare.lt(pc_ri,pc_rwidth)
+  branch pc_rmore byte(pc_rbytes,pc_rbase,pc_ri,pc_racc) done(pc_racc)
+block byte(pc_rbbytes:readbuf,pc_rbbase:usize,pc_rbi:u64,pc_rbacc:u64)
+  pc_rbindex:usize = int.cast(pc_rbi) {"mode":"wrap"}
+  pc_rbaddress:usize = int.add.wrap(pc_rbbase,pc_rbindex)
+  pc_rboctet:u8 = buffer.load(pc_rbbytes,pc_rbaddress)
+  pc_rbwide:u64 = int.cast(pc_rboctet) {"mode":"wrap"}
+  pc_rbeight:u64 = const() {"value":8}
+  pc_rbshift:u64 = int.mul.wrap(pc_rbi,pc_rbeight)
+  pc_rbvalue:u64 = int.shl.checked(pc_rbwide,pc_rbshift)
+  pc_rbnext:u64 = bit.or(pc_rbacc,pc_rbvalue)
+  pc_rbone:u64 = const() {"value":1}
+  pc_rbinext:u64 = int.add.wrap(pc_rbi,pc_rbone)
+  jump loop(pc_rbbytes,pc_rbbase,pc_rbinext,pc_rbnext)
+block done(pc_rdone:u64)
+  ret(pc_rdone)
+end
+fn write_u64(bytes:mutbuf,offset:usize,value:u64) -> (u32) effects(write,trap) entry(start)
+block start(bytes:mutbuf,offset:usize,value:u64)
+  pc_wzero:u64 = const() {"value":0}
+  jump loop(bytes,offset,value,pc_wzero)
+block loop(pc_wbytes:mutbuf,pc_wbase:usize,pc_word:u64,pc_wi:u64)
+  pc_wwidth:u64 = const() {"value":8}
+  pc_wmore:bool = compare.lt(pc_wi,pc_wwidth)
+  branch pc_wmore byte(pc_wbytes,pc_wbase,pc_word,pc_wi) done()
+block byte(pc_wbbytes:mutbuf,pc_wbbase:usize,pc_wbword:u64,pc_wbi:u64)
+  pc_wbindex:usize = int.cast(pc_wbi) {"mode":"wrap"}
+  pc_wbaddress:usize = int.add.wrap(pc_wbbase,pc_wbindex)
+  pc_wbeight:u64 = const() {"value":8}
+  pc_wbshift:u64 = int.mul.wrap(pc_wbi,pc_wbeight)
+  pc_wbvalue:u64 = int.shr.checked(pc_wbword,pc_wbshift)
+  pc_wboctet:u8 = int.cast(pc_wbvalue) {"mode":"wrap"}
+  _ = buffer.store(pc_wbbytes,pc_wbaddress,pc_wboctet)
+  pc_wbone:u64 = const() {"value":1}
+  pc_wbinext:u64 = int.add.wrap(pc_wbi,pc_wbone)
+  jump loop(pc_wbbytes,pc_wbbase,pc_wbword,pc_wbinext)
+block done()
+  pc_wdone:u32 = const() {"value":0}
+  ret(pc_wdone)
+end
+fn write_reply(reply:mutbuf,status:u32,ns:u64,next_fraction:u64) -> (u32) effects(write,trap) entry(start)
+block start(reply:mutbuf,status:u32,ns:u64,next_fraction:u64)
+  wr0:usize = const() {"value":0}
+  wr8:usize = const() {"value":8}
+  wr16:usize = const() {"value":16}
+  wr_status:u64 = int.cast(status) {"mode":"wrap"}
+  wr_a:u32 = call(reply,wr0,wr_status) {"function":"write_u64"}
+  wr_b:u32 = call(reply,wr8,ns) {"function":"write_u64"}
+  wr_c:u32 = call(reply,wr16,next_fraction) {"function":"write_u64"}
+  ret(status)
+end
