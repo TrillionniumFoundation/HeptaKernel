@@ -1,0 +1,351 @@
+{
+  "cases": 6,
+  "default_cases": 2,
+  "discovery_cases": 4,
+  "full_linux_acceptance": "HOLD",
+  "qemu_version": "QEMU emulator version 10.0.13 (Debian 1:10.0.13+ds-0+deb13u1)",
+  "runs": [
+    {
+      "command": [
+        "qemu-system-x86_64",
+        "-accel",
+        "tcg",
+        "-machine",
+        "pc",
+        "-cpu",
+        "qemu64",
+        "-m",
+        "32",
+        "-nodefaults",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-no-reboot",
+        "-device",
+        "isa-debug-exit,iobase=0xf4,iosize=0x04",
+        "-kernel",
+        "build/kernel-multiboot.elf"
+      ],
+      "guest_sha256": "c47c23a4dc61408f94f8882ddfa939acddd7fde07282f9515dff0096acda43b4",
+      "loaded_hia": {
+        "e820_f0": {
+          "bytes": 11752,
+          "object_sha256": "9f23e6a412ae985f89a121f49a051db82fca5ed0b7da3f035b7a3a9c2c16bb3e",
+          "text_sha256": "4fbaa668a608032b6a46ba86c69df33a536700f8eea3828d0fab66bab684a336"
+        },
+        "f0": {
+          "bytes": 52627,
+          "object_sha256": "8a280ebd0dfb551e6ed2811a1cbb94189f36f51c233d72dad2101437599fdaa5",
+          "text_sha256": "65dfc8c3e1959cb7f3aabb0c5b4d17678a4c6313a69982ed8ff45be328827be8"
+        },
+        "reservation_f0": {
+          "bytes": 7708,
+          "object_sha256": "933d0d30d6c6f35990dd6b65f781f390e3fc5b8c20ed06161292b614375db592",
+          "text_sha256": "e37fce4f0628d973409112aa7a50e55122657b63536350288a9fa4720ee37ae2"
+        }
+      },
+      "machine": "pc",
+      "memory_mib": 32,
+      "returncode": 33,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "HEPTAKERNEL HIA LIVE TSS STATE VERIFIED\nHEPTAKERNEL HIA LIVE USER GDT VERIFIED\nHEPTAKERNEL HIA LIVE TSS GDT VERIFIED\nHEPTAKERNEL HIA LIVE IDT VERIFIED\nHEPTAKERNEL HIA E820 VERIFIED\nHEPTAKERNEL HIA RESERVATIONS VERIFIED\nHEPTAKERNEL HIA PT COMMIT VERIFIED\nHEPTAKERNEL HIA LIVE PTE VERIFIED\nHEPTAKERNEL HIA ARENA ROUTER VERIFIED\nHEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED\nHEPTAKERNEL HIA PMM PASS\n",
+      "variant": "default"
+    },
+    {
+      "allocated_pages": 2,
+      "allocated_start": 4198400,
+      "command": [
+        "qemu-system-x86_64",
+        "-accel",
+        "tcg",
+        "-machine",
+        "pc",
+        "-cpu",
+        "qemu64",
+        "-m",
+        "32",
+        "-nodefaults",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-no-reboot",
+        "-device",
+        "isa-debug-exit,iobase=0xf4,iosize=0x04",
+        "-kernel",
+        "build/e820-discovery-plain-multiboot.elf"
+      ],
+      "guest_sha256": "06189231023600298b3a9e7d8235a7a4170385aa0cd7533c8f0b0175e991275f",
+      "loaded_hia": {
+        "e820_discovery_f0": {
+          "bytes": 10272,
+          "object_sha256": "a1478ad4ffc55dff6bee80efed8a9cfc450a319f5d05caa79bfc2da094a90f69",
+          "text_sha256": "15392a656dfb6a463de18fff88ddf1c946556d0935c76021cfa747bbf236fdd2"
+        },
+        "e820_f0": {
+          "bytes": 11752,
+          "object_sha256": "9f23e6a412ae985f89a121f49a051db82fca5ed0b7da3f035b7a3a9c2c16bb3e",
+          "text_sha256": "4fbaa668a608032b6a46ba86c69df33a536700f8eea3828d0fab66bab684a336"
+        },
+        "f0": {
+          "bytes": 52627,
+          "object_sha256": "8a280ebd0dfb551e6ed2811a1cbb94189f36f51c233d72dad2101437599fdaa5",
+          "text_sha256": "65dfc8c3e1959cb7f3aabb0c5b4d17678a4c6313a69982ed8ff45be328827be8"
+        },
+        "reservation_f0": {
+          "bytes": 7708,
+          "object_sha256": "933d0d30d6c6f35990dd6b65f781f390e3fc5b8c20ed06161292b614375db592",
+          "text_sha256": "e37fce4f0628d973409112aa7a50e55122657b63536350288a9fa4720ee37ae2"
+        }
+      },
+      "machine": "pc",
+      "memory_mib": 32,
+      "returncode": 33,
+      "selected_base": 4194304,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "HEPTAKERNEL HIA LIVE TSS STATE VERIFIED\nHEPTAKERNEL HIA LIVE USER GDT VERIFIED\nHEPTAKERNEL HIA LIVE TSS GDT VERIFIED\nHEPTAKERNEL HIA LIVE IDT VERIFIED\nHEPTAKERNEL HIA E820 VERIFIED\nHEPTAKERNEL HIA RESERVATIONS VERIFIED\nHEPTAKERNEL HIA E820 PHYSICAL PMM base=0000000000400000 allocated=0000000000401000\n",
+      "variant": "plain"
+    },
+    {
+      "allocated_pages": 2,
+      "allocated_start": 5246976,
+      "command": [
+        "qemu-system-x86_64",
+        "-accel",
+        "tcg",
+        "-machine",
+        "pc",
+        "-cpu",
+        "qemu64",
+        "-m",
+        "32",
+        "-nodefaults",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-no-reboot",
+        "-device",
+        "isa-debug-exit,iobase=0xf4,iosize=0x04",
+        "-kernel",
+        "build/e820-discovery-reserved-multiboot.elf"
+      ],
+      "guest_sha256": "5dca77fc48708499dde74c77fc59c058005c52031da545a3cfdb2846a16501a3",
+      "loaded_hia": {
+        "e820_discovery_f0": {
+          "bytes": 10272,
+          "object_sha256": "a1478ad4ffc55dff6bee80efed8a9cfc450a319f5d05caa79bfc2da094a90f69",
+          "text_sha256": "15392a656dfb6a463de18fff88ddf1c946556d0935c76021cfa747bbf236fdd2"
+        },
+        "e820_f0": {
+          "bytes": 11752,
+          "object_sha256": "9f23e6a412ae985f89a121f49a051db82fca5ed0b7da3f035b7a3a9c2c16bb3e",
+          "text_sha256": "4fbaa668a608032b6a46ba86c69df33a536700f8eea3828d0fab66bab684a336"
+        },
+        "f0": {
+          "bytes": 52627,
+          "object_sha256": "8a280ebd0dfb551e6ed2811a1cbb94189f36f51c233d72dad2101437599fdaa5",
+          "text_sha256": "65dfc8c3e1959cb7f3aabb0c5b4d17678a4c6313a69982ed8ff45be328827be8"
+        },
+        "reservation_f0": {
+          "bytes": 7708,
+          "object_sha256": "933d0d30d6c6f35990dd6b65f781f390e3fc5b8c20ed06161292b614375db592",
+          "text_sha256": "e37fce4f0628d973409112aa7a50e55122657b63536350288a9fa4720ee37ae2"
+        }
+      },
+      "machine": "pc",
+      "memory_mib": 32,
+      "returncode": 33,
+      "selected_base": 5242880,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "HEPTAKERNEL HIA LIVE TSS STATE VERIFIED\nHEPTAKERNEL HIA LIVE USER GDT VERIFIED\nHEPTAKERNEL HIA LIVE TSS GDT VERIFIED\nHEPTAKERNEL HIA LIVE IDT VERIFIED\nHEPTAKERNEL HIA E820 VERIFIED\nHEPTAKERNEL HIA RESERVATIONS VERIFIED\nHEPTAKERNEL HIA E820 PHYSICAL PMM base=0000000000500000 allocated=0000000000501000\n",
+      "variant": "reserved"
+    },
+    {
+      "command": [
+        "qemu-system-x86_64",
+        "-accel",
+        "tcg",
+        "-machine",
+        "q35",
+        "-cpu",
+        "qemu64",
+        "-m",
+        "64",
+        "-nodefaults",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-no-reboot",
+        "-device",
+        "isa-debug-exit,iobase=0xf4,iosize=0x04",
+        "-kernel",
+        "build/kernel-multiboot.elf"
+      ],
+      "guest_sha256": "c47c23a4dc61408f94f8882ddfa939acddd7fde07282f9515dff0096acda43b4",
+      "loaded_hia": {
+        "e820_f0": {
+          "bytes": 11752,
+          "object_sha256": "9f23e6a412ae985f89a121f49a051db82fca5ed0b7da3f035b7a3a9c2c16bb3e",
+          "text_sha256": "4fbaa668a608032b6a46ba86c69df33a536700f8eea3828d0fab66bab684a336"
+        },
+        "f0": {
+          "bytes": 52627,
+          "object_sha256": "8a280ebd0dfb551e6ed2811a1cbb94189f36f51c233d72dad2101437599fdaa5",
+          "text_sha256": "65dfc8c3e1959cb7f3aabb0c5b4d17678a4c6313a69982ed8ff45be328827be8"
+        },
+        "reservation_f0": {
+          "bytes": 7708,
+          "object_sha256": "933d0d30d6c6f35990dd6b65f781f390e3fc5b8c20ed06161292b614375db592",
+          "text_sha256": "e37fce4f0628d973409112aa7a50e55122657b63536350288a9fa4720ee37ae2"
+        }
+      },
+      "machine": "q35",
+      "memory_mib": 64,
+      "returncode": 33,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "HEPTAKERNEL HIA LIVE TSS STATE VERIFIED\nHEPTAKERNEL HIA LIVE USER GDT VERIFIED\nHEPTAKERNEL HIA LIVE TSS GDT VERIFIED\nHEPTAKERNEL HIA LIVE IDT VERIFIED\nHEPTAKERNEL HIA E820 VERIFIED\nHEPTAKERNEL HIA RESERVATIONS VERIFIED\nHEPTAKERNEL HIA PT COMMIT VERIFIED\nHEPTAKERNEL HIA LIVE PTE VERIFIED\nHEPTAKERNEL HIA ARENA ROUTER VERIFIED\nHEPTAKERNEL HIA MULTI-ARENA OWNERSHIP VERIFIED\nHEPTAKERNEL HIA PMM PASS\n",
+      "variant": "default"
+    },
+    {
+      "allocated_pages": 2,
+      "allocated_start": 4198400,
+      "command": [
+        "qemu-system-x86_64",
+        "-accel",
+        "tcg",
+        "-machine",
+        "q35",
+        "-cpu",
+        "qemu64",
+        "-m",
+        "64",
+        "-nodefaults",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-no-reboot",
+        "-device",
+        "isa-debug-exit,iobase=0xf4,iosize=0x04",
+        "-kernel",
+        "build/e820-discovery-plain-multiboot.elf"
+      ],
+      "guest_sha256": "06189231023600298b3a9e7d8235a7a4170385aa0cd7533c8f0b0175e991275f",
+      "loaded_hia": {
+        "e820_discovery_f0": {
+          "bytes": 10272,
+          "object_sha256": "a1478ad4ffc55dff6bee80efed8a9cfc450a319f5d05caa79bfc2da094a90f69",
+          "text_sha256": "15392a656dfb6a463de18fff88ddf1c946556d0935c76021cfa747bbf236fdd2"
+        },
+        "e820_f0": {
+          "bytes": 11752,
+          "object_sha256": "9f23e6a412ae985f89a121f49a051db82fca5ed0b7da3f035b7a3a9c2c16bb3e",
+          "text_sha256": "4fbaa668a608032b6a46ba86c69df33a536700f8eea3828d0fab66bab684a336"
+        },
+        "f0": {
+          "bytes": 52627,
+          "object_sha256": "8a280ebd0dfb551e6ed2811a1cbb94189f36f51c233d72dad2101437599fdaa5",
+          "text_sha256": "65dfc8c3e1959cb7f3aabb0c5b4d17678a4c6313a69982ed8ff45be328827be8"
+        },
+        "reservation_f0": {
+          "bytes": 7708,
+          "object_sha256": "933d0d30d6c6f35990dd6b65f781f390e3fc5b8c20ed06161292b614375db592",
+          "text_sha256": "e37fce4f0628d973409112aa7a50e55122657b63536350288a9fa4720ee37ae2"
+        }
+      },
+      "machine": "q35",
+      "memory_mib": 64,
+      "returncode": 33,
+      "selected_base": 4194304,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "HEPTAKERNEL HIA LIVE TSS STATE VERIFIED\nHEPTAKERNEL HIA LIVE USER GDT VERIFIED\nHEPTAKERNEL HIA LIVE TSS GDT VERIFIED\nHEPTAKERNEL HIA LIVE IDT VERIFIED\nHEPTAKERNEL HIA E820 VERIFIED\nHEPTAKERNEL HIA RESERVATIONS VERIFIED\nHEPTAKERNEL HIA E820 PHYSICAL PMM base=0000000000400000 allocated=0000000000401000\n",
+      "variant": "plain"
+    },
+    {
+      "allocated_pages": 2,
+      "allocated_start": 5246976,
+      "command": [
+        "qemu-system-x86_64",
+        "-accel",
+        "tcg",
+        "-machine",
+        "q35",
+        "-cpu",
+        "qemu64",
+        "-m",
+        "64",
+        "-nodefaults",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-no-reboot",
+        "-device",
+        "isa-debug-exit,iobase=0xf4,iosize=0x04",
+        "-kernel",
+        "build/e820-discovery-reserved-multiboot.elf"
+      ],
+      "guest_sha256": "5dca77fc48708499dde74c77fc59c058005c52031da545a3cfdb2846a16501a3",
+      "loaded_hia": {
+        "e820_discovery_f0": {
+          "bytes": 10272,
+          "object_sha256": "a1478ad4ffc55dff6bee80efed8a9cfc450a319f5d05caa79bfc2da094a90f69",
+          "text_sha256": "15392a656dfb6a463de18fff88ddf1c946556d0935c76021cfa747bbf236fdd2"
+        },
+        "e820_f0": {
+          "bytes": 11752,
+          "object_sha256": "9f23e6a412ae985f89a121f49a051db82fca5ed0b7da3f035b7a3a9c2c16bb3e",
+          "text_sha256": "4fbaa668a608032b6a46ba86c69df33a536700f8eea3828d0fab66bab684a336"
+        },
+        "f0": {
+          "bytes": 52627,
+          "object_sha256": "8a280ebd0dfb551e6ed2811a1cbb94189f36f51c233d72dad2101437599fdaa5",
+          "text_sha256": "65dfc8c3e1959cb7f3aabb0c5b4d17678a4c6313a69982ed8ff45be328827be8"
+        },
+        "reservation_f0": {
+          "bytes": 7708,
+          "object_sha256": "933d0d30d6c6f35990dd6b65f781f390e3fc5b8c20ed06161292b614375db592",
+          "text_sha256": "e37fce4f0628d973409112aa7a50e55122657b63536350288a9fa4720ee37ae2"
+        }
+      },
+      "machine": "q35",
+      "memory_mib": 64,
+      "returncode": 33,
+      "selected_base": 5242880,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "HEPTAKERNEL HIA LIVE TSS STATE VERIFIED\nHEPTAKERNEL HIA LIVE USER GDT VERIFIED\nHEPTAKERNEL HIA LIVE TSS GDT VERIFIED\nHEPTAKERNEL HIA LIVE IDT VERIFIED\nHEPTAKERNEL HIA E820 VERIFIED\nHEPTAKERNEL HIA RESERVATIONS VERIFIED\nHEPTAKERNEL HIA E820 PHYSICAL PMM base=0000000000500000 allocated=0000000000501000\n",
+      "variant": "reserved"
+    }
+  ],
+  "schema": "heptakernel.e820-discovery-qemu.v1",
+  "source_sha256": {
+    "arch/x86_64/boot.S": "c3d3418b8d709bc3ac8dd953426d110bafdbf34736f7f47078e7486263c756bc",
+    "arch/x86_64/e820_discovery_fixture.inc": "b0a0ba914e58350282fddc0df49ff858a11b8760fded1a93bb39c735ed25b692",
+    "src/e820_find_arena.hepta": "c580c66928dfb0d3183bb2e13747ca0dc06239e19635364ca918f6d080b5da9e",
+    "src/e820_region.hepta": "1195866579b208a81c3387d8cf3e1a177c84c442b8c21994cfe9059ebfbe3b6b",
+    "src/kernel.hepta": "0e0794fde672fb89301e72b181896c263f461e6ba7c353a6a1f383f51fa1c929",
+    "src/reservation_gate.hepta": "f5ef329e52660ec465e8e59e21063a128558edab971bc2f4f327043700d1def4"
+  },
+  "status": "PASS"
+}
