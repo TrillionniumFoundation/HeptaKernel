@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/tmp/hk-restore-stop-t67-StJLKSf3/tests/test_x86_native_pt0_restore_stop.py", line 216, in <module>
+    if __name__=='__main__':main()
+                            ^^^^^^
+  File "/tmp/hk-restore-stop-t67-StJLKSf3/tests/test_x86_native_pt0_restore_stop.py", line 174, in main
+    assert len(traps)==1 and int(traps[0],16)==symbol(d/'cohort.o','f0')-2
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
