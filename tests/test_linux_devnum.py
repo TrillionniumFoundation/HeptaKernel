@@ -62,7 +62,7 @@ def dump_text(binary, destination):
     return destination.read_bytes()
 
 
-def native_image(folder, compiler, source, name):
+def native_image(folder, compiler, source, name, symbol="linux_devnum"):
     obj = folder / f"{name}.o"
     so = folder / f"{name}.so"
     object_bytes = run(str(compiler), input=source)
@@ -70,8 +70,8 @@ def native_image(folder, compiler, source, name):
             "native object generation not deterministic")
     obj.write_bytes(object_bytes)
     require(not run("nm", "-u", str(obj)).strip(), "undefined target symbol")
-    require("linux_devnum" in run("nm", "-g", "--defined-only", str(obj)).decode(),
-            "missing exported leaf")
+    defined = run("nm", "-g", "--defined-only", str(obj)).decode().splitlines()
+    require(symbol in [line.split()[-1] for line in defined], "missing exported leaf")
     run("ld", "-shared", "-z", "noexecstack", "-o", str(so), str(obj))
     require(not run("nm", "-D", "-u", str(so)).strip(), "unexpected dynamic dependency")
     raw = dump_text(obj, folder / f"{name}.obj.text")
